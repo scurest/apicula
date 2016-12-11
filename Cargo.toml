@@ -1,0 +1,13 @@
+[package]
+name = "demense"
+version = "0.1.0"
+authors = ["scurest <scurest@users.noreply.github.com>"]
+license = "CC0-1.0"
+
+[dependencies]
+cgmath = "0.12.0"
+env_logger = "0.3.5"
+error-chain = "0.7.1"
+glium = "0.15.0"
+log = "0.3.6"
+time = "0.1.35"
