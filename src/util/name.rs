@@ -2,7 +2,7 @@ use std::fmt;
 use std::fmt::Write;
 use util::view::Viewable;
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Name(pub [u8; 16]);
 
 impl Name {
@@ -40,6 +40,29 @@ impl fmt::Debug for Name {
             }
         }
         f.write_char('"')
+    }
+}
+
+/// Wrapper than prints a name as a non-empty sequence of
+/// underscores, letters, and digits (safe for eg. filenames).
+pub struct IdFmt<'a>(pub &'a Name);
+
+impl<'a> fmt::Display for IdFmt<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let trimmed = trim_trailing_nul(&(self.0).0[..]);
+        if trimmed.len() == 0 {
+            f.write_char('_')?;
+            return Ok(());
+        }
+        for &b in trimmed {
+            let is_letter_or_digit =
+                (b >= 'a' as u8 && b <= 'z' as u8) ||
+                (b >= 'A' as u8 && b <= 'Z' as u8) ||
+                (b >= '0' as u8 && b <= '9' as u8);
+            let c = if is_letter_or_digit { b as char } else { '_' };
+            f.write_char(c)?;
+        }
+        Ok(())
     }
 }
 

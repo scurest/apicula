@@ -19,6 +19,7 @@ mod gfx;
 mod viewer;
 mod geometry;
 mod render;
+mod collada;
 
 use std::fs::File;
 use std::io::Read;
@@ -38,7 +39,10 @@ fn main() {
     match res {
         Ok(bmd) => {
             let model = &bmd.mdl.models[0];
-            viewer::viewer(model, &bmd.tex).unwrap();
+            let mut s = String::new();
+            collada::write(&mut s, model);
+            println!("{}", s);
+            //viewer::viewer(model, &bmd.tex).unwrap();
         }
         Err(e) => error!("err {:#?}", e),
     }

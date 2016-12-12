@@ -1,4 +1,9 @@
-error_chain! {}
+error_chain! {
+    foreign_links {
+        Fmt(::std::fmt::Error);
+        TimeFmt(::time::ParseError);
+    }
+}
 
 macro_rules! check {
     ($b:expr) => {
