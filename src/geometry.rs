@@ -31,6 +31,7 @@ pub struct Sink {
     pub cur_texture_dim: (u32, u32),
     cur_mesh_range: MeshRange,
     cur_prim_type: u32,
+    cur_prim_range: Range<u16>,
     next_texcoord: Point2<f64>,
     next_color: Point3<f32>,
 }
@@ -45,15 +46,19 @@ impl Sink {
                 mat_id: 0,
             },
             cur_prim_type: 0,
+            cur_prim_range: 0..0,
             cur_texture_dim: (1,1),
             next_texcoord: Point2::new(0.0, 0.0),
             next_color: Point3::new(1.0, 1.0, 1.0),
         }
     }
     pub fn begin_mesh(&mut self, mat_id: u8) {
+        let len = self.data.vertices.len() as u16;
+        self.cur_mesh_range.vertex_range = len .. len;
         let len = self.data.indices.len();
         self.cur_mesh_range.index_range = len .. len;
         self.cur_mesh_range.mat_id = mat_id;
+
         self.next_texcoord = Point2::new(0.0, 0.0);
         self.next_color = Point3::new(1.0, 1.0, 1.0);
     }
@@ -66,10 +71,10 @@ impl gfx::Sink for Sink {
     fn begin(&mut self, prim_type: u32) {
         self.cur_prim_type = prim_type;
         let len = self.data.vertices.len() as u16;
-        self.cur_mesh_range.vertex_range = len .. len;
+        self.cur_prim_range = len .. len;
     }
     fn end(&mut self) {
-        let r = self.cur_mesh_range.vertex_range.clone();
+        let r = self.cur_prim_range.clone();
         match self.cur_prim_type {
             0 => {
                 // Seperate triangles
@@ -151,6 +156,7 @@ impl gfx::Sink for Sink {
             texcoord: [self.next_texcoord.x as f32, self.next_texcoord.y as f32],
             color: [self.next_color.x, self.next_color.y, self.next_color.z],
         });
+        self.cur_prim_range.end += 1;
         self.cur_mesh_range.vertex_range.end += 1;
     }
 }
