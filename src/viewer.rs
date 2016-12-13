@@ -67,7 +67,7 @@ pub fn viewer(model: &Model, tex: &Tex) -> Result<()> {
     };
     let mut r = render::Renderer::new();
     r.run_render_cmds(&mut s, &model.objects[..], model.render_cmds_cur)?;
-    let geom = s.geosink.data;
+    let geom = s.geosink.data();
     //println!("{:#?}", geom.vertices);
     let vertex_buffer = glium::VertexBuffer::new(
         &display,

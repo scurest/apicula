@@ -1,7 +1,7 @@
 use cgmath::Point2;
 use cgmath::Point3;
 use gfx;
-use std::default::Default;
+use index_builder::IndexBuilder;
 use std::ops::Range;
 
 #[derive(Debug, Copy, Clone)]
@@ -18,7 +18,7 @@ pub struct MeshRange {
     pub mat_id: u8,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct GeometryData {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
@@ -27,8 +27,10 @@ pub struct GeometryData {
 
 #[derive(Debug, Clone)]
 pub struct Sink {
-    pub data: GeometryData,
     pub cur_texture_dim: (u32, u32),
+    vertices: Vec<Vertex>,
+    ind_builder: IndexBuilder,
+    mesh_ranges: Vec<MeshRange>,
     cur_mesh_range: MeshRange,
     cur_prim_type: u32,
     cur_prim_range: Range<u16>,
@@ -39,7 +41,9 @@ pub struct Sink {
 impl Sink {
     pub fn new() -> Sink {
         Sink {
-            data: Default::default(),
+            vertices: vec![],
+            ind_builder: IndexBuilder::new(),
+            mesh_ranges: vec![],
             cur_mesh_range: MeshRange {
                 vertex_range: 0..0,
                 index_range: 0..0,
@@ -53,9 +57,9 @@ impl Sink {
         }
     }
     pub fn begin_mesh(&mut self, mat_id: u8) {
-        let len = self.data.vertices.len() as u16;
+        let len = self.vertices.len() as u16;
         self.cur_mesh_range.vertex_range = len .. len;
-        let len = self.data.indices.len();
+        let len = self.ind_builder.indices.len();
         self.cur_mesh_range.index_range = len .. len;
         self.cur_mesh_range.mat_id = mat_id;
 
@@ -63,82 +67,24 @@ impl Sink {
         self.next_color = Point3::new(1.0, 1.0, 1.0);
     }
     pub fn end_mesh(&mut self) {
-        self.data.mesh_ranges.push(self.cur_mesh_range.clone());
+        self.mesh_ranges.push(self.cur_mesh_range.clone());
+    }
+    pub fn data(self) -> GeometryData {
+        GeometryData {
+            vertices: self.vertices,
+            indices: self.ind_builder.indices,
+            mesh_ranges: self.mesh_ranges,
+        }
     }
 }
 
 impl gfx::Sink for Sink {
     fn begin(&mut self, prim_type: u32) {
-        self.cur_prim_type = prim_type;
-        let len = self.data.vertices.len() as u16;
-        self.cur_prim_range = len .. len;
+        self.ind_builder.begin(prim_type);
     }
     fn end(&mut self) {
-        let r = self.cur_prim_range.clone();
-        match self.cur_prim_type {
-            0 => {
-                // Seperate triangles
-                let mut i = r.start;
-                while i != r.end {
-                    self.data.indices.extend_from_slice(&[
-                        i, i+1, i+2,
-                    ]);
-                    i += 3;
-                }
-            }
-            1 => {
-                // Seperate quads
-                let mut i = r.start;
-                while i != r.end {
-                    self.data.indices.extend_from_slice(&[
-                        i, i+1, i+2,
-                        i+2, i+3, i,
-                    ]);
-                    i += 4;
-                }
-            }
-            2 => {
-                // Triangle strip
-                let mut i = r.start;
-                if i != r.end {
-                    self.data.indices.extend_from_slice(&[
-                        i, i+1, i+2,
-                    ]);
-                    i += 3;
-                }
-                while i != r.end {
-                    self.data.indices.extend_from_slice(&[
-                        i, i-1, i-2,
-                    ]);
-                    i += 1;
-                    if i == r.end { break; }
-                    self.data.indices.extend_from_slice(&[
-                        i, i-2, i-1,
-                    ]);
-                    i += 1;
-                }
-            }
-            3 => {
-                // Quad strip
-                let mut i = r.start;
-                if i != r.end {
-                    self.data.indices.extend_from_slice(&[
-                        i, i+1, i+2,
-                        i+2, i+1, i+3,
-                    ]);
-                    i += 4;
-                }
-                while i != r.end {
-                    self.data.indices.extend_from_slice(&[
-                        i-2, i-1, i,
-                        i, i-1, i+1,
-                    ]);
-                    i += 2;
-                }
-            }
-            _ => unreachable!(),
-        }
-        self.cur_mesh_range.index_range.end = self.data.indices.len();
+        self.ind_builder.end();
+        self.cur_mesh_range.index_range.end = self.ind_builder.indices.len();
     }
     fn texcoord(&mut self, texcoord: Point2<f64>) {
         self.next_texcoord = Point2::new(
@@ -151,12 +97,12 @@ impl gfx::Sink for Sink {
         self.next_color = color;
     }
     fn vertex(&mut self, v: Point3<f64>) {
-        self.data.vertices.push(Vertex {
+        self.vertices.push(Vertex {
             position: [v.x as f32, v.y as f32, v.z as f32],
             texcoord: [self.next_texcoord.x as f32, self.next_texcoord.y as f32],
             color: [self.next_color.x, self.next_color.y, self.next_color.z],
         });
-        self.cur_prim_range.end += 1;
+        self.ind_builder.vertex();
         self.cur_mesh_range.vertex_range.end += 1;
     }
 }

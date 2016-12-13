@@ -43,7 +43,7 @@ pub fn write<W: Write>(w: &mut W, model: &Model) -> Result<()> {
     };
     let mut r = render::Renderer::new();
     r.run_render_cmds(&mut s, &model.objects[..], model.render_cmds_cur)?;
-    let geom = s.geosink.data;
+    let geom = s.geosink.data();
 
     write!(w, cat!(
         r#"<?xml version="1.0" encoding="utf-8"?>"#,

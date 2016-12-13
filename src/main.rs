@@ -4,24 +4,25 @@
 extern crate log;
 #[macro_use]
 extern crate error_chain;
-extern crate cgmath;
-extern crate env_logger;
 #[macro_use]
 extern crate glium;
-extern crate time;
 #[macro_use]
 extern crate clap;
+extern crate cgmath;
+extern crate env_logger;
+extern crate time;
 
 #[macro_use]
 mod errors;
 #[macro_use]
 mod util;
-mod nitro;
-mod gfx;
-mod viewer;
-mod geometry;
-mod render;
 mod collada;
+mod geometry;
+mod gfx;
+mod index_builder;
+mod nitro;
+mod render;
+mod viewer;
 
 use std::fs::File;
 use std::io::Read;
