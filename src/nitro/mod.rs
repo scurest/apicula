@@ -1,4 +1,6 @@
+pub mod gpu_cmds;
 pub mod mdl;
+pub mod render_cmds;
 pub mod tex;
 mod info_block;
 

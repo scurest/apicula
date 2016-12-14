@@ -18,10 +18,8 @@ mod errors;
 mod util;
 mod collada;
 mod geometry;
-mod gfx;
 mod index_builder;
 mod nitro;
-mod render;
 mod viewer;
 
 use std::fs::File;

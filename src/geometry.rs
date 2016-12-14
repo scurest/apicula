@@ -1,14 +1,38 @@
+use cgmath::Matrix4;
 use cgmath::Point2;
 use cgmath::Point3;
-use gfx;
+use cgmath::Transform;
+use cgmath::vec4;
+use errors::Result;
 use index_builder::IndexBuilder;
+use nitro::gpu_cmds;
+use nitro::mdl::Model;
+use nitro::render_cmds;
+use std::default::Default;
 use std::ops::Range;
+
+#[derive(Debug, Clone)]
+pub struct GpuState {
+    pub cur_matrix: Matrix4<f64>,
+    pub texture_matrix: Matrix4<f64>,
+    pub matrix_stack: Vec<Matrix4<f64>>,
+}
 
 #[derive(Debug, Copy, Clone)]
 pub struct Vertex {
     pub position: [f32; 3],
     pub texcoord: [f32; 2],
     pub color: [f32; 3],
+}
+
+impl Default for Vertex {
+    fn default() -> Vertex {
+        Vertex {
+            position: [0.0, 0.0, 0.0],
+            texcoord: [0.0, 0.0],
+            color: [1.0, 1.0, 1.0],
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -26,21 +50,47 @@ pub struct GeometryData {
 }
 
 #[derive(Debug, Clone)]
-pub struct Sink {
-    pub cur_texture_dim: (u32, u32),
+pub struct Builder<'a, 'b: 'a> {
+    model: &'a Model<'b>,
+    gpu: GpuState,
+    cur_texture_dim: (u32, u32),
     vertices: Vec<Vertex>,
     ind_builder: IndexBuilder,
     mesh_ranges: Vec<MeshRange>,
     cur_mesh_range: MeshRange,
-    cur_prim_type: u32,
-    cur_prim_range: Range<u16>,
-    next_texcoord: Point2<f64>,
-    next_color: Point3<f32>,
+    next_vertex: Vertex,
 }
 
-impl Sink {
-    pub fn new() -> Sink {
-        Sink {
+pub fn build(model: &Model) -> Result<GeometryData> {
+    let mut builder = Builder::new(model);
+    render_cmds::run_commands(model.render_cmds_cur, &mut builder)?;
+    Ok(builder.data())
+}
+
+impl GpuState {
+    pub fn new() -> GpuState {
+        GpuState {
+            cur_matrix: Matrix4::one(),
+            texture_matrix: Matrix4::one(),
+            matrix_stack: vec![Matrix4::one(); 32],
+        }
+    }
+    pub fn restore(&mut self, stack_pos: u8) {
+        self.cur_matrix = self.matrix_stack[stack_pos as usize];
+    }
+    pub fn store(&mut self, stack_pos: u8) {
+        self.matrix_stack[stack_pos as usize] = self.cur_matrix;
+    }
+    pub fn mul_matrix(&mut self, mat: &Matrix4<f64>) {
+        self.cur_matrix = self.cur_matrix * *mat;
+    }
+}
+
+impl<'a, 'b: 'a> Builder<'a, 'b> {
+    pub fn new(model: &'a Model<'b>) -> Builder<'a, 'b> {
+        Builder {
+            model: model,
+            gpu: GpuState::new(),
             vertices: vec![],
             ind_builder: IndexBuilder::new(),
             mesh_ranges: vec![],
@@ -49,26 +99,29 @@ impl Sink {
                 index_range: 0..0,
                 mat_id: 0,
             },
-            cur_prim_type: 0,
-            cur_prim_range: 0..0,
             cur_texture_dim: (1,1),
-            next_texcoord: Point2::new(0.0, 0.0),
-            next_color: Point3::new(1.0, 1.0, 1.0),
+            next_vertex: Default::default(),
         }
     }
+
     pub fn begin_mesh(&mut self, mat_id: u8) {
         let len = self.vertices.len() as u16;
         self.cur_mesh_range.vertex_range = len .. len;
         let len = self.ind_builder.indices.len();
         self.cur_mesh_range.index_range = len .. len;
         self.cur_mesh_range.mat_id = mat_id;
-
-        self.next_texcoord = Point2::new(0.0, 0.0);
-        self.next_color = Point3::new(1.0, 1.0, 1.0);
+        self.next_vertex = Default::default();
     }
+
     pub fn end_mesh(&mut self) {
+        let len = self.vertices.len() as u16;
+        self.cur_mesh_range.vertex_range.end = len;
+        let len = self.ind_builder.indices.len();
+        self.cur_mesh_range.index_range.end = len;
+
         self.mesh_ranges.push(self.cur_mesh_range.clone());
     }
+
     pub fn data(self) -> GeometryData {
         GeometryData {
             vertices: self.vertices,
@@ -78,7 +131,39 @@ impl Sink {
     }
 }
 
-impl gfx::Sink for Sink {
+impl<'a, 'b: 'a> render_cmds::Sink for Builder<'a, 'b> {
+    fn load_matrix(&mut self, stack_pos: u8) -> Result<()> {
+        self.gpu.restore(stack_pos);
+        Ok(())
+    }
+    fn store_matrix(&mut self, stack_pos: u8) -> Result<()> {
+        self.gpu.store(stack_pos);
+        Ok(())
+    }
+    fn mul_by_object(&mut self, object_id: u8) -> Result<()> {
+        self.gpu.mul_matrix(&self.model.objects[object_id as usize].xform);
+        Ok(())
+    }
+    fn draw(&mut self, mesh_id: u8, mat_id: u8) -> Result<()> {
+        let mat = &self.model.materials[mat_id as usize];
+        let dim = (mat.width as u32, mat.height as u32);
+        self.cur_texture_dim = dim;
+        self.gpu.texture_matrix = mat.texture_mat;
+
+        self.begin_mesh(mat_id);
+        gpu_cmds::run_commands(self.model.meshes[mesh_id as usize].commands, self)?;
+        self.end_mesh();
+        Ok(())
+    }
+}
+
+impl<'a, 'b: 'a> gpu_cmds::Sink for Builder<'a, 'b> {
+    fn restore(&mut self, idx: u32) {
+        self.gpu.restore(idx as u8);
+    }
+    fn scale(&mut self, sx: f64, sy: f64, sz: f64) {
+        self.gpu.mul_matrix(&Matrix4::from_nonuniform_scale(sx, sy, sz));
+    }
     fn begin(&mut self, prim_type: u32) {
         self.ind_builder.begin(prim_type);
     }
@@ -87,22 +172,21 @@ impl gfx::Sink for Sink {
         self.cur_mesh_range.index_range.end = self.ind_builder.indices.len();
     }
     fn texcoord(&mut self, texcoord: Point2<f64>) {
-        self.next_texcoord = Point2::new(
+        let tc = Point2::new(
             texcoord.x / self.cur_texture_dim.0 as f64,
             // TODO: t coordinate seems to be wrong for mirrored textures
             1.0 - texcoord.y / self.cur_texture_dim.1 as f64,
         );
+        let tc = self.gpu.texture_matrix * vec4(tc.x, tc.y, 0.0, 0.0);
+        self.next_vertex.texcoord = [tc[0] as f32, tc[1] as f32];
     }
-    fn color(&mut self, color: Point3<f32>) {
-        self.next_color = color;
+    fn color(&mut self, c: Point3<f32>) {
+        self.next_vertex.color = [c[0] as f32, c[1] as f32, c[2] as f32];
     }
-    fn vertex(&mut self, v: Point3<f64>) {
-        self.vertices.push(Vertex {
-            position: [v.x as f32, v.y as f32, v.z as f32],
-            texcoord: [self.next_texcoord.x as f32, self.next_texcoord.y as f32],
-            color: [self.next_color.x, self.next_color.y, self.next_color.z],
-        });
+    fn vertex(&mut self, p: Point3<f64>) {
+        let p = self.gpu.cur_matrix.transform_point(p);
+        self.next_vertex.position = [p[0] as f32, p[1] as f32, p[2] as f32];
+        self.vertices.push(self.next_vertex);
         self.ind_builder.vertex();
-        self.cur_mesh_range.vertex_range.end += 1;
     }
 }

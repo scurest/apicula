@@ -1,30 +1,11 @@
 use errors::Result;
 use geometry;
 use geometry::GeometryData;
-use gfx::GfxState;
 use nitro::mdl::Model;
-use render;
 use std::collections::HashSet;
 use std::fmt::Write;
 use time;
 use util::name;
-
-struct Sink<'a, 'b: 'a> {
-    geosink: geometry::Sink,
-    model: &'a Model<'b>,
-}
-
-impl<'a, 'b: 'a> render::Sink for Sink<'a, 'b> {
-    fn draw(&mut self, gs: &mut GfxState, mesh_id: u8, material_id: u8) -> Result<()> {
-        let material = &self.model.materials[material_id as usize];
-        gs.texture_mat = material.texture_mat;
-        self.geosink.begin_mesh(material_id);
-        self.geosink.cur_texture_dim = (material.width as u32, material.height as u32);
-        gs.run_commands(&mut self.geosink, self.model.meshes[mesh_id as usize].commands)?;
-        self.geosink.end_mesh();
-        Ok(())
-    }
-}
 
 /// Concatenate strings with a new line interposed after each.
 macro_rules! cat {
@@ -37,13 +18,7 @@ macro_rules! cat {
 }
 
 pub fn write<W: Write>(w: &mut W, model: &Model) -> Result<()> {
-    let mut s = Sink {
-        geosink: geometry::Sink::new(),
-        model: model,
-    };
-    let mut r = render::Renderer::new();
-    r.run_render_cmds(&mut s, &model.objects[..], model.render_cmds_cur)?;
-    let geom = s.geosink.data();
+    let geom = geometry::build(model)?;
 
     write!(w, cat!(
         r#"<?xml version="1.0" encoding="utf-8"?>"#,

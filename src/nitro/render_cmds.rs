@@ -1,49 +1,67 @@
 use errors::Result;
-use gfx::GfxState;
-use nitro::mdl::Object;
 use util::cur::Cur;
 
 pub trait Sink {
-    fn draw(&mut self, gs: &mut GfxState, mesh_id: u8, material_id: u8) -> Result<()>;
+    /// cur_matrix = matrix_stack[stack_pos]
+    fn load_matrix(&mut self, stack_pos: u8) -> Result<()>;
+    /// matrix_stack[stack_pos] = cur_matrix
+    fn store_matrix(&mut self, stack_pos: u8) -> Result<()>;
+    /// cur_matrix = cur_matrix * object_matrices[object_id]
+    fn mul_by_object(&mut self, object_id: u8) -> Result<()>;
+    fn draw(&mut self, mesh_id: u8, material_id: u8) -> Result<()>;
 }
 
-pub struct Renderer {
-    pub gfx_state: GfxState,
+pub fn run_commands<S: Sink>(cur: Cur, sink: &mut S) -> Result<()> {
+    let mut state = RenderInterpreterState::new();
+    state.run_commands(sink, cur)
+}
+
+pub struct RenderInterpreterState {
     pub cur_material: u8,
-    pub cur_stack_ptr: u8,
+    pub cur_stack_pos: u8,
 }
 
-impl Renderer {
-    pub fn new() -> Renderer {
-        Renderer {
-            gfx_state: GfxState::new(),
+impl RenderInterpreterState {
+    pub fn new() -> RenderInterpreterState {
+        RenderInterpreterState {
             cur_material: 0,
-            cur_stack_ptr: 0,
+            cur_stack_pos: 0,
         }
     }
 
-    pub fn run_render_cmds<S: Sink>(&mut self, sink: &mut S, objects: &[Object], mut cur: Cur) -> Result<()> {
+    pub fn run_commands<S: Sink>(&mut self, sink: &mut S, mut cur: Cur) -> Result<()> {
         loop {
             let opcode = cur.next::<u8>()?;
             let num_params = cmd_size(opcode, cur)?;
             let params = cur.next_n_u8s(num_params)?;
             trace!("{:#2x} {:?}", opcode, params);
             match opcode {
-                0x00 => { /* NOP */ }
-                0x01 => { return Ok(()) }
+                0x00 => {
+                    // NOP
+                }
+                0x01 => {
+                    // End render commands
+                    return Ok(())
+                }
                 0x02 => {
                     // unknown
                 }
                 0x03 => {
-                    self.gfx_state.restore(params[0] as u32);
+                    // Load a matrix from the stack
+                    sink.load_matrix(params[0])?;
                 }
                 0x04 | 0x24 | 0x44 => {
+                    // Set the current material
                     self.cur_material = params[0];
                 }
                 0x05 => {
-                    sink.draw(&mut self.gfx_state, params[0], self.cur_material)?;
+                    // Draw a mesh
+                    sink.draw(params[0], self.cur_material)?;
                 }
                 0x06 | 0x26 | 0x46 | 0x66 => {
+                    // Multiply the current matrix by an object matrix, possibly
+                    // loading a matrix from the stack beforehand, and store the
+                    // result to a stack location.
                     let object_id = params[0];
                     let _parent_id = params[1];
                     let _dummy = params[2];
@@ -56,20 +74,20 @@ impl Renderer {
                     };
 
                     if let Some(restore_id) = restore_id {
-                        self.gfx_state.restore(restore_id as u32);
+                        sink.load_matrix(restore_id)?;
                     }
-                    self.gfx_state.cur_mat = self.gfx_state.cur_mat * objects[object_id as usize].xform;
+                    sink.mul_by_object(object_id)?;
                     if let Some(stack_id) = stack_id {
-                        self.cur_stack_ptr = stack_id;
+                        self.cur_stack_pos = stack_id;
                     }
-                    self.gfx_state.mat_stack[self.cur_stack_ptr as usize] = self.gfx_state.cur_mat;
-                    self.cur_stack_ptr += 1;
+                    sink.store_matrix(self.cur_stack_pos)?;
+                    self.cur_stack_pos += 1;
                 }
                 0x09 => {
                     // unknown
                 }
                 _ => {
-                    trace!("unknown render command: {:#x} {:?}", opcode, params);
+                    info!("unknown render command: {:#x} {:?}", opcode, params);
                 }
             }
         }

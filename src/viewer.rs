@@ -9,33 +9,14 @@ use cgmath::vec3;
 use errors::Result;
 use geometry;
 use geometry::Vertex;
-use gfx::GfxState;
 use glium;
 use nitro::mdl::Model;
 use nitro::tex::image::gen_image;
 use nitro::tex::Tex;
-use render;
 use std::f32::consts::PI;
 use time;
 
 implement_vertex!(Vertex, position, texcoord, color);
-
-struct Sink<'a, 'b: 'a> {
-    geosink: geometry::Sink,
-    model: &'a Model<'b>,
-}
-
-impl<'a, 'b: 'a> render::Sink for Sink<'a, 'b> {
-    fn draw(&mut self, gs: &mut GfxState, mesh_id: u8, material_id: u8) -> Result<()> {
-        let material = &self.model.materials[material_id as usize];
-        gs.texture_mat = material.texture_mat;
-        self.geosink.begin_mesh(material_id);
-        self.geosink.cur_texture_dim = (material.width as u32, material.height as u32);
-        gs.run_commands(&mut self.geosink, self.model.meshes[mesh_id as usize].commands)?;
-        self.geosink.end_mesh();
-        Ok(())
-    }
-}
 
 struct Eye {
     position: Point3<f32>,
@@ -61,14 +42,7 @@ pub fn viewer(model: &Model, tex: &Tex) -> Result<()> {
         .build_glium()
         .unwrap();
 
-    let mut s = Sink {
-        geosink: geometry::Sink::new(),
-        model: model,
-    };
-    let mut r = render::Renderer::new();
-    r.run_render_cmds(&mut s, &model.objects[..], model.render_cmds_cur)?;
-    let geom = s.geosink.data();
-    //println!("{:#?}", geom.vertices);
+    let geom = geometry::build(model)?;
     let vertex_buffer = glium::VertexBuffer::new(
         &display,
         &geom.vertices

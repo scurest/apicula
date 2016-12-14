@@ -1,9 +1,6 @@
-use cgmath::Matrix4;
 use cgmath::Point2;
 use cgmath::Point3;
-use cgmath::Transform;
 use cgmath::vec3;
-use cgmath::vec4;
 use errors::Result;
 use util::bits::BitField;
 use util::fixed::fix16;
@@ -11,35 +8,54 @@ use util::fixed::fix32;
 use util::view::View;
 
 pub trait Sink {
+    /// Load a matrix from the stack to the current matrix.
+    fn restore(&mut self, idx: u32);
+
+    /// Precompose the current matrix with a scaling.
+    fn scale(&mut self, sx: f64, sy: f64, sz: f64);
+
+    /// Begin a primitive group (eg. triangles, quads, etc).
     fn begin(&mut self, prim_type: u32);
+
+    /// End the current primitive group.
     fn end(&mut self);
-    fn vertex(&mut self, v: Point3<f64>);
+
+    /// Send a vertex with the given position.
+    ///
+    /// Note that the vertex is _untransformed_. It must be multiplied
+    /// by the current matrix to get its final position. The implementer
+    /// is responsible for tracking the current matrix and doing the
+    /// transformation.
+    fn vertex(&mut self, position: Point3<f64>);
+
+    /// Set the texture coordinate for the next vertex.
+    ///
+    /// Texture coordinate on the DS are measured in texels. The top-left
+    /// corner of an image is (0,0) and the bottom-right is (w,h), where
+    /// w and h are the width and height of the image.
     fn texcoord(&mut self, tc: Point2<f64>);
+
+    /// Set the vertex color for the next vertex.
     fn color(&mut self, color: Point3<f32>);
 }
 
-pub struct GfxState {
-    pub vertex: Point3<f64>,
-    pub cur_mat: Matrix4<f64>,
-    pub mat_stack: Vec<Matrix4<f64>>,
-    pub texture_mat: Matrix4<f64>,
+pub fn run_commands<S: Sink>(cmds: &[u8], sink: &mut S) -> Result<()> {
+    let mut state = GpuInterpreterState::new();
+    state.run_commands(cmds, sink)
 }
 
-impl GfxState {
-    pub fn new() -> GfxState {
-        GfxState {
+pub struct GpuInterpreterState {
+    pub vertex: Point3<f64>,
+}
+
+impl GpuInterpreterState {
+    pub fn new() -> GpuInterpreterState {
+        GpuInterpreterState {
             vertex: Point3::new(0.0, 0.0, 0.0),
-            cur_mat: Matrix4::from_scale(1.0),
-            mat_stack: vec![Matrix4::from_scale(1.0); 32],
-            texture_mat: Matrix4::from_scale(1.0),
         }
     }
 
-    pub fn restore(&mut self, id: u32) {
-        self.cur_mat = self.mat_stack[id as usize];
-    }
-
-    pub fn run_commands<S: Sink>(&mut self, sink: &mut S, mut cmds: &[u8]) -> Result<()> {
+    pub fn run_commands<S: Sink>(&mut self, mut cmds: &[u8], sink: &mut S) -> Result<()> {
         let mut fifo = &cmds[0..0];
         while cmds.len() != 0 {
             if fifo.len() == 0 {
@@ -48,7 +64,7 @@ impl GfxState {
             }
             let opcode = fifo[0];
             fifo = &fifo[1..];
-            let size = gfx_cmd_size(opcode)?;
+            let size = cmd_size(opcode)?;
             let params = View::from_buf(&cmds[0..4*size]);
             cmds = &cmds[4*size..];
             self.run_command(sink, opcode, params);
@@ -63,15 +79,15 @@ impl GfxState {
             }
             0x14 => {
                 // MTX_RESTORE - Restore Current Matrix from Stack
-                let restore_id = params.get(0);
-                self.restore(restore_id);
+                let id = params.get(0);
+                sink.restore(id);
             }
             0x1b => {
                 // MTX_SCALE - Multiply Current Matrix by Scale Matrix
                 let sx = fix32(params.get(0), 1, 19, 12);
                 let sy = fix32(params.get(1), 1, 19, 12);
                 let sz = fix32(params.get(2), 1, 19, 12);
-                self.cur_mat = self.cur_mat * Matrix4::from_nonuniform_scale(sx, sy, sz);
+                sink.scale(sx, sy, sz);
             }
             0x40 => {
                 // BEGIN_VTXS - Start of Vertex List
@@ -142,11 +158,11 @@ impl GfxState {
                 let p = params.get(0);
                 let s = fix16(p.bits(0,16) as u16, 1, 11, 4);
                 let t = fix16(p.bits(16,32) as u16, 1, 11, 4);
-                let tc = self.texture_mat * vec4(s,t,0.0,0.0);
-                let texcoord = Point2::new(tc.x, tc.y);
+                let texcoord = Point2::new(s,t);
                 sink.texcoord(texcoord);
             }
             0x20 => {
+                // COLOR - Set Vertex Color
                 let p = params.get(0);
                 let r = p.bits(0,5) as f32 / 31.0;
                 let g = p.bits(5,10) as f32 / 31.0;
@@ -155,20 +171,23 @@ impl GfxState {
                 sink.color(color);
             }
             0x21 => {
-                // normal
+                // NORMAL - Set Normal Vector
+                // Not implemented; just ignore it for now.
             }
-            _ => { panic!("unknown opcode {:#x}", opcode); }
+            _ => {
+                warn!("unknown opcode {:#x}", opcode);
+            }
         }
     }
 
     fn push_vertex<S: Sink>(&mut self, sink: &mut S, vertex: Point3<f64>) {
         self.vertex = vertex;
-        sink.vertex(self.cur_mat.transform_point(vertex));
+        sink.vertex(vertex);
     }
 }
 
 
-fn gfx_cmd_size(opcode: u8) -> Result<usize> {
+fn cmd_size(opcode: u8) -> Result<usize> {
     static SIZES: [i8; 66] = [
          0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1, -1,  1,  0,  1,  1,  1,  0,
