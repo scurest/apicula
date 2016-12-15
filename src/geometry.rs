@@ -36,17 +36,18 @@ impl Default for Vertex {
 }
 
 #[derive(Debug, Clone)]
-pub struct MeshRange {
+pub struct DrawCall {
     pub vertex_range: Range<u16>,
     pub index_range: Range<usize>,
     pub mat_id: u8,
+    pub mesh_id: u8,
 }
 
 #[derive(Debug, Clone)]
 pub struct GeometryData {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
-    pub mesh_ranges: Vec<MeshRange>,
+    pub draw_calls: Vec<DrawCall>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,8 +57,8 @@ pub struct Builder<'a, 'b: 'a> {
     cur_texture_dim: (u32, u32),
     vertices: Vec<Vertex>,
     ind_builder: IndexBuilder,
-    mesh_ranges: Vec<MeshRange>,
-    cur_mesh_range: MeshRange,
+    draw_calls: Vec<DrawCall>,
+    cur_draw_call: DrawCall,
     next_vertex: Vertex,
 }
 
@@ -93,40 +94,42 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             gpu: GpuState::new(),
             vertices: vec![],
             ind_builder: IndexBuilder::new(),
-            mesh_ranges: vec![],
-            cur_mesh_range: MeshRange {
+            draw_calls: vec![],
+            cur_draw_call: DrawCall {
                 vertex_range: 0..0,
                 index_range: 0..0,
                 mat_id: 0,
+                mesh_id: 0,
             },
             cur_texture_dim: (1,1),
             next_vertex: Default::default(),
         }
     }
 
-    pub fn begin_mesh(&mut self, mat_id: u8) {
+    pub fn begin_draw_call(&mut self, mesh_id: u8, mat_id: u8) {
         let len = self.vertices.len() as u16;
-        self.cur_mesh_range.vertex_range = len .. len;
+        self.cur_draw_call.vertex_range = len .. len;
         let len = self.ind_builder.indices.len();
-        self.cur_mesh_range.index_range = len .. len;
-        self.cur_mesh_range.mat_id = mat_id;
+        self.cur_draw_call.index_range = len .. len;
+        self.cur_draw_call.mat_id = mat_id;
+        self.cur_draw_call.mesh_id = mesh_id;
         self.next_vertex = Default::default();
     }
 
-    pub fn end_mesh(&mut self) {
+    pub fn end_draw_call(&mut self) {
         let len = self.vertices.len() as u16;
-        self.cur_mesh_range.vertex_range.end = len;
+        self.cur_draw_call.vertex_range.end = len;
         let len = self.ind_builder.indices.len();
-        self.cur_mesh_range.index_range.end = len;
+        self.cur_draw_call.index_range.end = len;
 
-        self.mesh_ranges.push(self.cur_mesh_range.clone());
+        self.draw_calls.push(self.cur_draw_call.clone());
     }
 
     pub fn data(self) -> GeometryData {
         GeometryData {
             vertices: self.vertices,
             indices: self.ind_builder.indices,
-            mesh_ranges: self.mesh_ranges,
+            draw_calls: self.draw_calls,
         }
     }
 }
@@ -150,9 +153,10 @@ impl<'a, 'b: 'a> render_cmds::Sink for Builder<'a, 'b> {
         self.cur_texture_dim = dim;
         self.gpu.texture_matrix = mat.texture_mat;
 
-        self.begin_mesh(mat_id);
+        self.begin_draw_call(mesh_id, mat_id);
         gpu_cmds::run_commands(self.model.meshes[mesh_id as usize].commands, self)?;
-        self.end_mesh();
+        self.end_draw_call();
+
         Ok(())
     }
 }
@@ -169,7 +173,7 @@ impl<'a, 'b: 'a> gpu_cmds::Sink for Builder<'a, 'b> {
     }
     fn end(&mut self) {
         self.ind_builder.end();
-        self.cur_mesh_range.index_range.end = self.ind_builder.indices.len();
+        self.cur_draw_call.index_range.end = self.ind_builder.indices.len();
     }
     fn texcoord(&mut self, texcoord: Point2<f64>) {
         let tc = Point2::new(

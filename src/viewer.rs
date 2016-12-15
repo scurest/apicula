@@ -164,8 +164,8 @@ pub fn viewer(model: &Model, tex: &Tex) -> Result<()> {
             Matrix4::from_angle_y(Rad(-eye.azimuth)) *
             Matrix4::from_translation(-eye.position.to_vec());
 
-        for range in geom.mesh_ranges.iter() {
-            let tx = textures[range.mat_id as usize].as_ref()
+        for call in geom.draw_calls.iter() {
+            let tx = textures[call.mat_id as usize].as_ref()
                 .unwrap_or(&default_texture);
             let mut sampler = glium::uniforms::Sampler::new(tx)
                 .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
@@ -178,7 +178,7 @@ pub fn viewer(model: &Model, tex: &Tex) -> Result<()> {
                     (true, true) => Wrap::Mirror,
                 }
             };
-            let params = model.materials[range.mat_id as usize].params;
+            let params = model.materials[call.mat_id as usize].params;
             sampler.1.wrap_function.0 = wrap_fn(params.repeat_s(), params.mirror_s());
             sampler.1.wrap_function.1 = wrap_fn(params.repeat_t(), params.mirror_t());
 
@@ -193,7 +193,7 @@ pub fn viewer(model: &Model, tex: &Tex) -> Result<()> {
             };
             target.draw(
                 &vertex_buffer,
-                &indices.slice(range.index_range.clone()).unwrap(),
+                &indices.slice(call.index_range.clone()).unwrap(),
                 &program,
                 &uniforms,
                 &drawparams,

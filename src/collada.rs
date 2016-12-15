@@ -184,10 +184,10 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
     write!(w, cat!(
         r#"  <library_geometries>"#,
     ))?;
-    for (i, mesh) in model.meshes.iter().enumerate() {
-        let mesh_range = &geom.mesh_ranges[i];
+    for (i, call) in geom.draw_calls.iter().enumerate() {
+        let mesh = &model.meshes[call.mesh_id as usize];
 
-        let num_vertices = (mesh_range.vertex_range.end - mesh_range.vertex_range.start) as usize;
+        let num_vertices = (call.vertex_range.end - call.vertex_range.start) as usize;
 
         write!(w, cat!(
             r#"    <geometry id="geometry{i}" name="{name}">"#,
@@ -208,7 +208,7 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
             i = i,
             num_floats = num_floats,
         )?;
-        for j in mesh_range.vertex_range.clone() {
+        for j in call.vertex_range.clone() {
             let pos = &geom.vertices[j as usize].position;
             write!(w, "{} {} {} ", pos[0], pos[1], pos[2])?;
         }
@@ -238,7 +238,7 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
             i = i,
             num_floats = num_floats,
         )?;
-        for j in mesh_range.vertex_range.clone() {
+        for j in call.vertex_range.clone() {
             let texcoord = &geom.vertices[j as usize].texcoord;
             write!(w, "{} {} ", texcoord[0], texcoord[1])?;
         }
@@ -267,7 +267,7 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
             i = i,
             num_floats = num_floats,
         )?;
-        for j in mesh_range.vertex_range.clone() {
+        for j in call.vertex_range.clone() {
             let color = &geom.vertices[j as usize].color;
             write!(w, "{} {} {} ", color[0], color[1], color[2])?;
         }
@@ -296,20 +296,20 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
             i = i,
         )?;
 
-        let num_tris = (mesh_range.index_range.end - mesh_range.index_range.start) / 3;
+        let num_tris = (call.index_range.end - call.index_range.start) / 3;
         write!(w, cat!(
             r#"        <triangles material="material{mat_id}" count="{num_tris}">"#,
             r##"          <input semantic="VERTEX" source="#geometry{i}_vertices" offset="0"/>"##,
             ),
             i = i,
-            mat_id = mesh_range.mat_id,
+            mat_id = call.mat_id,
             num_tris = num_tris,
         )?;
         write!(w,
             r#"          <p>"#,
         )?;
-        let start_index = mesh_range.vertex_range.start;
-        for j in mesh_range.index_range.clone() {
+        let start_index = call.vertex_range.start;
+        for j in call.index_range.clone() {
             let index = &geom.indices[j] - start_index;
             write!(w, "{} ", index)?;
         }
@@ -336,8 +336,8 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
         ),
         model_name = name::IdFmt(&model.name),
     )?;
-    for (i, mesh) in model.meshes.iter().enumerate() {
-        let mesh_range = &geom.mesh_ranges[i];
+    for (i, call) in geom.draw_calls.iter().enumerate() {
+        let mesh = &model.meshes[call.mesh_id as usize];
         write!(w, cat!(
             r#"      <node id="node{i}" name="{mesh_name}" type="NODE">"#,
             r##"        <instance_geometry url="#geometry{i}">"##,
@@ -351,7 +351,7 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
             ),
             i = i,
             mesh_name = name::IdFmt(&mesh.name),
-            mat_id = mesh_range.mat_id,
+            mat_id = call.mat_id,
         )?;
     }
     write!(w, cat!(
