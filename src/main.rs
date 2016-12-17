@@ -17,20 +17,35 @@ extern crate petgraph;
 mod errors;
 #[macro_use]
 mod util;
-mod collada;
+mod convert;
 mod geometry;
 mod index_builder;
 mod joint_builder;
 mod nitro;
 mod viewer;
 
+use errors::Result;
 use std::fs::File;
 use std::io::Read;
 use util::cur::Cur;
 
 fn main() {
-    env_logger::init().unwrap();
+    let ret_code = main2();
+    std::process::exit(ret_code);
+}
 
+fn main2() -> i32 {
+    env_logger::init().unwrap();
+    match main3() {
+        Ok(()) => 0,
+        Err(e) => {
+            error!("error: {:#?}", e);
+            1
+        }
+    }
+}
+
+fn main3() -> Result<()> {
     let app = clap_app!(demense =>
         (@setting SubcommandRequiredElseHelp)
         (version: "0.1")
@@ -44,42 +59,29 @@ fn main() {
             (about: "Convert a model to COLLADA")
             (alias: "c")
             (@arg INPUT: +required "BMD0 file")
+            (@arg OUTPUT: -o --output +required +takes_value "output directory")
         )
     );
     let matches = app.get_matches();
     let subcmd = matches.subcommand_name().unwrap();
 
-    let arg = matches
+    let input_file = matches
         .subcommand_matches(subcmd).unwrap()
         .value_of_os("INPUT").unwrap();
-    let mut f = File::open(&arg).unwrap();
+    let mut f = File::open(&input_file).unwrap();
     let mut v: Vec<u8> = vec![];
     f.read_to_end(&mut v).unwrap();
-
     let cur = Cur::new(&v[..]);
-    let res = nitro::read_bmd(cur);
+    let bmd = nitro::read_bmd(cur)?;
 
-    match res {
-        Ok(bmd) => {
-            let model = &bmd.mdl.models[0];
-            match matches.subcommand_name() {
-                Some("view") => {
-                    let res = viewer::viewer(model, &bmd.tex);
-                    if let Err(e) = res {
-                        error!("err {:#?}", e);
-                    }
-                }
-                Some("convert") => {
-                    let mut s = String::new();
-                    let res = collada::write(&mut s, model);
-                    match res {
-                        Ok(()) => println!("{}", s),
-                        Err(e) => error!("err {:#?}", e),
-                    }
-                }
-                _ => {}
-            }
+    match matches.subcommand() {
+        ("view", Some(m)) => {
+            viewer::main(&bmd)?;
         }
-        Err(e) => error!("err {:#?}", e),
-    }
+        ("convert", Some(m)) => {
+            convert::main(m, &bmd)?;
+        }
+        _ => {}
+    };
+    Ok(())
 }
