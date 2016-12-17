@@ -1,4 +1,6 @@
 use cgmath::Matrix4;
+use convert::image_names::ImageNames;
+use convert::image_names::TexturePalettePair;
 use errors::Result;
 use geometry;
 use geometry::GeometryData;
@@ -8,7 +10,6 @@ use nitro::mdl::Model;
 use petgraph::Direction;
 use petgraph::Graph;
 use petgraph::graph::NodeIndex;
-use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Write;
 use time;
@@ -37,7 +38,7 @@ macro_rules! cat {
     ($($es:expr),*,) => { cat!($($es),*) }
 }
 
-pub fn write<W: Write>(w: &mut W, model: &Model) -> Result<()> {
+pub fn write<W: Write>(w: &mut W, model: &Model, image_names: &ImageNames) -> Result<()> {
     let geom = geometry::build(model)?;
 
     write!(w, cat!(
@@ -45,9 +46,9 @@ pub fn write<W: Write>(w: &mut W, model: &Model) -> Result<()> {
         r#"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">"#,
     ))?;
     write_asset(w)?;
-    write_library_images(w, model)?;
+    write_library_images(w, image_names)?;
     write_library_materials(w, model)?;
-    write_library_effects(w, model)?;
+    write_library_effects(w, model, image_names)?;
     write_library_geometries(w, model, &geom)?;
     write_library_controllers(w, &geom)?;
     write_library_visual_scenes(w, model, &geom)?;
@@ -72,21 +73,17 @@ fn write_asset<W: Write>(w: &mut W) -> Result<()> {
     Ok(())
 }
 
-fn write_library_images<W: Write>(w: &mut W, model: &Model) -> Result<()> {
-    let texture_names = model.materials.iter()
-        .map(|mat| mat.name)
-        .collect::<HashSet<_>>();
-
+fn write_library_images<W: Write>(w: &mut W, image_names: &ImageNames) -> Result<()> {
     write!(w, cat!(
         r#"  <library_images>"#,
     ))?;
-    for name in texture_names {
+    for name in image_names.values() {
         write!(w, cat!(
             r#"    <image id="{name}">"#,
             r#"      <init_from>{name}.png</init_from>"#,
             r#"    </image>"#,
             ),
-            name = name::IdFmt(&name),
+            name = name,
         )?;
     }
     write!(w, cat!(
@@ -115,11 +112,18 @@ fn write_library_materials<W: Write>(w: &mut W, model: &Model) -> Result<()> {
     Ok(())
 }
 
-fn write_library_effects<W: Write>(w: &mut W, model: &Model) -> Result<()> {
+fn write_library_effects<W: Write>(w: &mut W, model: &Model, image_names: &ImageNames) -> Result<()> {
     write!(w, cat!(
         r#"  <library_effects>"#,
     ))?;
     for (i, mat) in model.materials.iter().enumerate() {
+        let image_name = mat.texture_name
+            .map(|texname| TexturePalettePair {
+                texture_name: texname,
+                palette_name: mat.palette_name,
+            })
+            .and_then(|pair| image_names.get(&pair));
+
         write!(w, cat!(
             r#"    <effect id="effect{i}" name="{name}">"#,
             r#"      <profile_COMMON>"#,
@@ -128,7 +132,7 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model) -> Result<()> {
             name = name::IdFmt(&mat.name),
         )?;
 
-        if let Some(texname) = mat.texture_name {
+        if let Some(name) = image_name {
             let wrap = |repeat, mirror| {
                 match (repeat, mirror) {
                     (false, _) => "CLAMP",
@@ -139,7 +143,7 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model) -> Result<()> {
             write!(w, cat!(
                 r#"        <newparam sid="Image-surface">"#,
                 r#"          <surface type="2D">"#,
-                r#"            <init_from>{texname}</init_from>"#,
+                r#"            <init_from>{image_name}</init_from>"#,
                 r#"            <format>A8R8G8B8</format>"#,
                 r#"          </surface>"#,
                 r#"        </newparam>"#,
@@ -154,7 +158,7 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model) -> Result<()> {
                 r#"          </sampler2D>"#,
                 r#"        </newparam>"#,
                 ),
-                texname = name::IdFmt(&mat.name),
+                image_name = name,
                 wrap_s = wrap(mat.params.repeat_s(), mat.params.mirror_s()),
                 wrap_t = wrap(mat.params.repeat_t(), mat.params.mirror_t()),
             )?;
@@ -165,7 +169,7 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model) -> Result<()> {
             r#"          <phong>"#,
             r#"            <diffuse>"#,
         ))?;
-        if mat.texture_name.is_some() {
+        if image_name.is_some() {
             write!(w, cat!(
                 r#"              <texture texture="Image-sampler" texcoord=""/>"#,
             ))?;
@@ -178,7 +182,7 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model) -> Result<()> {
             r#"            </diffuse>"#,
             r#"            <transparent opaque="A_ONE">"#,
         ))?;
-        if mat.texture_name.is_some() {
+        if image_name.is_some() {
             write!(w, cat!(
                 r#"              <texture texture="Image-sampler" texcoord=""/>"#,
             ))?;

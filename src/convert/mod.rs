@@ -1,8 +1,11 @@
 mod collada;
+mod image_names;
 
 use clap::ArgMatches;
 use errors::Result;
 use nitro::Bmd;
+use nitro::tex;
+use png;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -17,10 +20,39 @@ pub fn main(matches: &ArgMatches, bmd: &Bmd) -> Result<()> {
     let dae_path = out_dir.join(&format!("{}.dae", name::IdFmt(&model.name)));
     let mut f = File::create(dae_path)?;
 
+    let image_names = image_names::build_image_names(model);
+
     let mut s = String::new();
-    collada::write(&mut s, model)?;
+    collada::write(&mut s, model, &image_names)?;
 
     f.write_all(s.as_bytes())?;
+
+    for (texpal, image_name) in image_names.into_iter() {
+        let texinfo = bmd.tex.texinfo.iter()
+            .find(|info| info.name == texpal.texture_name);
+        let texinfo = match texinfo {
+            Some(info) => info,
+            None => {
+                warn!("couldn't find a texture named: {}", texpal.texture_name);
+                continue;
+            }
+        };
+        let palinfo = texpal.palette_name.and_then(|palname|
+            bmd.tex.palinfo.iter()
+                .find(|info| info.name == palname)
+        );
+
+        let res = tex::image::gen_image(&bmd.tex, texinfo, palinfo);
+        let rgba = match res {
+            Ok(rgba) => rgba,
+            Err(e) => {
+                warn!("error generating image {}, error: {:#?}", image_name, e);
+                continue;
+            }
+        };
+        let path = out_dir.join(&format!("{}.png", image_name));
+        png::write(&path, &rgba[..], texinfo.params.width(), texinfo.params.height())?;
+    }
 
     Ok(())
 }

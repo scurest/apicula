@@ -12,6 +12,7 @@ extern crate cgmath;
 extern crate env_logger;
 extern crate time;
 extern crate petgraph;
+extern crate png as pnglib;
 
 #[macro_use]
 mod errors;
@@ -21,6 +22,7 @@ mod convert;
 mod geometry;
 mod index_builder;
 mod joint_builder;
+mod png;
 mod nitro;
 mod viewer;
 

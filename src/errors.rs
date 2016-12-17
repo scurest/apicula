@@ -3,6 +3,7 @@ error_chain! {
         Fmt(::std::fmt::Error);
         Io(::std::io::Error);
         TimeFmt(::time::ParseError);
+        Png(::pnglib::EncodingError);
     }
 }
 
