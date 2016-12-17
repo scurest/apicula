@@ -1,11 +1,31 @@
+use cgmath::Matrix4;
 use errors::Result;
 use geometry;
 use geometry::GeometryData;
+use joint_builder::Kind;
+use joint_builder::Weight;
 use nitro::mdl::Model;
+use petgraph::Direction;
+use petgraph::Graph;
+use petgraph::graph::NodeIndex;
 use std::collections::HashSet;
+use std::fmt;
 use std::fmt::Write;
 use time;
 use util::name;
+
+struct Mat<'a>(&'a Matrix4<f64>);
+
+impl<'a> fmt::Display for Mat<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+            self.0.x.x, self.0.y.x, self.0.z.x, self.0.w.x,
+            self.0.x.y, self.0.y.y, self.0.z.y, self.0.w.y,
+            self.0.x.z, self.0.y.z, self.0.z.z, self.0.w.z,
+            self.0.x.w, self.0.y.w, self.0.z.w, self.0.w.w,
+        )
+    }
+}
 
 /// Concatenate strings with a new line interposed after each.
 macro_rules! cat {
@@ -29,6 +49,7 @@ pub fn write<W: Write>(w: &mut W, model: &Model) -> Result<()> {
     write_library_materials(w, model)?;
     write_library_effects(w, model)?;
     write_library_geometries(w, model, &geom)?;
+    write_library_controllers(w, &geom)?;
     write_library_visual_scenes(w, model, &geom)?;
     write_scene(w)?;
     write!(w, cat!(
@@ -329,6 +350,126 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
     Ok(())
 }
 
+fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result<()> {
+    write!(w, cat!(
+        r#"  <library_controllers>"#,
+    ))?;
+    for (i, call) in geom.draw_calls.iter().enumerate() {
+        write!(w, cat!(
+            r#"    <controller id="controller{i}">"#,
+            r##"      <skin source="#geometry{i}">"##,
+            ),
+            i = i,
+        )?;
+        write!(w, cat!(
+            r#"        <source id="controller{i}-joints">"#,
+            ),
+            i = i,
+        )?;
+        let count = geom.joint_data.tree.node_count();
+        write!(w,
+            r#"          <IDREF_array id="controller{i}-joints-array" count="{count}">"#,
+            i = i,
+            count = count,
+        )?;
+        for j in 0..count {
+            write!(w, "joint{} ", j)?;
+        }
+        write!(w, "</IDREF_array>\n")?;
+        write!(w, cat!(
+            r#"          <technique_common>"#,
+            r##"            <accessor source="#controller{i}-joints-array" count="{count}" stride="1">"##,
+            r#"              <param name="JOINT" type="Name"/>"#,
+            r#"            </accessor>"#,
+            r#"          </technique_common>"#,
+            r#"        </source>"#,
+            ),
+            i = i,
+            count = count
+        )?;
+
+        write!(w, cat!(
+            r#"        <source id="controller{i}-bind_poses">"#,
+            ),
+            i = i,
+        )?;
+        write!(w,
+            r#"          <float_array id="controller{i}-bind_poses-array" count="{num_floats}">"#,
+            i = i,
+            num_floats = 16 * count,
+        )?;
+        for j in 0..count {
+            let inv_bind = geom.joint_data.tree[NodeIndex::new(j)].inv_bind_matrix;
+            write!(w, "{} ", Mat(&inv_bind))?;
+        }
+        write!(w, "</float_array>\n")?;
+        write!(w, cat!(
+            r#"          <technique_common>"#,
+            r##"            <accessor source="#controller{i}-joints-array" count="{count}" stride="16">"##,
+            r#"              <param name="TRANSFORM" type="float4x4"/>"#,
+            r#"            </accessor>"#,
+            r#"          </technique_common>"#,
+            r#"        </source>"#,
+            ),
+            i = i,
+            count = count
+        )?;
+
+        write!(w, cat!(
+            r#"        <source id="controller{i}-weights">"#,
+            r#"          <float_array id="controller-weights-array" count="1">1</float_array>"#,
+            r#"          <technique_common>"#,
+            r##"            <accessor source="#controller-joints-array" count="1" stride="1">"##,
+            r#"              <param name="WEIGHT" type="float"/>"#,
+            r#"            </accessor>"#,
+            r#"          </technique_common>"#,
+            r#"        </source>"#,
+            ),
+            i = i,
+        )?;
+        write!(w, cat!(
+            r#"        <joints>"#,
+            r##"          <input semantic="JOINT" source="#controller{i}-joints"/>"##,
+            r##"          <input semantic="INV_BIND_MATRIX" source="#controller{i}-bind_poses"/>"##,
+            r#"        </joints>"#,
+            ),
+            i = i,
+        )?;
+        let num_verts = call.vertex_range.end - call.vertex_range.start;
+        write!(w, cat!(
+            r#"        <vertex_weights count="{num_verts}">"#,
+            r##"          <input semantic="JOINT" source="#controller{i}-joints" offset="0"/>"##,
+            r##"          <input semantic="WEIGHT" source="#controller{i}-weights" offset="1"/>"##,
+            ),
+            i = i,
+            num_verts = num_verts,
+        )?;
+        write!(w, r#"          <vcount>"#)?;
+        for _ in 0..num_verts {
+            write!(w, "1 ")?;
+        }
+        write!(w, "</vcount>\n")?;
+        write!(w, r#"          <v>"#)?;
+        for j in 0..num_verts {
+            let vert_index = call.vertex_range.start + j;
+            let joint_index = geom.joint_data.vertices[vert_index as usize].index();
+            write!(w, "{} 0 ", joint_index)?;
+        }
+        write!(w, "</v>\n")?;
+
+        write!(w, cat!(
+            r#"        </vertex_weights>"#,
+            r#"      </skin>"#,
+            r#"    </controller>"#,
+        ))?;
+    }
+    write!(w, cat!(
+        r#"  </library_controllers>"#,
+    ))?;
+
+    Ok(())
+}
+
 fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
     write!(w, cat!(
         r#"  <library_visual_scenes>"#,
@@ -336,17 +477,20 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
         ),
         model_name = name::IdFmt(&model.name),
     )?;
+
+    write_joint_heirarchy(w, model, geom)?;
+
     for (i, call) in geom.draw_calls.iter().enumerate() {
         let mesh = &model.meshes[call.mesh_id as usize];
         write!(w, cat!(
             r#"      <node id="node{i}" name="{mesh_name}" type="NODE">"#,
-            r##"        <instance_geometry url="#geometry{i}">"##,
+            r##"        <instance_controller url="#controller{i}">"##,
             r#"          <bind_material>"#,
             r#"            <technique_common>"#,
             r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}"/>"##,
             r#"            </technique_common>"#,
             r#"          </bind_material>"#,
-            r#"        </instance_geometry>"#,
+            r#"        </instance_controller>"#,
             r#"      </node>"#,
             ),
             i = i,
@@ -359,6 +503,51 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
         r#"  </library_visual_scenes>"#,
     ))?;
     Ok(())
+}
+
+fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
+    fn write_indent<W: Write>(w: &mut W, indent: u32) -> Result<()> {
+        // Base indent
+        write!(w, "      ")?;
+        for _ in 0..indent {
+            write!(w, "  ")?;
+        }
+        Ok(())
+    }
+    fn write<W: Write>(w: &mut W, model: &Model, tree: &Graph<Weight, ()>, node: NodeIndex, indent: u32) -> Result<()> {
+        write_indent(w, indent)?;
+        write!(w, r#"<node id="joint{}" "#, node.index())?;
+        match tree[node].kind {
+            Kind::Root => (),
+            Kind::Object(id) => {
+                let object = &model.objects[id as usize];
+                write!(w, r#"name="{}" "#, name::IdFmt(&object.name))?;
+            }
+            Kind::UndefinedStackSlot(pos) => {
+                write!(w, r#"name="__STACK{}__" "#, pos)?;
+            }
+        }
+        write!(w, "type=\"JOINT\">\n")?;
+
+        match tree[node].kind {
+            Kind::Object(id) => {
+                let mat = model.objects[id as usize].xform;
+                write_indent(w, indent + 1)?;
+                write!(w, "<matrix>{}</matrix>\n", Mat(&mat))?;
+            }
+            _ => (),
+        }
+
+        let children = tree.neighbors_directed(node, Direction::Outgoing);
+        for child in children {
+            write(w, model, tree, child, indent + 1)?;
+        }
+
+        write_indent(w, indent)?;
+        write!(w, "</node>\n")?;
+        Ok(())
+    }
+    write(w, model, &geom.joint_data.tree, geom.joint_data.root, 0)
 }
 
 fn write_scene<W: Write>(w: &mut W) -> Result<()> {

@@ -5,6 +5,8 @@ use cgmath::Transform;
 use cgmath::vec4;
 use errors::Result;
 use index_builder::IndexBuilder;
+use joint_builder::JointBuilder;
+use joint_builder::JointData;
 use nitro::gpu_cmds;
 use nitro::mdl::Model;
 use nitro::render_cmds;
@@ -48,11 +50,13 @@ pub struct GeometryData {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
     pub draw_calls: Vec<DrawCall>,
+    pub joint_data: JointData,
 }
 
 #[derive(Debug, Clone)]
 pub struct Builder<'a, 'b: 'a> {
     model: &'a Model<'b>,
+    joint_builder: JointBuilder<'a>,
     gpu: GpuState,
     cur_texture_dim: (u32, u32),
     vertices: Vec<Vertex>,
@@ -91,6 +95,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn new(model: &'a Model<'b>) -> Builder<'a, 'b> {
         Builder {
             model: model,
+            joint_builder: JointBuilder::new(&model.objects),
             gpu: GpuState::new(),
             vertices: vec![],
             ind_builder: IndexBuilder::new(),
@@ -130,20 +135,27 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             vertices: self.vertices,
             indices: self.ind_builder.indices,
             draw_calls: self.draw_calls,
+            joint_data: self.joint_builder.data(),
         }
     }
 }
 
 impl<'a, 'b: 'a> render_cmds::Sink for Builder<'a, 'b> {
     fn load_matrix(&mut self, stack_pos: u8) -> Result<()> {
+        self.joint_builder.load_matrix(stack_pos);
+
         self.gpu.restore(stack_pos);
         Ok(())
     }
     fn store_matrix(&mut self, stack_pos: u8) -> Result<()> {
+        self.joint_builder.store_matrix(stack_pos);
+
         self.gpu.store(stack_pos);
         Ok(())
     }
     fn mul_by_object(&mut self, object_id: u8) -> Result<()> {
+        self.joint_builder.mul_by_object(object_id);
+
         self.gpu.mul_matrix(&self.model.objects[object_id as usize].xform);
         Ok(())
     }
@@ -163,6 +175,7 @@ impl<'a, 'b: 'a> render_cmds::Sink for Builder<'a, 'b> {
 
 impl<'a, 'b: 'a> gpu_cmds::Sink for Builder<'a, 'b> {
     fn restore(&mut self, idx: u32) {
+        self.joint_builder.load_matrix(idx as u8);
         self.gpu.restore(idx as u8);
     }
     fn scale(&mut self, sx: f64, sy: f64, sz: f64) {
@@ -188,9 +201,11 @@ impl<'a, 'b: 'a> gpu_cmds::Sink for Builder<'a, 'b> {
         self.next_vertex.color = [c[0] as f32, c[1] as f32, c[2] as f32];
     }
     fn vertex(&mut self, p: Point3<f64>) {
+        self.ind_builder.vertex();
+        self.joint_builder.vertex();
+
         let p = self.gpu.cur_matrix.transform_point(p);
         self.next_vertex.position = [p[0] as f32, p[1] as f32, p[2] as f32];
         self.vertices.push(self.next_vertex);
-        self.ind_builder.vertex();
     }
 }

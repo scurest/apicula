@@ -11,6 +11,7 @@ extern crate clap;
 extern crate cgmath;
 extern crate env_logger;
 extern crate time;
+extern crate petgraph;
 
 #[macro_use]
 mod errors;
@@ -19,6 +20,7 @@ mod util;
 mod collada;
 mod geometry;
 mod index_builder;
+mod joint_builder;
 mod nitro;
 mod viewer;
 
