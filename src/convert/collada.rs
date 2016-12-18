@@ -4,6 +4,7 @@ use convert::image_names::TexturePalettePair;
 use errors::Result;
 use geometry;
 use geometry::GeometryData;
+use geometry::Vertex;
 use joint_builder::Kind;
 use joint_builder::Weight;
 use nitro::mdl::Model;
@@ -222,104 +223,110 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
             name = name::IdFmt(&mesh.name),
         )?;
 
-        write!(w, cat!(
-            r#"        <source id="geometry{i}_positions">"#,
-            ),
-            i = i,
-        )?;
-        let num_floats = 3 * num_vertices;
-        write!(w,
-            r#"          <float_array id="geometry_{i}_positions_array" count="{num_floats}">"#,
-            i = i,
-            num_floats = num_floats,
-        )?;
-        for j in call.vertex_range.clone() {
-            let pos = &geom.vertices[j as usize].position;
-            write!(w, "{} {} {} ", pos[0], pos[1], pos[2])?;
+        fn write_float_source<W: Write, F>(
+            w: &mut W,
+            i: usize,
+            name: &'static str,
+            params: &[&'static str],
+            vertices: &[Vertex],
+            f: F
+        ) -> Result<()>
+            where F: Fn(&Vertex) -> &[f32]
+        {
+            let num_verts = vertices.len();
+            let num_params = params.len();
+            let num_floats = num_params * num_verts;
+
+            write!(w, cat!(
+                r#"        <source id="geometry{i}_{name}">"#,
+                ),
+                i = i,
+                name = name
+            )?;
+            write!(w,
+                r#"          <float_array id="geometry_{i}_{name}_array" count="{num_floats}">"#,
+                i = i,
+                name = name,
+                num_floats = num_floats,
+            )?;
+            for v in vertices {
+                for float in f(v) {
+                    write!(w, "{} ", float)?;
+                }
+            }
+            write!(w, "</float_array>\n")?;
+            write!(w, cat!(
+                r#"          <technique_common>"#,
+                r##"            <accessor source="#geometry{i}_{name}_array" count="{num_verts}" stride="{num_params}">"##,
+                ),
+                i = i,
+                name = name,
+                num_verts = num_verts,
+                num_params = num_params,
+            )?;
+            for param_name in params {
+                write!(w, cat!(
+                    r#"              <param name="{param_name}" type="float"/>"#,
+                    ),
+                    param_name = param_name,
+                )?;
+            }
+            write!(w, cat!(
+                r#"            </accessor>"#,
+                r#"          </technique_common>"#,
+                r#"        </source>"#,
+            ))?;
+            Ok(())
         }
-        write!(w, "</float_array>\n")?;
-        write!(w, cat!(
-            r#"          <technique_common>"#,
-            r##"            <accessor source="#geometry{i}_positions_array" count="{num_verts}" stride="3">"##,
-            r#"              <param name="X" type="float"/>"#,
-            r#"              <param name="Y" type="float"/>"#,
-            r#"              <param name="Z" type="float"/>"#,
-            r#"            </accessor>"#,
-            r#"          </technique_common>"#,
-            r#"        </source>"#,
-            ),
-            i = i,
-            num_verts = num_vertices,
+        let vert_range = call.vertex_range.start as usize .. call.vertex_range.end as usize;
+        let verts = &geom.vertices[vert_range];
+        write_float_source(
+            w,
+            i,
+            "positions",
+            &["X", "Y", "Z"],
+            verts,
+            |v| { &v.position }
+        )?;
+        write_float_source(
+            w,
+            i,
+            "texcoords",
+            &["S", "T"],
+            verts,
+            |v| { &v.texcoord }
         )?;
 
-        write!(w, cat!(
-            r#"        <source id="geometry{i}_texcoords">"#,
-            ),
-            i = i,
-        )?;
-        let num_floats = 2 * num_vertices;
-        write!(w,
-            r#"          <float_array id="geometry_{i}_texcoords_array" count="{num_floats}">"#,
-            i = i,
-            num_floats = num_floats,
-        )?;
-        for j in call.vertex_range.clone() {
-            let texcoord = &geom.vertices[j as usize].texcoord;
-            write!(w, "{} {} ", texcoord[0], texcoord[1])?;
+        // Omit the colors if they are all white
+        let omit_colors = verts.iter().all(|v| v.color == [1.0, 1.0, 1.0]);
+        if !omit_colors {
+            write_float_source(
+                w,
+                i,
+                "colors",
+                &["R", "G", "B"],
+                verts,
+                |v| { &v.color }
+            )?;
         }
-        write!(w, "</float_array>\n")?;
-        write!(w, cat!(
-            r#"          <technique_common>"#,
-            r##"            <accessor source="#geometry{i}_texcoord_array" count="{num_verts}" stride="2">"##,
-            r#"              <param name="S" type="float"/>"#,
-            r#"              <param name="T" type="float"/>"#,
-            r#"            </accessor>"#,
-            r#"          </technique_common>"#,
-            r#"        </source>"#,
-            ),
-            i = i,
-            num_verts = num_vertices,
-        )?;
-
-        write!(w, cat!(
-            r#"        <source id="geometry{i}_colors">"#,
-            ),
-            i = i,
-        )?;
-        let num_floats = 3 * num_vertices;
-        write!(w,
-            r#"          <float_array id="geometry_{i}_colors_array" count="{num_floats}">"#,
-            i = i,
-            num_floats = num_floats,
-        )?;
-        for j in call.vertex_range.clone() {
-            let color = &geom.vertices[j as usize].color;
-            write!(w, "{} {} {} ", color[0], color[1], color[2])?;
-        }
-        write!(w, "</float_array>\n")?;
-        write!(w, cat!(
-            r#"          <technique_common>"#,
-            r##"            <accessor source="#geometry{i}_colors_array" count="{num_verts}" stride="3">"##,
-            r#"              <param name="R" type="float"/>"#,
-            r#"              <param name="G" type="float"/>"#,
-            r#"              <param name="B" type="float"/>"#,
-            r#"            </accessor>"#,
-            r#"          </technique_common>"#,
-            r#"        </source>"#,
-            ),
-            i = i,
-            num_verts = num_vertices,
-        )?;
 
         write!(w, cat!(
             r#"        <vertices id="geometry{i}_vertices">"#,
             r##"          <input semantic="POSITION" source="#geometry{i}_positions"/>"##,
             r##"          <input semantic="TEXCOORD" source="#geometry{i}_texcoords"/>"##,
-            r##"          <input semantic="COLOR" source="#geometry{i}_colors"/>"##,
-            r#"        </vertices>"#,
             ),
             i = i,
         )?;
+        if !omit_colors {
+            write!(w, cat!(
+                r##"          <input semantic="COLOR" source="#geometry{i}_colors"/>"##,
+                ),
+                i = i,
+            )?;
+        }
+        write!(w, cat!(
+            r#"        </vertices>"#,
+        ))?;
 
         let num_tris = (call.index_range.end - call.index_range.start) / 3;
         write!(w, cat!(
