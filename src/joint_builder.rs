@@ -69,12 +69,11 @@ impl<'a> JointBuilder<'a> {
         let idx = match slot {
             Some(idx) => idx,
             None => {
-                let n = self.data.tree.add_node(Weight {
-                    kind: Kind::UndefinedStackSlot(stack_pos),
-                    inv_bind_matrix: Matrix4::one(),
-                });
-                self.data.tree.add_edge(self.data.root, n, ());
-                n
+                let root = self.data.root;
+                self.find_or_add_child(
+                    root,
+                    Kind::UndefinedStackSlot(stack_pos),
+                )
             }
         };
         self.cur_matrix = idx;
