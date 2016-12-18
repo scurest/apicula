@@ -172,7 +172,7 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model, image_names: &Image
         ))?;
         if image_name.is_some() {
             write!(w, cat!(
-                r#"              <texture texture="Image-sampler" texcoord=""/>"#,
+                r#"              <texture texture="Image-sampler" texcoord="tc"/>"#,
             ))?;
         } else {
             write!(w, cat!(
@@ -185,7 +185,7 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model, image_names: &Image
         ))?;
         if image_name.is_some() {
             write!(w, cat!(
-                r#"              <texture texture="Image-sampler" texcoord=""/>"#,
+                r#"              <texture texture="Image-sampler" texcoord="tc"/>"#,
             ))?;
         } else {
             write!(w, cat!(
@@ -212,8 +212,6 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
     ))?;
     for (i, call) in geom.draw_calls.iter().enumerate() {
         let mesh = &model.meshes[call.mesh_id as usize];
-
-        let num_vertices = (call.vertex_range.end - call.vertex_range.start) as usize;
 
         write!(w, cat!(
             r#"    <geometry id="geometry{i}" name="{name}">"#,
@@ -244,7 +242,7 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
                 name = name
             )?;
             write!(w,
-                r#"          <float_array id="geometry_{i}_{name}_array" count="{num_floats}">"#,
+                r#"          <float_array id="geometry{i}_{name}_array" count="{num_floats}">"#,
                 i = i,
                 name = name,
                 num_floats = num_floats,
@@ -416,7 +414,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         write!(w, "</float_array>\n")?;
         write!(w, cat!(
             r#"          <technique_common>"#,
-            r##"            <accessor source="#controller{i}-joints-array" count="{count}" stride="16">"##,
+            r##"            <accessor source="#controller{i}-bind_poses-array" count="{count}" stride="16">"##,
             r#"              <param name="TRANSFORM" type="float4x4"/>"#,
             r#"            </accessor>"#,
             r#"          </technique_common>"#,
@@ -428,9 +426,9 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
 
         write!(w, cat!(
             r#"        <source id="controller{i}-weights">"#,
-            r#"          <float_array id="controller-weights-array" count="1">1</float_array>"#,
+            r#"          <float_array id="controller{i}-weights-array" count="1">1</float_array>"#,
             r#"          <technique_common>"#,
-            r##"            <accessor source="#controller-joints-array" count="1" stride="1">"##,
+            r##"            <accessor source="#controller{i}-weights-array" count="1" stride="1">"##,
             r#"              <param name="WEIGHT" type="float"/>"#,
             r#"            </accessor>"#,
             r#"          </technique_common>"#,
@@ -498,16 +496,24 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
             r##"        <instance_controller url="#controller{i}">"##,
             r#"          <bind_material>"#,
             r#"            <technique_common>"#,
-            r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}"/>"##,
-            r#"            </technique_common>"#,
-            r#"          </bind_material>"#,
-            r#"        </instance_controller>"#,
-            r#"      </node>"#,
+            r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}">"##,
             ),
             i = i,
             mesh_name = name::IdFmt(&mesh.name),
             mat_id = call.mat_id,
         )?;
+        if model.materials[call.mat_id as usize].texture_name.is_some() {
+            write!(w, cat!(
+                r#"                <bind_vertex_input semantic="tc" input_semantic="TEXCOORD"/>"#,
+            ))?;
+        }
+        write!(w, cat!(
+            r#"              </instance_material>"#,
+            r#"            </technique_common>"#,
+            r#"          </bind_material>"#,
+            r#"        </instance_controller>"#,
+            r#"      </node>"#,
+        ))?;
     }
     write!(w, cat!(
         r#"    </visual_scene>"#,
