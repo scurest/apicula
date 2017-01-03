@@ -24,9 +24,42 @@ pub fn gen_image(
                 None => Err("texture with palette format was not paired with a palette".into()),
             }
         }
-        _ => unimplemented!(),
+        7 => {
+            if pal_info.is_some() {
+                info!("direct color texture was paired with a palette; palette is being ignored");
+            }
+            Ok(gen_direct_color_image(tex, tex_info))
+        }
+        // Only 0 should be possible for the last case; format is only three bits
+        _ => Err(format!("invalid texture format: {}", tex_info.params.format()).into()),
     }
 }
+
+fn gen_direct_color_image(tex: &Tex, tex_info: &TextureInfo) -> Vec<u8> {
+    // Direct Color Texture; holds actual 16-bit color values (no palette)
+
+    let texture_off = tex_info.params.offset();
+    let width = tex_info.params.width() as usize;
+    let height = tex_info.params.height() as usize;
+
+    let texture_size = width * height * 2; // 16 bits per texel
+    let texture = &tex.texture_data[texture_off .. texture_off + texture_size];
+    let texture: View<u16> = View::from_buf(texture);
+
+    let mut pixels = vec![0u8; 4 * width * height]; // 4 bytes (RGBA) for every texel
+    let mut i = 0;
+
+    for texel in texture {
+        let alpha_bit = texel.bits(15,16);
+        write_pixel(&mut pixels, &mut i, rgb555a5(
+            texel,
+            if alpha_bit == 0 { 0 } else { 31 },
+        ));
+    }
+
+    pixels
+}
+
 
 fn gen_palette_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &PaletteInfo) -> Vec<u8>
 {
