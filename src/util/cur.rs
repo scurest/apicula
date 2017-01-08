@@ -22,6 +22,10 @@ impl<'a> Cur<'a> {
         Ok(self.next_n::<T>(1)?.get(0))
     }
 
+    pub fn nth<T: Viewable>(&self, n: usize) -> Result<T> {
+        Ok(self.clone().next_n::<T>(n+1)?.get(n))
+    }
+
     pub fn next_n<T: Viewable>(&mut self, n: usize) -> Result<View<'a, T>> {
         let size = <T as Viewable>::size();
         let buf = self.next_n_u8s(size * n)?;

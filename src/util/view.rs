@@ -55,6 +55,20 @@ impl<T,S,P> Viewable for (T,S,P) where
     }
 }
 
+impl<T,S,P,Q,R> Viewable for (T,S,P,Q,R) where
+    T: Viewable,
+    S: Viewable,
+    P: Viewable,
+    Q: Viewable,
+    R: Viewable,
+{
+    fn size() -> usize { <(T,S,(P,Q,R)) as Viewable>::size() }
+    fn view(buf: &[u8]) -> (T,S,P,Q,R) {
+        let (t,s,(p,q,r)) = <(T,S,(P,Q,R)) as Viewable>::view(buf);
+        (t,s,p,q,r)
+    }
+}
+
 /// An byte buffer interpreted as an array of Viewable elements.
 #[derive(Copy, Clone)]
 pub struct View<'a, T> {

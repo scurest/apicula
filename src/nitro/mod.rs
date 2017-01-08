@@ -1,3 +1,4 @@
+pub mod bca;
 pub mod gpu_cmds;
 pub mod mdl;
 pub mod render_cmds;

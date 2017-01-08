@@ -61,7 +61,7 @@ pub fn read_scale(cur: &mut Cur) -> Result<Matrix4<f64>> {
     Ok(Matrix4::from_nonuniform_scale(sx,sy,sz))
 }
 
-fn pivot_mat(select: u16, neg: u16, a: f64, b: f64) -> Result<Matrix4<f64>> {
+pub fn pivot_mat(select: u16, neg: u16, a: f64, b: f64) -> Result<Matrix4<f64>> {
     if select > 9 {
         return Err(format!("unknown pivot select: {}", select).into());
     }

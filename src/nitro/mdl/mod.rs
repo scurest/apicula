@@ -7,6 +7,7 @@ use util::cur::Cur;
 use util::name::Name;
 
 pub use self::model::read_mdl;
+pub use self::xform::pivot_mat;
 
 #[derive(Debug, Clone)]
 pub struct Mdl<'a> {
