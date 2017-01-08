@@ -38,7 +38,7 @@ pub fn read_bca(cur: Cur) -> Result<Bca> {
     })
 }
 
-fn read_jnt(cur: Cur) -> Result<Jnt> {
+pub fn read_jnt(cur: Cur) -> Result<Jnt> {
     fields!(cur, JNT0 {
         stamp: [u8; 4],
         section_size: u32,

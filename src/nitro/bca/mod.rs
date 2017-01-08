@@ -2,6 +2,7 @@ mod anim;
 pub mod object;
 
 pub use self::anim::read_bca;
+pub use self::anim::read_jnt;
 
 use util::cur::Cur;
 use util::name::Name;
