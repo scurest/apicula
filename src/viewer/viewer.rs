@@ -20,6 +20,7 @@ use nitro::tex::Tex;
 use nitro::tex::TextureInfo;
 use std::f32::consts::PI;
 use time;
+use nitro::bca::object::to_matrix as bca_object_to_matrix;
 use util::name::Name;
 
 implement_vertex!(Vertex, position, texcoord, color);
@@ -43,6 +44,7 @@ enum GrabState {
 struct State<'a> {
     file_holder: FileHolder<'a>,
     cur_model: usize,
+    cur_anim: Option<AnimData>,
     eye: Eye,
     mouse: MouseState,
     move_dir: Vector3<f32>,
@@ -59,11 +61,13 @@ struct ModelData {
     vertex_buffer: glium::VertexBuffer<Vertex>,
     index_buffer: glium::IndexBuffer<u16>,
     textures: Vec<Option<glium::texture::Texture2d>>,
+    objects: Vec<Matrix4<f64>>,
 }
 
 impl ModelData {
     fn new(display: &glium::Display, model: &Model, texs: &[Tex]) -> Result<ModelData> {
-        let geo_data = geometry::build(model)?;
+        let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
+        let geo_data = geometry::build(model, &objects[..])?;
         let vertex_buffer = glium::VertexBuffer::new(
             display,
             &geo_data.vertices
@@ -79,8 +83,20 @@ impl ModelData {
             vertex_buffer: vertex_buffer,
             index_buffer: index_buffer,
             textures: textures,
+            objects: objects,
         })
     }
+    fn regen_after_object_update(&mut self, model: &Model) -> Result<()> {
+        self.geo_data = geometry::build(model, &self.objects[..])?;
+        self.vertex_buffer.write(&self.geo_data.vertices);
+        Ok(())
+    }
+}
+
+struct AnimData {
+    anim_id: usize,
+    cur_frame: u16,
+    last_frame_time: f32,
 }
 
 fn find_matching_texture_info<'a, 'b>(texs: &'b [Tex<'a>], texture_name: Name)
@@ -157,6 +173,8 @@ pub fn viewer(file_holder: FileHolder) -> Result<()> {
         &file_holder.texs[..],
     )?;
 
+    let cur_anim = None;
+
     // The default image is just a 1x1 white texture. Or it should be. For some reason
     // I don't understand, on the Windows box I'm testing on, 1x1 textures don't seem
     // to work. The work-around is just to make it 2x1. :(
@@ -225,6 +243,7 @@ pub fn viewer(file_holder: FileHolder) -> Result<()> {
     let mut st = State {
         file_holder: file_holder,
         cur_model: cur_model,
+        cur_anim: cur_anim,
         eye: eye,
         mouse: mouse,
         move_dir: move_dir,
@@ -393,6 +412,7 @@ fn run(st: &mut State) -> Result<()> {
                         &st.file_holder.models[st.cur_model],
                         &st.file_holder.texs[..],
                     )?;
+                    st.cur_anim = None;
                 }
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::Comma)) => {
                     if st.cur_model == 0 {
@@ -405,6 +425,61 @@ fn run(st: &mut State) -> Result<()> {
                         &st.file_holder.models[st.cur_model],
                         &st.file_holder.texs[..],
                     )?;
+                    st.cur_anim = None;
+                }
+                Ev::KeyboardInput(Es::Pressed, _, Some(K::LBracket)) => {
+                    let mut anim_id = st.cur_anim.as_ref().map(|a| a.anim_id);
+                    let max_anim_id = st.file_holder.animations.len() - 1;
+                    let num_objects = st.file_holder.models[st.cur_model].objects.len();
+                    loop {
+                        anim_id = match anim_id {
+                            None => Some(max_anim_id),
+                            Some(i) if i == 0 => None,
+                            Some(i) => Some(i - 1),
+                        };
+                        if let Some(i) = anim_id {
+                            if st.file_holder.animations[i].objects.len() != num_objects {
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+                    match anim_id {
+                        None => println!("Bind pose."),
+                        Some(i) => println!("Animation {}", i),
+                    }
+                    st.cur_anim = anim_id.map(|id| AnimData {
+                        anim_id: id,
+                        cur_frame: 0,
+                        last_frame_time: time::precise_time_s() as f32,
+                    });
+                }
+                Ev::KeyboardInput(Es::Pressed, _, Some(K::RBracket)) => {
+                    let mut anim_id = st.cur_anim.as_ref().map(|a| a.anim_id);
+                    let max_anim_id = st.file_holder.animations.len() - 1;
+                    let num_objects = st.file_holder.models[st.cur_model].objects.len();
+                    loop {
+                        anim_id = match anim_id {
+                            None => Some(0),
+                            Some(i) if i == max_anim_id => None,
+                            Some(i) => Some(i + 1),
+                        };
+                        if let Some(i) = anim_id {
+                            if st.file_holder.animations[i].objects.len() != num_objects {
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+                    match anim_id {
+                        None => println!("Bind pose."),
+                        Some(i) => println!("Animation {}", i),
+                    }
+                    st.cur_anim = anim_id.map(|id| AnimData {
+                        anim_id: id,
+                        cur_frame: 0,
+                        last_frame_time: time::precise_time_s() as f32,
+                    });
                 }
                 _ => ()
             }
@@ -412,6 +487,22 @@ fn run(st: &mut State) -> Result<()> {
         let cur_time = time::precise_time_s() as f32;
         let dt = cur_time - st.last_time;
         st.last_time = cur_time;
+
+        if let Some(ref mut anim) = st.cur_anim {
+            if cur_time - anim.last_frame_time > 1.0 / 60.0 {
+                let animation = &st.file_holder.animations[anim.anim_id];
+                for (mat, o) in st.model_data.objects.iter_mut().zip(animation.objects.iter()) {
+                    *mat = bca_object_to_matrix(o, animation, anim.cur_frame)?;
+                }
+                st.model_data.regen_after_object_update(&st.file_holder.models[st.cur_model])?;
+
+                anim.cur_frame += 1;
+                if anim.cur_frame == st.file_holder.animations[anim.anim_id].num_frames {
+                    anim.cur_frame = 0;
+                }
+                anim.last_frame_time = cur_time;
+            }
+        }
 
         let mag = st.move_dir.magnitude();
         if mag != 0.0 {

@@ -54,8 +54,9 @@ pub struct GeometryData {
 }
 
 #[derive(Debug, Clone)]
-pub struct Builder<'a, 'b: 'a> {
+pub struct Builder<'a, 'b: 'a, 'c> {
     model: &'a Model<'b>,
+    objects: &'c [Matrix4<f64>],
     joint_builder: JointBuilder<'a>,
     gpu: GpuState,
     cur_texture_dim: (u32, u32),
@@ -66,8 +67,8 @@ pub struct Builder<'a, 'b: 'a> {
     next_vertex: Vertex,
 }
 
-pub fn build(model: &Model) -> Result<GeometryData> {
-    let mut builder = Builder::new(model);
+pub fn build(model: &Model, objects: &[Matrix4<f64>]) -> Result<GeometryData> {
+    let mut builder = Builder::new(model, objects);
     render_cmds::run_commands(model.render_cmds_cur, &mut builder)?;
     Ok(builder.data())
 }
@@ -91,10 +92,11 @@ impl GpuState {
     }
 }
 
-impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn new(model: &'a Model<'b>) -> Builder<'a, 'b> {
+impl<'a, 'b: 'a, 'c> Builder<'a, 'b, 'c> {
+    pub fn new(model: &'a Model<'b>, objects: &'c [Matrix4<f64>]) -> Builder<'a, 'b, 'c> {
         Builder {
             model: model,
+            objects: objects,
             joint_builder: JointBuilder::new(&model.objects),
             gpu: GpuState::new(),
             vertices: vec![],
@@ -140,7 +142,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 }
 
-impl<'a, 'b: 'a> render_cmds::Sink for Builder<'a, 'b> {
+impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
     fn load_matrix(&mut self, stack_pos: u8) -> Result<()> {
         self.joint_builder.load_matrix(stack_pos);
 
@@ -156,7 +158,7 @@ impl<'a, 'b: 'a> render_cmds::Sink for Builder<'a, 'b> {
     fn mul_by_object(&mut self, object_id: u8) -> Result<()> {
         self.joint_builder.mul_by_object(object_id);
 
-        self.gpu.mul_matrix(&self.model.objects[object_id as usize].xform);
+        self.gpu.mul_matrix(&self.objects[object_id as usize]);
         Ok(())
     }
     fn draw(&mut self, mesh_id: u8, mat_id: u8) -> Result<()> {
@@ -173,7 +175,7 @@ impl<'a, 'b: 'a> render_cmds::Sink for Builder<'a, 'b> {
     }
 }
 
-impl<'a, 'b: 'a> gpu_cmds::Sink for Builder<'a, 'b> {
+impl<'a, 'b: 'a, 'c> gpu_cmds::Sink for Builder<'a, 'b, 'c> {
     fn restore(&mut self, idx: u32) {
         self.joint_builder.load_matrix(idx as u8);
         self.gpu.restore(idx as u8);

@@ -40,7 +40,8 @@ macro_rules! cat {
 }
 
 pub fn write<W: Write>(w: &mut W, model: &Model, image_names: &ImageNames) -> Result<()> {
-    let geom = geometry::build(model)?;
+    let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
+    let geom = geometry::build(model, &objects[..])?;
 
     write!(w, cat!(
         r#"<?xml version="1.0" encoding="utf-8"?>"#,
