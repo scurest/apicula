@@ -384,14 +384,14 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         )?;
         let count = geom.joint_data.tree.node_count();
         write!(w,
-            r#"          <IDREF_array id="controller{i}-joints-array" count="{count}">"#,
+            r#"          <Name_array id="controller{i}-joints-array" count="{count}">"#,
             i = i,
             count = count,
         )?;
         for j in 0..count {
             write!(w, "joint{} ", j)?;
         }
-        write!(w, "</IDREF_array>\n")?;
+        write!(w, "</Name_array>\n")?;
         write!(w, cat!(
             r#"          <technique_common>"#,
             r##"            <accessor source="#controller{i}-joints-array" count="{count}" stride="1">"##,
@@ -676,6 +676,7 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
         write!(w, cat!(
             r#"      <node id="node{i}" name="{mesh_name}" type="NODE">"#,
             r##"        <instance_controller url="#controller{i}">"##,
+            r#"          <skeleton>#joint0</skeleton>"#,
             r#"          <bind_material>"#,
             r#"            <technique_common>"#,
             r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}">"##,
@@ -715,7 +716,7 @@ fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
     }
     fn write<W: Write>(w: &mut W, model: &Model, tree: &Graph<Weight, ()>, node: NodeIndex, indent: u32) -> Result<()> {
         write_indent(w, indent)?;
-        write!(w, r#"<node id="joint{}" "#, node.index())?;
+        write!(w, r#"<node id="joint{}" sid="joint{0}" "#, node.index())?;
         match tree[node].kind {
             Kind::Root => (),
             Kind::Object(id) => {
