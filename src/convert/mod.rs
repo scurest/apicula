@@ -30,7 +30,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     let image_names = image_names::build_image_names(model);
 
     let mut s = String::new();
-    collada::write(&mut s, model, &image_names)?;
+    collada::write(&mut s, model, &file_holder.animations[..], &image_names)?;
 
     f.write_all(s.as_bytes())?;
 

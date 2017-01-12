@@ -7,6 +7,8 @@ use geometry::GeometryData;
 use geometry::Vertex;
 use joint_builder::Kind;
 use joint_builder::Weight;
+use nitro::bca;
+use nitro::bca::Animation;
 use nitro::mdl::Model;
 use petgraph::Direction;
 use petgraph::Graph;
@@ -15,6 +17,8 @@ use std::fmt;
 use std::fmt::Write;
 use time;
 use util::name;
+
+static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
 struct Mat<'a>(&'a Matrix4<f64>);
 
@@ -39,7 +43,7 @@ macro_rules! cat {
     ($($es:expr),*,) => { cat!($($es),*) }
 }
 
-pub fn write<W: Write>(w: &mut W, model: &Model, image_names: &ImageNames) -> Result<()> {
+pub fn write<W: Write>(w: &mut W, model: &Model, anims: &[Animation], image_names: &ImageNames) -> Result<()> {
     let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
     let geom = geometry::build(model, &objects[..])?;
 
@@ -53,6 +57,8 @@ pub fn write<W: Write>(w: &mut W, model: &Model, image_names: &ImageNames) -> Re
     write_library_effects(w, model, image_names)?;
     write_library_geometries(w, model, &geom)?;
     write_library_controllers(w, &geom)?;
+    write_library_animations(w, model, anims, &geom)?;
+    write_library_animation_clips(w, model, anims, &geom)?;
     write_library_visual_scenes(w, model, &geom)?;
     write_scene(w)?;
     write!(w, cat!(
@@ -480,6 +486,181 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
     Ok(())
 }
 
+fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
+    write!(w, cat!(
+        r#"  <library_animations>"#,
+    ))?;
+
+    let num_objects = model.objects.len();
+    let matching_anims = anims.iter().enumerate()
+        .filter(|&(_, ref a)| a.objects.len() == num_objects);
+    let num_joints = geom.joint_data.tree.node_count();
+
+    for (anim_id, anim) in matching_anims {
+        let num_frames = anim.num_frames;
+        for joint_id in  0..num_joints {
+            let joint = &geom.joint_data.tree[NodeIndex::new(joint_id)];
+            let object_id = match joint.kind {
+                Kind::Object(id) => id,
+                _ => continue,
+            };
+            let object = &anim.objects[object_id as usize];
+            write!(w, cat!(
+                r#"    <animation id="anim{anim_id}-joint{joint_id}">"#,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+            )?;
+            write!(w, cat!(
+                r#"      <source id="anim{anim_id}-joint{joint_id}-time">"#,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+            )?;
+            write!(w,
+                r#"        <float_array id="anim{anim_id}-joint{joint_id}-time-array" count="{num_frames}">"#,
+                anim_id = anim_id,
+                joint_id = joint_id,
+                num_frames = num_frames,
+            )?;
+            for frame in 0..num_frames {
+                write!(w, "{} ", frame as f64 * FRAME_LENGTH)?;
+            }
+            write!(w, "</float_array>\n")?;
+            write!(w, cat!(
+                r#"        <technique_common>"#,
+                r##"          <accessor source="#anim{anim_id}-joint{joint_id}-time-array" count="{num_frames}">"##,
+                r#"            <param name="TIME" type="float"/>"#,
+                r#"          </accessor>"#,
+                r#"        </technique_common>"#,
+                r#"      </source>"#,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+                num_frames = num_frames,
+            )?;
+
+            write!(w, cat!(
+                r#"      <source id="anim{anim_id}-joint{joint_id}-matrix">"#,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+            )?;
+            write!(w,
+                r#"        <float_array id="anim{anim_id}-joint{joint_id}-matrix-array" count="{num_floats}">"#,
+                anim_id = anim_id,
+                joint_id = joint_id,
+                num_floats = 16 * num_frames,
+            )?;
+            for frame in 0..num_frames {
+                let mat = bca::object::to_matrix(object, anim,frame)?;
+                write!(w, "{} ", Mat(&mat))?;
+            }
+            write!(w, "</float_array>\n")?;
+            write!(w, cat!(
+                r#"        <technique_common>"#,
+                r##"          <accessor source="#anim{anim_id}-joint{joint_id}-matrix-array" count="{num_frames}" stride="16">"##,
+                r#"            <param name="TRANSFORM" type="float4x4"/>"#,
+                r#"          </accessor>"#,
+                r#"        </technique_common>"#,
+                r#"      </source>"#,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+                num_frames = num_frames,
+            )?;
+
+            write!(w, cat!(
+                r#"      <source id="anim{anim_id}-joint{joint_id}-interpolation">"#,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+            )?;
+            write!(w,
+                r#"        <Name_array id="anim{anim_id}-joint{joint_id}-interpolation-array" count="{num_frames}">"#,
+                anim_id = anim_id,
+                joint_id = joint_id,
+                num_frames = num_frames,
+            )?;
+            for _ in 0..num_frames {
+                write!(w, "LINEAR ")?;
+            }
+            write!(w, "</Name_array>\n")?;
+            write!(w, cat!(
+                r#"        <technique_common>"#,
+                r##"          <accessor source="#anim{anim_id}-joint{joint_id}-interpolation-array" count="{num_frames}">"##,
+                r#"            <param name="INTERPOLATION" type="name"/>"#,
+                r#"          </accessor>"#,
+                r#"        </technique_common>"#,
+                r#"      </source>"#,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+                num_frames = num_frames,
+            )?;
+
+            write!(w, cat!(
+                r#"      <sampler id="anim{anim_id}-joint{joint_id}-sampler">"#,
+                r##"        <input semantic="INPUT" source="#anim{anim_id}-joint{joint_id}-time"/>"##,
+                r##"        <input semantic="OUTPUT" source="#anim{anim_id}-joint{joint_id}-matrix"/>"##,
+                r##"        <input semantic="INTERPOLATION" source="#anim{anim_id}-joint{joint_id}-interpolation"/>"##,
+                r#"      </sampler>"#,
+                r##"      <channel source="#anim{anim_id}-joint{joint_id}-sampler" target="joint{joint_id}/transform"/>"##,
+                r#"    </animation>"#,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+            )?;
+        }
+    }
+    write!(w, cat!(
+        r#"  </library_animations>"#,
+    ))?;
+    Ok(())
+}
+
+
+fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
+    write!(w, cat!(
+        r#"  <library_animation_clips>"#,
+    ))?;
+
+    let num_objects = model.objects.len();
+    let matching_anims = anims.iter().enumerate()
+        .filter(|&(_, ref a)| a.objects.len() == num_objects);
+    let num_joints = geom.joint_data.tree.node_count();
+
+    for (anim_id, anim) in matching_anims {
+        let end_time = if anim.num_frames == 0 {
+            0.0
+        } else {
+            (anim.num_frames - 1) as f64 * FRAME_LENGTH
+        };
+        write!(w, cat!(
+            r#"    <animation_clip id="anim{anim_id}" name="{name}" end="{end_time}">"#,
+            ),
+            anim_id = anim_id,
+            name = name::IdFmt(&anim.name),
+            end_time = end_time,
+        )?;
+        for joint_id in  0..num_joints {
+            write!(w, cat!(
+                r##"      <instance_animation url="#anim{anim_id}-joint{joint_id}"/>"##,
+                ),
+                anim_id = anim_id,
+                joint_id = joint_id,
+            )?;
+        }
+        write!(w, cat!(
+            r#"    </animation_clip>"#,
+        ))?;
+    }
+    write!(w, cat!(
+        r#"  </library_animation_clips>"#,
+    ))?;
+    Ok(())
+}
+
 fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
     write!(w, cat!(
         r#"  <library_visual_scenes>"#,
@@ -551,7 +732,7 @@ fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
             Kind::Object(id) => {
                 let mat = model.objects[id as usize].xform;
                 write_indent(w, indent + 1)?;
-                write!(w, "<matrix>{}</matrix>\n", Mat(&mat))?;
+                write!(w, r#"<matrix sid="transform">{}</matrix>\n"#, Mat(&mat))?;
             }
             _ => (),
         }
