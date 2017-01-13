@@ -93,7 +93,7 @@ impl<'a, T: Viewable> View<'a, T> {
         let begin = size * pos;
         let end = begin + size;
         if end > self.buf.len() {
-            panic!("index {} out of range for view of length {}", pos, self.buf.len());
+            panic!("index {} out of range for view of length {}", pos, self.len());
         }
         let bytes = &self.buf[begin..end];
         <T as Viewable>::view(bytes)
