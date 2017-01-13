@@ -1,10 +1,10 @@
-use cgmath::Matrix4;
+use convert::format::FnFmt;
+use convert::format::Mat;
 use convert::image_names::ImageNames;
 use convert::image_names::TexturePalettePair;
 use errors::Result;
 use geometry;
 use geometry::GeometryData;
-use geometry::Vertex;
 use joint_builder::Kind;
 use joint_builder::Weight;
 use nitro::bca;
@@ -13,44 +13,20 @@ use nitro::mdl::Model;
 use petgraph::Direction;
 use petgraph::Graph;
 use petgraph::graph::NodeIndex;
-use std::fmt;
 use std::fmt::Write;
 use time;
 use util::name;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
-struct Mat<'a>(&'a Matrix4<f64>);
-
-impl<'a> fmt::Display for Mat<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-            self.0.x.x, self.0.y.x, self.0.z.x, self.0.w.x,
-            self.0.x.y, self.0.y.y, self.0.z.y, self.0.w.y,
-            self.0.x.z, self.0.y.z, self.0.z.z, self.0.w.z,
-            self.0.x.w, self.0.y.w, self.0.z.w, self.0.w.w,
-        )
-    }
-}
-
-/// Concatenate strings with a new line interposed after each.
-macro_rules! cat {
-    () => { "\n" };
-    (,) => { "\n" };
-    ($e:expr) => { concat!($e, "\n") };
-    ($e:expr,) => { concat!($e, "\n") };
-    ($e:expr, $($es:expr),*) => { concat!($e, "\n", cat!($($es),*)) };
-    ($($es:expr),*,) => { cat!($($es),*) }
-}
-
 pub fn write<W: Write>(w: &mut W, model: &Model, anims: &[Animation], image_names: &ImageNames) -> Result<()> {
     let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
     let geom = geometry::build(model, &objects[..])?;
 
-    write!(w, cat!(
-        r#"<?xml version="1.0" encoding="utf-8"?>"#,
-        r#"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">"#,
-    ))?;
+    write_lines!(w,
+        r##"<?xml version="1.0" encoding="utf-8"?>"##,
+        r##"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">"##;
+    )?;
     write_asset(w)?;
     write_library_images(w, image_names)?;
     write_library_materials(w, model)?;
@@ -61,69 +37,66 @@ pub fn write<W: Write>(w: &mut W, model: &Model, anims: &[Animation], image_name
     write_library_animation_clips(w, model, anims, &geom)?;
     write_library_visual_scenes(w, model, &geom)?;
     write_scene(w)?;
-    write!(w, cat!(
-        r#"</COLLADA>"#,
-    ))?;
+    write_lines!(w,
+        r##"</COLLADA>"##;
+    )?;
     Ok(())
 }
 
 fn write_asset<W: Write>(w: &mut W) -> Result<()> {
     let now = time::now_utc();
     let iso8601_datetime = time::strftime("%FT%TZ", &now)?;
-    write!(w, cat!(
-        r#"  <asset>"#,
-        r#"    <created>{time}</created>"#,
-        r#"    <modified>{time}</modified>"#,
-        r#"  </asset>"#,
-        ),
+    write_lines!(w,
+        r##"  <asset>"##,
+        r##"    <created>{time}</created>"##,
+        r##"    <modified>{time}</modified>"##,
+        r##"  </asset>"##;
         time = iso8601_datetime,
     )?;
     Ok(())
 }
 
 fn write_library_images<W: Write>(w: &mut W, image_names: &ImageNames) -> Result<()> {
-    write!(w, cat!(
-        r#"  <library_images>"#,
-    ))?;
+    write_lines!(w,
+        r##"  <library_images>"##;
+    )?;
     for name in image_names.values() {
-        write!(w, cat!(
-            r#"    <image id="{name}">"#,
-            r#"      <init_from>{name}.png</init_from>"#,
-            r#"    </image>"#,
-            ),
+        write_lines!(w,
+            r##"    <image id="{name}">"##,
+            r##"      <init_from>{name}.png</init_from>"##,
+            r##"    </image>"##;
             name = name,
         )?;
     }
-    write!(w, cat!(
-        r#"  </library_images>"#,
-    ))?;
+    write_lines!(w,
+        r##"  </library_images>"##;
+    )?;
     Ok(())
 }
 
 fn write_library_materials<W: Write>(w: &mut W, model: &Model) -> Result<()> {
-    write!(w, cat!(
-        r#"  <library_materials>"#,
-    ))?;
+    write_lines!(w,
+        r##"  <library_materials>"##;
+    )?;
     for (i, mat) in model.materials.iter().enumerate() {
-        write!(w, cat!(
-            r#"    <material id="material{i}" name="{name}">"#,
+        write_lines!(w,
+            r##"    <material id="material{i}" name="{name}">"##,
             r##"      <instance_effect url="#effect{i}"/>"##,
-            r#"    </material>"#,
-            ),
+            r##"    </material>"##;
             i = i,
             name = name::IdFmt(&mat.name),
         )?;
     }
-    write!(w, cat!(
-        r#"  </library_materials>"#,
-    ))?;
+    write_lines!(w,
+        r##"  </library_materials>"##;
+    )?;
     Ok(())
 }
 
 fn write_library_effects<W: Write>(w: &mut W, model: &Model, image_names: &ImageNames) -> Result<()> {
-    write!(w, cat!(
-        r#"  <library_effects>"#,
-    ))?;
+    write_lines!(w,
+        r##"  <library_effects>"##;
+    )?;
     for (i, mat) in model.materials.iter().enumerate() {
         let image_name = mat.texture_name
             .map(|texname| TexturePalettePair {
@@ -132,12 +105,10 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model, image_names: &Image
             })
             .and_then(|pair| image_names.get(&pair));
 
-        write!(w, cat!(
-            r#"    <effect id="effect{i}" name="{name}">"#,
-            r#"      <profile_COMMON>"#,
-            ),
-            i = i,
-            name = name::IdFmt(&mat.name),
+        write_lines!(w,
+            r##"    <effect id="effect{i}" name="{name}">"##,
+            r##"      <profile_COMMON>"##;
+            i = i, name = name::IdFmt(&mat.name),
         )?;
 
         if let Some(name) = image_name {
@@ -148,348 +119,305 @@ fn write_library_effects<W: Write>(w: &mut W, model: &Model, image_names: &Image
                     (true, true) => "MIRROR",
                 }
             };
-            write!(w, cat!(
-                r#"        <newparam sid="Image-surface">"#,
-                r#"          <surface type="2D">"#,
-                r#"            <init_from>{image_name}</init_from>"#,
-                r#"            <format>A8R8G8B8</format>"#,
-                r#"          </surface>"#,
-                r#"        </newparam>"#,
-                r#"        <newparam sid="Image-sampler">"#,
-                r#"          <sampler2D>"#,
-                r#"            <source>Image-surface</source>"#,
-                r#"            <wrap_s>{wrap_s}</wrap_s>"#,
-                r#"            <wrap_t>{wrap_t}</wrap_t>"#,
-                r#"            <minfilter>NEAREST</minfilter>"#,
-                r#"            <magfilter>NEAREST</magfilter>"#,
-                r#"            <mipfilter>NEAREST</mipfilter>"#,
-                r#"          </sampler2D>"#,
-                r#"        </newparam>"#,
-                ),
+            write_lines!(w,
+                r##"        <newparam sid="Image-surface">"##,
+                r##"          <surface type="2D">"##,
+                r##"            <init_from>{image_name}</init_from>"##,
+                r##"            <format>A8R8G8B8</format>"##,
+                r##"          </surface>"##,
+                r##"        </newparam>"##,
+                r##"        <newparam sid="Image-sampler">"##,
+                r##"          <sampler2D>"##,
+                r##"            <source>Image-surface</source>"##,
+                r##"            <wrap_s>{wrap_s}</wrap_s>"##,
+                r##"            <wrap_t>{wrap_t}</wrap_t>"##,
+                r##"            <minfilter>NEAREST</minfilter>"##,
+                r##"            <magfilter>NEAREST</magfilter>"##,
+                r##"            <mipfilter>NEAREST</mipfilter>"##,
+                r##"          </sampler2D>"##,
+                r##"        </newparam>"##;
                 image_name = name,
                 wrap_s = wrap(mat.params.repeat_s(), mat.params.mirror_s()),
                 wrap_t = wrap(mat.params.repeat_t(), mat.params.mirror_t()),
             )?;
         }
 
-        write!(w, cat!(
-            r#"        <technique sid="common">"#,
-            r#"          <phong>"#,
-            r#"            <diffuse>"#,
-        ))?;
-        if image_name.is_some() {
-            write!(w, cat!(
-                r#"              <texture texture="Image-sampler" texcoord="tc"/>"#,
-            ))?;
-        } else {
-            write!(w, cat!(
-                r#"              <color>1 1 1 1</color>"#,
-            ))?;
-        }
-        write!(w, cat!(
-            r#"            </diffuse>"#,
-            r#"            <transparent opaque="A_ONE">"#,
-        ))?;
-        if image_name.is_some() {
-            write!(w, cat!(
-                r#"              <texture texture="Image-sampler" texcoord="tc"/>"#,
-            ))?;
-        } else {
-            write!(w, cat!(
-                r#"              <color>0 0 0 1</color>"#,
-            ))?;
-        }
-        write!(w, cat!(
-            r#"            </transparent>"#,
-            r#"          </phong>"#,
-            r#"        </technique>"#,
-            r#"      </profile_COMMON>"#,
-            r#"    </effect>"#,
-        ))?;
+        write_lines!(w,
+            r##"        <technique sid="common">"##,
+            r##"          <phong>"##,
+            r##"            <diffuse>"##,
+            r##"              {diffuse}"##,
+            r##"            </diffuse>"##,
+            r##"            <transparent>"##,
+            r##"              {transparent}"##,
+            r##"            </transparent>"##,
+            r##"          </phong>"##,
+            r##"        </technique>"##;
+            diffuse = match image_name {
+                Some(_) => r#"<texture texture="Image-sampler" texcoord="tc"/>"#,
+                None => r#"<color>1 1 1 1</color>"#,
+            },
+            transparent = match image_name {
+                Some(_) => r#"<texture texture="Image-sampler" texcoord="tc"/>"#,
+                None => r#"<color>0 0 0 1</color>"#,
+            },
+        )?;
+
+        write_lines!(w,
+            r##"      </profile_COMMON>"##,
+            r##"    </effect>"##;
+        )?;
     }
-    write!(w, cat!(
-        r#"  </library_effects>"#,
-    ))?;
+    write_lines!(w,
+        r##"  </library_effects>"##;
+    )?;
     Ok(())
 }
 
 fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
-    write!(w, cat!(
-        r#"  <library_geometries>"#,
-    ))?;
+    write_lines!(w,
+        r##"  <library_geometries>"##;
+    )?;
+
     for (i, call) in geom.draw_calls.iter().enumerate() {
         let mesh = &model.meshes[call.mesh_id as usize];
-
-        write!(w, cat!(
-            r#"    <geometry id="geometry{i}" name="{name}">"#,
-            r#"      <mesh>"#,
-            ),
-            i = i,
-            name = name::IdFmt(&mesh.name),
-        )?;
-
-        fn write_float_source<W: Write, F>(
-            w: &mut W,
-            i: usize,
-            name: &'static str,
-            params: &[&'static str],
-            vertices: &[Vertex],
-            f: F
-        ) -> Result<()>
-            where F: Fn(&Vertex) -> &[f32]
-        {
-            let num_verts = vertices.len();
-            let num_params = params.len();
-            let num_floats = num_params * num_verts;
-
-            write!(w, cat!(
-                r#"        <source id="geometry{i}_{name}">"#,
-                ),
-                i = i,
-                name = name
-            )?;
-            write!(w,
-                r#"          <float_array id="geometry{i}_{name}_array" count="{num_floats}">"#,
-                i = i,
-                name = name,
-                num_floats = num_floats,
-            )?;
-            for v in vertices {
-                for float in f(v) {
-                    write!(w, "{} ", float)?;
-                }
-            }
-            write!(w, "</float_array>\n")?;
-            write!(w, cat!(
-                r#"          <technique_common>"#,
-                r##"            <accessor source="#geometry{i}_{name}_array" count="{num_verts}" stride="{num_params}">"##,
-                ),
-                i = i,
-                name = name,
-                num_verts = num_verts,
-                num_params = num_params,
-            )?;
-            for param_name in params {
-                write!(w, cat!(
-                    r#"              <param name="{param_name}" type="float"/>"#,
-                    ),
-                    param_name = param_name,
-                )?;
-            }
-            write!(w, cat!(
-                r#"            </accessor>"#,
-                r#"          </technique_common>"#,
-                r#"        </source>"#,
-            ))?;
-            Ok(())
-        }
         let vert_range = call.vertex_range.start as usize .. call.vertex_range.end as usize;
         let verts = &geom.vertices[vert_range];
-        write_float_source(
-            w,
-            i,
-            "positions",
-            &["X", "Y", "Z"],
-            verts,
-            |v| { &v.position }
+
+        write_lines!(w,
+            r##"    <geometry id="geometry{i}" name="{name}">"##,
+            r##"      <mesh>"##;
+            i = i, name = name::IdFmt(&mesh.name),
         )?;
-        write_float_source(
-            w,
-            i,
-            "texcoords",
-            &["S", "T"],
-            verts,
-            |v| { &v.texcoord }
+
+        write_lines!(w,
+            r##"        <source id="geometry{i}-positions">"##,
+            r##"          <float_array id="geometry{i}-positions-array" count="{num_floats}">{floats}</float_array>"##,
+            r##"          <technique_common>"##,
+            r##"            <accessor source="#geometry{i}-positions-array" count="{num_verts}" stride="3">"##,
+            r##"              <param name="X" type="float"/>"##,
+            r##"              <param name="Y" type="float"/>"##,
+            r##"              <param name="Z" type="float"/>"##,
+            r##"            </accessor>"##,
+            r##"          </technique_common>"##,
+            r##"        </source>"##;
+            i = i, num_floats = 3 * verts.len(), num_verts = verts.len(),
+            floats = FnFmt(|f| {
+                for x in verts.iter().flat_map(|v| v.position.iter()) {
+                    write!(f, "{} ", x)?;
+                }
+                Ok(())
+            }),
+        )?;
+
+        write_lines!(w,
+            r##"        <source id="geometry{i}-texcoords">"##,
+            r##"          <float_array id="geometry{i}-texcoords-array" count="{num_floats}">{floats}</float_array>"##,
+            r##"          <technique_common>"##,
+            r##"            <accessor source="#geometry{i}-texcoords-array" count="{num_verts}" stride="2">"##,
+            r##"              <param name="S" type="float"/>"##,
+            r##"              <param name="T" type="float"/>"##,
+            r##"            </accessor>"##,
+            r##"          </technique_common>"##,
+            r##"        </source>"##;
+            i = i, num_floats = 2 * verts.len(), num_verts = verts.len(),
+            floats = FnFmt(|f| {
+                for x in verts.iter().flat_map(|v| v.texcoord.iter()) {
+                    write!(f, "{} ", x)?;
+                }
+                Ok(())
+            }),
         )?;
 
         // Omit the colors if they are all white
         let omit_colors = verts.iter().all(|v| v.color == [1.0, 1.0, 1.0]);
         if !omit_colors {
-            write_float_source(
-                w,
-                i,
-                "colors",
-                &["R", "G", "B"],
-                verts,
-                |v| { &v.color }
+            write_lines!(w,
+                r##"        <source id="geometry{i}-colors">"##,
+                r##"          <float_array id="geometry{i}-colors-array" count="{num_floats}">{floats}</float_array>"##,
+                r##"          <technique_common>"##,
+                r##"            <accessor source="#geometry{i}-colors-array" count="{num_verts}" stride="3">"##,
+                r##"              <param name="R" type="float"/>"##,
+                r##"              <param name="G" type="float"/>"##,
+                r##"              <param name="B" type="float"/>"##,
+                r##"            </accessor>"##,
+                r##"          </technique_common>"##,
+                r##"        </source>"##;
+                i = i, num_floats = 3 * verts.len(), num_verts = verts.len(),
+                floats = FnFmt(|f| {
+                    for x in verts.iter().flat_map(|v| v.color.iter()) {
+                        write!(f, "{} ", x)?;
+                    }
+                    Ok(())
+                }),
             )?;
         }
 
-        write!(w, cat!(
-            r#"        <vertices id="geometry{i}_vertices">"#,
-            r##"          <input semantic="POSITION" source="#geometry{i}_positions"/>"##,
-            r##"          <input semantic="TEXCOORD" source="#geometry{i}_texcoords"/>"##,
-            ),
+        write_lines!(w,
+            r##"        <vertices id="geometry{i}-vertices">"##,
+            r##"          <input semantic="POSITION" source="#geometry{i}-positions"/>"##,
+            r##"          <input semantic="TEXCOORD" source="#geometry{i}-texcoords"/>"##;
             i = i,
         )?;
         if !omit_colors {
-            write!(w, cat!(
-                r##"          <input semantic="COLOR" source="#geometry{i}_colors"/>"##,
-                ),
+            write_lines!(w,
+                r##"          <input semantic="COLOR" source="#geometry{i}-colors"/>"##;
                 i = i,
             )?;
         }
-        write!(w, cat!(
-            r#"        </vertices>"#,
-        ))?;
+        write_lines!(w,
+            r#"        </vertices>"#;
+        )?;
 
         let num_tris = (call.index_range.end - call.index_range.start) / 3;
-        write!(w, cat!(
-            r#"        <triangles material="material{mat_id}" count="{num_tris}">"#,
-            r##"          <input semantic="VERTEX" source="#geometry{i}_vertices" offset="0"/>"##,
-            ),
-            i = i,
-            mat_id = call.mat_id,
-            num_tris = num_tris,
-        )?;
-        write!(w,
-            r#"          <p>"#,
-        )?;
         let start_index = call.vertex_range.start;
-        for j in call.index_range.clone() {
-            let index = &geom.indices[j] - start_index;
-            write!(w, "{} ", index)?;
-        }
-        write!(w, "</p>\n")?;
-        write!(w, cat!(
-            r#"        </triangles>"#,
-        ))?;
+        write_lines!(w,
+            r##"        <triangles material="material{mat_id}" count="{num_tris}">"##,
+            r##"          <input semantic="VERTEX" source="#geometry{i}-vertices" offset="0"/>"##,
+            r##"          <p>{indices}</p>"##,
+            r##"        </triangles>"##;
+            i = i, mat_id = call.mat_id, num_tris = num_tris,
+            indices = FnFmt(|f| {
+                for index in &geom.indices[call.index_range.clone()] {
+                    // The indices in geom are counting from the first vertex
+                    // in the whole model, but we want them relative to the
+                    // start of just this <mesh>.
+                    let index = index - start_index;
+                    write!(f, "{} ", index)?;
+                }
+                Ok(())
+            }),
+        )?;
 
-        write!(w, cat!(
-            r#"      </mesh>"#,
-            r#"    </geometry>"#,
-        ))?;
+        write_lines!(w,
+            r##"      </mesh>"##,
+            r##"    </geometry>"##;
+        )?;
     }
-    write!(w, cat!(
-        r#"  </library_geometries>"#,
-    ))?;
+
+    write_lines!(w,
+        r##"  </library_geometries>"##;
+    )?;
+
     Ok(())
 }
 
 fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result<()> {
-    write!(w, cat!(
-        r#"  <library_controllers>"#,
-    ))?;
+    write_lines!(w,
+        r##"  <library_controllers>"##;
+    )?;
+
     for (i, call) in geom.draw_calls.iter().enumerate() {
-        write!(w, cat!(
-            r#"    <controller id="controller{i}">"#,
-            r##"      <skin source="#geometry{i}">"##,
-            ),
+        write_lines!(w,
+            r##"    <controller id="controller{i}">"##,
+            r##"      <skin source="#geometry{i}">"##;
             i = i,
-        )?;
-        write!(w, cat!(
-            r#"        <source id="controller{i}-joints">"#,
-            ),
-            i = i,
-        )?;
-        let count = geom.joint_data.tree.node_count();
-        write!(w,
-            r#"          <Name_array id="controller{i}-joints-array" count="{count}">"#,
-            i = i,
-            count = count,
-        )?;
-        for j in 0..count {
-            write!(w, "joint{} ", j)?;
-        }
-        write!(w, "</Name_array>\n")?;
-        write!(w, cat!(
-            r#"          <technique_common>"#,
-            r##"            <accessor source="#controller{i}-joints-array" count="{count}" stride="1">"##,
-            r#"              <param name="JOINT" type="Name"/>"#,
-            r#"            </accessor>"#,
-            r#"          </technique_common>"#,
-            r#"        </source>"#,
-            ),
-            i = i,
-            count = count
         )?;
 
-        write!(w, cat!(
-            r#"        <source id="controller{i}-bind_poses">"#,
-            ),
-            i = i,
-        )?;
-        write!(w,
-            r#"          <float_array id="controller{i}-bind_poses-array" count="{num_floats}">"#,
-            i = i,
-            num_floats = 16 * count,
-        )?;
-        for j in 0..count {
-            let inv_bind = geom.joint_data.tree[NodeIndex::new(j)].inv_bind_matrix;
-            write!(w, "{} ", Mat(&inv_bind))?;
-        }
-        write!(w, "</float_array>\n")?;
-        write!(w, cat!(
-            r#"          <technique_common>"#,
-            r##"            <accessor source="#controller{i}-bind_poses-array" count="{count}" stride="16">"##,
-            r#"              <param name="TRANSFORM" type="float4x4"/>"#,
-            r#"            </accessor>"#,
-            r#"          </technique_common>"#,
-            r#"        </source>"#,
-            ),
-            i = i,
-            count = count
+        // This data should be shared by all the controllers, say, by putting it
+        // all in the first controller and referencing the sources or arrays from
+        // all the others. Blender does not seem to like this, so I duplicate it.
+        // TODO: Invetigate this more.
+
+        let num_joints = geom.joint_data.tree.node_count();
+        write_lines!(w,
+            r##"        <source id="controller{i}-joints">"##,
+            r##"          <Name_array id="controller{i}-joints-array" count="{num_joints}">{joints}</Name_array>"##,
+            r##"          <technique_common>"##,
+            r##"            <accessor source="#controller{i}-joints-array" count="{num_joints}">"##,
+            r##"              <param name="JOINT" type="Name"/>"##,
+            r##"            </accessor>"##,
+            r##"          </technique_common>"##,
+            r##"        </source>"##;
+            i = i, num_joints = num_joints,
+            joints = FnFmt(|f| {
+                for n in 0..num_joints {
+                    write!(f, "joint{} ", n)?;
+                }
+                Ok(())
+            }),
         )?;
 
-        write!(w, cat!(
-            r#"        <source id="controller{i}-weights">"#,
-            r#"          <float_array id="controller{i}-weights-array" count="1">1</float_array>"#,
-            r#"          <technique_common>"#,
-            r##"            <accessor source="#controller{i}-weights-array" count="1" stride="1">"##,
-            r#"              <param name="WEIGHT" type="float"/>"#,
-            r#"            </accessor>"#,
-            r#"          </technique_common>"#,
-            r#"        </source>"#,
-            ),
+        write_lines!(w,
+            r##"        <source id="controller{i}-bind_poses">"##,
+            r##"          <float_array id="controller{i}-bind_poses-array" count="{num_floats}">{floats}</float_array>"##,
+            r##"          <technique_common>"##,
+            r##"            <accessor source="#controller{i}-bind_poses-array" count="{num_joints}" stride="16">"##,
+            r##"              <param name="TRANSFORM" type="float4x4"/>"##,
+            r##"            </accessor>"##,
+            r##"          </technique_common>"##,
+            r##"        </source>"##;
+            i = i, num_floats = 16 * num_joints, num_joints = num_joints,
+            floats = FnFmt(|f| {
+                for n in 0..num_joints {
+                    let inv_bind = geom.joint_data.tree[NodeIndex::new(n)].inv_bind_matrix;
+                    write!(f, "{} ", Mat(&inv_bind))?;
+                }
+                Ok(())
+            }),
+        )?;
+
+        write_lines!(w,
+            r##"        <source id="controller{i}-weights">"##,
+            r##"          <float_array id="controller{i}-weights-array" count="1">1</float_array>"##,
+            r##"          <technique_common>"##,
+            r##"            <accessor source="#controller{i}-weights-array" count="1">"##,
+            r##"              <param name="WEIGHT" type="float"/>"##,
+            r##"            </accessor>"##,
+            r##"          </technique_common>"##,
+            r##"        </source>"##;
             i = i,
         )?;
-        write!(w, cat!(
-            r#"        <joints>"#,
+
+        write_lines!(w,
+            r##"        <joints>"##,
             r##"          <input semantic="JOINT" source="#controller{i}-joints"/>"##,
             r##"          <input semantic="INV_BIND_MATRIX" source="#controller{i}-bind_poses"/>"##,
-            r#"        </joints>"#,
-            ),
+            r##"        </joints>"##;
             i = i,
         )?;
+
         let num_verts = call.vertex_range.end - call.vertex_range.start;
-        write!(w, cat!(
-            r#"        <vertex_weights count="{num_verts}">"#,
+        write_lines!(w,
+            r##"        <vertex_weights count="{num_verts}">"##,
             r##"          <input semantic="JOINT" source="#controller{i}-joints" offset="0"/>"##,
             r##"          <input semantic="WEIGHT" source="#controller{i}-weights" offset="1"/>"##,
-            ),
-            i = i,
-            num_verts = num_verts,
+            r##"          <vcount>{vcount}</vcount>"##,
+            r##"          <v>{v}</v>"##,
+            r##"        </vertex_weights>"##;
+            i = i, num_verts = num_verts,
+            vcount = FnFmt(|f| {
+                for _ in 0..num_verts {
+                    write!(f, "1 ")?;
+                }
+                Ok(())
+            }),
+            v = FnFmt(|f| {
+                let vrange = call.vertex_range.start as usize..call.vertex_range.end as usize;
+                for j in &geom.joint_data.vertices[vrange] {
+                    write!(f, "{} 0 ", j.index())?;
+                }
+                Ok(())
+            }),
         )?;
-        write!(w, r#"          <vcount>"#)?;
-        for _ in 0..num_verts {
-            write!(w, "1 ")?;
-        }
-        write!(w, "</vcount>\n")?;
-        write!(w, r#"          <v>"#)?;
-        for j in 0..num_verts {
-            let vert_index = call.vertex_range.start + j;
-            let joint_index = geom.joint_data.vertices[vert_index as usize].index();
-            write!(w, "{} 0 ", joint_index)?;
-        }
-        write!(w, "</v>\n")?;
 
-        write!(w, cat!(
-            r#"        </vertex_weights>"#,
-            r#"      </skin>"#,
-            r#"    </controller>"#,
-        ))?;
+        write_lines!(w,
+            r##"      </skin>"##,
+            r##"    </controller>"##;
+        )?;
     }
-    write!(w, cat!(
-        r#"  </library_controllers>"#,
-    ))?;
+
+    write_lines!(w,
+        r##"  </library_controllers>"##;
+    )?;
 
     Ok(())
 }
 
 fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
-    write!(w, cat!(
-        r#"  <library_animations>"#,
-    ))?;
+    write_lines!(w,
+        r##"  <library_animations>"##;
+    )?;
 
     let num_objects = model.objects.len();
     let matching_anims = anims.iter().enumerate()
@@ -498,6 +426,7 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
 
     for (anim_id, anim) in matching_anims {
         let num_frames = anim.num_frames;
+
         for joint_id in  0..num_joints {
             let joint = &geom.joint_data.tree[NodeIndex::new(joint_id)];
             let object_id = match joint.kind {
@@ -505,125 +434,106 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
                 _ => continue,
             };
             let object = &anim.objects[object_id as usize];
-            write!(w, cat!(
-                r#"    <animation id="anim{anim_id}-joint{joint_id}">"#,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
-            )?;
-            write!(w, cat!(
-                r#"      <source id="anim{anim_id}-joint{joint_id}-time">"#,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
-            )?;
-            write!(w,
-                r#"        <float_array id="anim{anim_id}-joint{joint_id}-time-array" count="{num_frames}">"#,
-                anim_id = anim_id,
-                joint_id = joint_id,
-                num_frames = num_frames,
-            )?;
-            for frame in 0..num_frames {
-                write!(w, "{} ", frame as f64 * FRAME_LENGTH)?;
-            }
-            write!(w, "</float_array>\n")?;
-            write!(w, cat!(
-                r#"        <technique_common>"#,
-                r##"          <accessor source="#anim{anim_id}-joint{joint_id}-time-array" count="{num_frames}">"##,
-                r#"            <param name="TIME" type="float"/>"#,
-                r#"          </accessor>"#,
-                r#"        </technique_common>"#,
-                r#"      </source>"#,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
-                num_frames = num_frames,
+
+            write_lines!(w,
+                r##"    <animation id="anim{anim_id}-joint{joint_id}">"##;
+                anim_id = anim_id, joint_id = joint_id,
             )?;
 
-            write!(w, cat!(
-                r#"      <source id="anim{anim_id}-joint{joint_id}-matrix">"#,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
+            write_lines!(w,
+                r##"      <source id="anim{anim_id}-joint{joint_id}-time">"##,
+                r##"        <float_array id="anim{anim_id}-joint{joint_id}-time-array" count="{num_frames}">{times}</float_array>"##,
+                r##"        <technique_common>"##,
+                r##"          <accessor source="#anim{anim_id}-joint{joint_id}-time-array" count="{num_frames}">"##,
+                r##"            <param name="TIME" type="float"/>"##,
+                r##"          </accessor>"##,
+                r##"        </technique_common>"##,
+                r##"      </source>"##;
+                anim_id = anim_id, joint_id = joint_id, num_frames = num_frames,
+                times = FnFmt(|f| {
+                    for frame in 0..num_frames {
+                        write!(f, "{} ", frame as f64 * FRAME_LENGTH)?;
+                    }
+                    Ok(())
+                }),
+            )?;
+
+            write_lines!(w,
+                r##"      <source id="anim{anim_id}-joint{joint_id}-matrix">"##;
+                anim_id = anim_id, joint_id = joint_id,
             )?;
             write!(w,
-                r#"        <float_array id="anim{anim_id}-joint{joint_id}-matrix-array" count="{num_floats}">"#,
-                anim_id = anim_id,
-                joint_id = joint_id,
-                num_floats = 16 * num_frames,
+                r##"        <float_array id="anim{anim_id}-joint{joint_id}-matrix-array" count="{num_floats}">"##,
+                anim_id = anim_id, joint_id = joint_id, num_floats = 16 * num_frames,
             )?;
             for frame in 0..num_frames {
-                let mat = bca::object::to_matrix(object, anim,frame)?;
+                // The reason we can't do this with a FnFmt like the others is that getting the matrix
+                // can result in an Error, and that Error can't "go through" a fmt::Result, so this has
+                // to be directly contained in this function.
+                let mat = bca::object::to_matrix(object, anim, frame)?;
                 write!(w, "{} ", Mat(&mat))?;
             }
             write!(w, "</float_array>\n")?;
-            write!(w, cat!(
-                r#"        <technique_common>"#,
+            write_lines!(w,
+                r##"        <technique_common>"##,
                 r##"          <accessor source="#anim{anim_id}-joint{joint_id}-matrix-array" count="{num_frames}" stride="16">"##,
-                r#"            <param name="TRANSFORM" type="float4x4"/>"#,
-                r#"          </accessor>"#,
-                r#"        </technique_common>"#,
-                r#"      </source>"#,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
-                num_frames = num_frames,
+                r##"            <param name="TRANSFORM" type="float4x4"/>"##,
+                r##"          </accessor>"##,
+                r##"        </technique_common>"##,
+                r##"      </source>"##;
+                anim_id = anim_id, joint_id = joint_id, num_frames = num_frames,
             )?;
 
-            write!(w, cat!(
-                r#"      <source id="anim{anim_id}-joint{joint_id}-interpolation">"#,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
-            )?;
-            write!(w,
-                r#"        <Name_array id="anim{anim_id}-joint{joint_id}-interpolation-array" count="{num_frames}">"#,
-                anim_id = anim_id,
-                joint_id = joint_id,
-                num_frames = num_frames,
-            )?;
-            for _ in 0..num_frames {
-                write!(w, "LINEAR ")?;
-            }
-            write!(w, "</Name_array>\n")?;
-            write!(w, cat!(
-                r#"        <technique_common>"#,
+            write_lines!(w,
+                r##"      <source id="anim{anim_id}-joint{joint_id}-interpolation">"##,
+                r##"        <Name_array id="anim{anim_id}-joint{joint_id}-interpolation-array" count="{num_frames}">{interps}</Name_array>"##,
+                r##"        <technique_common>"##,
                 r##"          <accessor source="#anim{anim_id}-joint{joint_id}-interpolation-array" count="{num_frames}">"##,
-                r#"            <param name="INTERPOLATION" type="name"/>"#,
-                r#"          </accessor>"#,
-                r#"        </technique_common>"#,
-                r#"      </source>"#,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
-                num_frames = num_frames,
+                r##"            <param name="INTERPOLATION" type="name"/>"##,
+                r##"          </accessor>"##,
+                r##"        </technique_common>"##,
+                r##"      </source>"##;
+                anim_id = anim_id, joint_id = joint_id, num_frames = num_frames,
+                interps = FnFmt(|f| {
+                    for _ in 0..num_frames {
+                        write!(f, "LINEAR ")?;
+                    }
+                    Ok(())
+                }),
             )?;
 
-            write!(w, cat!(
-                r#"      <sampler id="anim{anim_id}-joint{joint_id}-sampler">"#,
+            write_lines!(w,
+                r##"      <sampler id="anim{anim_id}-joint{joint_id}-sampler">"##,
                 r##"        <input semantic="INPUT" source="#anim{anim_id}-joint{joint_id}-time"/>"##,
                 r##"        <input semantic="OUTPUT" source="#anim{anim_id}-joint{joint_id}-matrix"/>"##,
                 r##"        <input semantic="INTERPOLATION" source="#anim{anim_id}-joint{joint_id}-interpolation"/>"##,
-                r#"      </sampler>"#,
-                r##"      <channel source="#anim{anim_id}-joint{joint_id}-sampler" target="joint{joint_id}/transform"/>"##,
-                r#"    </animation>"#,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
+                r##"      </sampler>"##;
+                anim_id = anim_id, joint_id = joint_id,
+            )?;
+
+            write_lines!(w,
+                r##"      <channel source="#anim{anim_id}-joint{joint_id}-sampler" target="joint{joint_id}/transform"/>"##;
+                anim_id = anim_id, joint_id = joint_id,
+            )?;
+
+            write_lines!(w,
+                r##"    </animation>"##;
             )?;
         }
     }
-    write!(w, cat!(
-        r#"  </library_animations>"#,
-    ))?;
+
+    write_lines!(w,
+        r##"  </library_animations>"##;
+    )?;
+
     Ok(())
 }
 
 
 fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
-    write!(w, cat!(
-        r#"  <library_animation_clips>"#,
-    ))?;
+    write_lines!(w,
+        r##"  <library_animation_clips>"##;
+    )?;
 
     let num_objects = model.objects.len();
     let matching_anims = anims.iter().enumerate()
@@ -631,41 +541,35 @@ fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[An
     let num_joints = geom.joint_data.tree.node_count();
 
     for (anim_id, anim) in matching_anims {
-        let end_time = if anim.num_frames == 0 {
-            0.0
-        } else {
-            (anim.num_frames - 1) as f64 * FRAME_LENGTH
-        };
-        write!(w, cat!(
-            r#"    <animation_clip id="anim{anim_id}" name="{name}" end="{end_time}">"#,
-            ),
-            anim_id = anim_id,
-            name = name::IdFmt(&anim.name),
-            end_time = end_time,
+        check!(anim.num_frames != 0);
+        let end_time = (anim.num_frames - 1) as f64 * FRAME_LENGTH;
+
+        write_lines!(w,
+            r##"    <animation_clip id="anim{anim_id}" name="{name}" end="{end_time}">"##;
+            anim_id = anim_id, name = name::IdFmt(&anim.name), end_time = end_time,
         )?;
         for joint_id in  0..num_joints {
-            write!(w, cat!(
-                r##"      <instance_animation url="#anim{anim_id}-joint{joint_id}"/>"##,
-                ),
-                anim_id = anim_id,
-                joint_id = joint_id,
+            write_lines!(w,
+                r##"      <instance_animation url="#anim{anim_id}-joint{joint_id}"/>"##;
+                anim_id = anim_id, joint_id = joint_id,
             )?;
         }
-        write!(w, cat!(
-            r#"    </animation_clip>"#,
-        ))?;
+        write_lines!(w,
+            r##"    </animation_clip>"##;
+        )?;
     }
-    write!(w, cat!(
-        r#"  </library_animation_clips>"#,
-    ))?;
+
+    write_lines!(w,
+        r##"  </library_animation_clips>"##;
+    )?;
+
     Ok(())
 }
 
 fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
-    write!(w, cat!(
+    write_lines!(w,
         r#"  <library_visual_scenes>"#,
-        r#"    <visual_scene id="scene0" name="{model_name}">"#,
-        ),
+        r#"    <visual_scene id="scene0" name="{model_name}">"#;
         model_name = name::IdFmt(&model.name),
     )?;
 
@@ -673,35 +577,34 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
 
     for (i, call) in geom.draw_calls.iter().enumerate() {
         let mesh = &model.meshes[call.mesh_id as usize];
-        write!(w, cat!(
-            r#"      <node id="node{i}" name="{mesh_name}" type="NODE">"#,
+        write_lines!(w,
+            r##"      <node id="node{i}" name="{mesh_name}" type="NODE">"##,
             r##"        <instance_controller url="#controller{i}">"##,
-            r#"          <skeleton>#joint0</skeleton>"#,
-            r#"          <bind_material>"#,
-            r#"            <technique_common>"#,
-            r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}">"##,
-            ),
-            i = i,
-            mesh_name = name::IdFmt(&mesh.name),
-            mat_id = call.mat_id,
+            r##"          <skeleton>#joint0</skeleton>"##,
+            r##"          <bind_material>"##,
+            r##"            <technique_common>"##,
+            r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}">"##;
+            i = i, mesh_name = name::IdFmt(&mesh.name), mat_id = call.mat_id,
         )?;
         if model.materials[call.mat_id as usize].texture_name.is_some() {
-            write!(w, cat!(
-                r#"                <bind_vertex_input semantic="tc" input_semantic="TEXCOORD"/>"#,
-            ))?;
+            write_lines!(w,
+                r##"                <bind_vertex_input semantic="tc" input_semantic="TEXCOORD"/>"##;
+            )?;
         }
-        write!(w, cat!(
-            r#"              </instance_material>"#,
-            r#"            </technique_common>"#,
-            r#"          </bind_material>"#,
-            r#"        </instance_controller>"#,
-            r#"      </node>"#,
-        ))?;
+        write_lines!(w,
+            r##"              </instance_material>"##,
+            r##"            </technique_common>"##,
+            r##"          </bind_material>"##,
+            r##"        </instance_controller>"##,
+            r##"      </node>"##;
+        )?;
     }
-    write!(w, cat!(
-        r#"    </visual_scene>"#,
-        r#"  </library_visual_scenes>"#,
-    ))?;
+
+    write_lines!(w,
+        r##"    </visual_scene>"##,
+        r##"  </library_visual_scenes>"##;
+    )?;
+
     Ok(())
 }
 
@@ -714,26 +617,29 @@ fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
         }
         Ok(())
     }
+
     fn write<W: Write>(w: &mut W, model: &Model, tree: &Graph<Weight, ()>, node: NodeIndex, indent: u32) -> Result<()> {
         write_indent(w, indent)?;
-        write!(w, r#"<node id="joint{}" sid="joint{0}" "#, node.index())?;
-        match tree[node].kind {
-            Kind::Root => (),
-            Kind::Object(id) => {
-                let object = &model.objects[id as usize];
-                write!(w, r#"name="{}" "#, name::IdFmt(&object.name))?;
-            }
-            Kind::UndefinedStackSlot(pos) => {
-                write!(w, r#"name="__STACK{}__" "#, pos)?;
-            }
-        }
-        write!(w, "type=\"JOINT\">\n")?;
+        write_lines!(w,
+            r#"<node id="joint{joint_id}" sid="joint{joint_id}" name="{name}" type="JOINT">"#;
+            joint_id = node.index(),
+            name = FnFmt(|f| match tree[node].kind {
+                Kind::Root => write!(f, "__ROOT__"),
+                Kind::Object(id) => {
+                    let object = &model.objects[id as usize];
+                    write!(f, "{}", name::IdFmt(&object.name))
+                }
+                Kind::UndefinedStackSlot(pos) => {
+                    write!(f, r"__STACK{}__", pos)
+                }
+            }),
+        )?;
 
         match tree[node].kind {
             Kind::Object(id) => {
                 let mat = model.objects[id as usize].xform;
                 write_indent(w, indent + 1)?;
-                write!(w, r#"<matrix sid="transform">{}</matrix>\n"#, Mat(&mat))?;
+                write_lines!(w, r#"<matrix sid="transform">{}</matrix>"#; Mat(&mat))?;
             }
             _ => (),
         }
@@ -751,10 +657,10 @@ fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
 }
 
 fn write_scene<W: Write>(w: &mut W) -> Result<()> {
-    write!(w, cat!(
-        r#"  <scene>"#,
+    write_lines!(w,
+        r##"  <scene>"##,
         r##"    <instance_visual_scene url="#scene0"/>"##,
-        r#"  </scene>"#,
-    ))?;
+        r##"  </scene>"##;
+    )?;
     Ok(())
 }

@@ -1,3 +1,5 @@
+#[macro_use]
+mod format;
 mod collada;
 mod image_names;
 
