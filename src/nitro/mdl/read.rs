@@ -8,10 +8,10 @@ use nitro::mdl::Mesh;
 use nitro::mdl::Model;
 use nitro::mdl::Object;
 use nitro::mdl::xform;
+use nitro::name::Name;
 use nitro::tex::TextureParameters;
 use util::bits::BitField;
 use util::cur::Cur;
-use util::name::Name;
 
 pub fn read_mdl(cur: Cur) -> Result<Mdl> {
     fields!(cur, MDL0 {

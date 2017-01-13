@@ -1,8 +1,8 @@
 use nitro::mdl::Model;
+use nitro::name;
+use nitro::name::Name;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use util::name;
-use util::name::Name;
 
 pub type ImageNames = HashMap<TexturePalettePair, String>;
 

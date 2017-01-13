@@ -1,42 +1,17 @@
 use errors::Result;
-use nitro::bca::Animation;
-use nitro::bca::Bca;
-use nitro::bca::Jnt;
-use nitro::bca::Object;
-use nitro::bca::Rotation;
-use nitro::bca::Scaling;
-use nitro::bca::ScalingData;
-use nitro::bca::Timing;
-use nitro::bca::Translation;
-use nitro::bca::TranslationData;
 use nitro::info_block;
+use nitro::jnt::Animation;
+use nitro::jnt::Jnt;
+use nitro::jnt::Object;
+use nitro::jnt::Rotation;
+use nitro::jnt::Scaling;
+use nitro::jnt::ScalingData;
+use nitro::jnt::Timing;
+use nitro::jnt::Translation;
+use nitro::jnt::TranslationData;
+use nitro::name::Name;
 use util::bits::BitField;
 use util::cur::Cur;
-use util::name::Name;
-
-pub fn read_bca(cur: Cur) -> Result<Bca> {
-    fields!(cur, BCA0 {
-        stamp: [u8; 4],
-        bom: u16,
-        version: u16,
-        file_size: u32,
-        header_size: u16,
-        num_sections: u16,
-        section_offs: [u32; num_sections],
-    });
-    check!(stamp == b"BCA0");
-    check!(bom == 0xfeff);
-    check!(header_size == 16);
-    check!(num_sections > 0);
-
-    let jnts = section_offs
-        .map(|off| read_jnt((cur + off as usize)?))
-        .collect::<Result<_>>()?;
-
-    Ok(Bca {
-        jnts: jnts,
-    })
-}
 
 pub fn read_jnt(cur: Cur) -> Result<Jnt> {
     fields!(cur, JNT0 {

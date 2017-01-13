@@ -7,15 +7,15 @@ use geometry;
 use geometry::GeometryData;
 use joint_builder::Kind;
 use joint_builder::Weight;
-use nitro::bca;
-use nitro::bca::Animation;
+use nitro::jnt;
+use nitro::jnt::Animation;
 use nitro::mdl::Model;
+use nitro::name;
 use petgraph::Direction;
 use petgraph::Graph;
 use petgraph::graph::NodeIndex;
 use std::fmt::Write;
 use time;
-use util::name;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
@@ -470,7 +470,7 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
                 // The reason we can't do this with a FnFmt like the others is that getting the matrix
                 // can result in an Error, and that Error can't "go through" a fmt::Result, so this has
                 // to be directly contained in this function.
-                let mat = bca::object::to_matrix(object, anim, frame)?;
+                let mat = jnt::object::to_matrix(object, anim, frame)?;
                 write!(w, "{} ", Mat(&mat))?;
             }
             write!(w, "</float_array>\n")?;

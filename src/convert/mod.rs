@@ -5,15 +5,15 @@ mod image_names;
 
 use clap::ArgMatches;
 use errors::Result;
+use files::BufferHolder;
+use files::FileHolder;
+use nitro::name;
 use nitro::tex;
 use png;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use util::name;
-use files::BufferHolder;
-use files::FileHolder;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let input_files = matches

@@ -16,15 +16,15 @@ use geometry::GeometryData;
 use geometry::Vertex;
 use glium;
 use glium::Surface;
-use nitro::bca::object::to_matrix as bca_object_to_matrix;
+use nitro::jnt::object::to_matrix as bca_object_to_matrix;
 use nitro::mdl::Material;
 use nitro::mdl::Model;
+use nitro::name::Name;
 use nitro::tex::image::gen_image;
 use nitro::tex::Tex;
 use nitro::tex::TextureInfo;
 use std::f32::consts::PI;
 use time;
-use util::name::Name;
 
 implement_vertex!(Vertex, position, texcoord, color);
 

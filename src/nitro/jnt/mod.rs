@@ -1,17 +1,11 @@
-mod anim;
 pub mod object;
+mod read;
 
-pub use self::anim::read_bca;
-pub use self::anim::read_jnt;
+pub use self::read::read_jnt;
 
+use nitro::name::Name;
 use util::cur::Cur;
-use util::name::Name;
 use util::view::View;
-
-#[derive(Debug, Clone)]
-pub struct Bca<'a> {
-    pub jnts: Vec<Jnt<'a>>,
-}
 
 #[derive(Debug, Clone)]
 pub struct Jnt<'a> {

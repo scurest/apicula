@@ -9,7 +9,7 @@ use joint_builder::JointBuilder;
 use joint_builder::JointData;
 use nitro::gpu_cmds;
 use nitro::mdl::Model;
-use nitro::render_cmds;
+use nitro::mdl::render_cmds;
 use std::default::Default;
 use std::ops::Range;
 

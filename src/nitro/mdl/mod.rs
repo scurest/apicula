@@ -1,12 +1,13 @@
-mod model;
+pub mod render_cmds;
+mod read;
 mod xform;
 
 use cgmath::Matrix4;
+use nitro::name::Name;
 use nitro::tex::TextureParameters;
 use util::cur::Cur;
-use util::name::Name;
 
-pub use self::model::read_mdl;
+pub use self::read::read_mdl;
 pub use self::xform::pivot_mat;
 
 #[derive(Debug, Clone)]

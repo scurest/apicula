@@ -1,10 +1,10 @@
+use nitro::name::Name;
 use util::bits::BitField;
-use util::name::Name;
 
 pub mod image;
-mod texture;
+mod read;
 
-pub use self::texture::read_tex;
+pub use self::read::read_tex;
 
 #[derive(Debug, Clone)]
 pub struct Tex<'a> {
