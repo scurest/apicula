@@ -1,6 +1,6 @@
 use convert::format::FnFmt;
 use convert::format::Mat;
-use convert::TexPalPair;
+use nitro::tex::texpal::TexPalPair;
 use errors::Result;
 use geometry;
 use geometry::GeometryData;

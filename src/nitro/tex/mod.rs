@@ -2,6 +2,7 @@ use nitro::name::Name;
 use util::bits::BitField;
 
 pub mod image;
+pub mod texpal;
 mod read;
 
 pub use self::read::read_tex;

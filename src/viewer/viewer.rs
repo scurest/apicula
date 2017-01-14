@@ -19,10 +19,11 @@ use glium::Surface;
 use nitro::jnt::object::to_matrix as bca_object_to_matrix;
 use nitro::mdl::Material;
 use nitro::mdl::Model;
-use nitro::name::Name;
 use nitro::tex::image::gen_image;
 use nitro::tex::Tex;
-use nitro::tex::TextureInfo;
+use nitro::tex::texpal::find_tex;
+use nitro::tex::texpal::TexPalPair;
+
 use std::f32::consts::PI;
 use time;
 
@@ -265,51 +266,27 @@ impl ModelData {
     }
 }
 
-
-fn find_matching_texture_info<'a, 'b>(texs: &'b [Tex<'a>], texture_name: Name)
--> Result<(&'b Tex<'a>, &'b TextureInfo)> {
-    for tex in texs {
-        let res = tex.texinfo.iter().find(|info| texture_name == info.name);
-        if let Some(texinfo) = res {
-            return Ok((tex, texinfo))
-        }
-    }
-    Err(format!("couldn't find texture named {}", texture_name).into())
-}
-
 fn build_textures(display: &glium::Display, materials: &[Material], texs: &[Tex])
 -> Vec<Option<glium::texture::Texture2d>> {
-    // Seriously horrible function follows :-(
     materials.iter()
-        .map(|material| {
-            let tex_texinfo = material.texture_name.map(|name| {
-                find_matching_texture_info(texs, name)
-            });
-            let tex_texinfo_palinfo: Option<Result<_>> = tex_texinfo.map(|res| -> Result<_> {
-                let (tex, texinfo) = res?;
-                let palinfo = material.palette_name.and_then(|name| {
-                    tex.palinfo.iter().find(|info| info.name == name)
-                });
-                Ok((tex, texinfo, palinfo))
-            });
-            let texture_res = tex_texinfo_palinfo.map(|res| -> Result<_> {
-                let (tex, texinfo, palinfo) = res?;
-                let rgba = gen_image(tex, texinfo, palinfo)?;
-                let dim = (texinfo.params.width(), texinfo.params.height());
-                let image = glium::texture::RawImage2d::from_raw_rgba_reversed(rgba, dim);
-                Ok(glium::texture::Texture2d::new(display, image)?)
-            });
-            texture_res
+        .map(|material| -> Result<Option<_>> {
+            let pair = match TexPalPair::from_material(material) {
+                Some(pair) => pair,
+                None => return Ok(None), // no texture
+            };
+            let (tex, texinfo, palinfo) = find_tex(&texs[..], pair)
+                .ok_or_else(|| format!("couldn't find texture named {}", pair.0))?;
+
+            let rgba = gen_image(tex, texinfo, palinfo)?;
+            let dim = (texinfo.params.width(), texinfo.params.height());
+            let image = glium::texture::RawImage2d::from_raw_rgba_reversed(rgba, dim);
+            Ok(Some(glium::texture::Texture2d::new(display, image)?))
         })
         .map(|res| {
-            match res {
-                Some(Ok(x)) => Some(x),
-                Some(Err(e)) => {
-                    error!("error generating texture: {:?}", e);
-                    None
-                }
-                None => None,
-            }
+            res.unwrap_or_else(|e| {
+                error!("error generating texture: {:?}", e);
+                None
+            })
         })
         .collect()
 }
