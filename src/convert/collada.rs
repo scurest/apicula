@@ -1,7 +1,6 @@
 use convert::format::FnFmt;
 use convert::format::Mat;
-use convert::image_names::ImageNames;
-use convert::image_names::TexturePalettePair;
+use convert::TexPalPair;
 use errors::Result;
 use geometry;
 use geometry::GeometryData;
@@ -16,10 +15,18 @@ use petgraph::Graph;
 use petgraph::graph::NodeIndex;
 use std::fmt::Write;
 use time;
+use util::uniq::UniqueNamer;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
-pub fn write<W: Write>(w: &mut W, model: &Model, anims: &[Animation], image_names: &ImageNames) -> Result<()> {
+type ImageNamer = UniqueNamer<TexPalPair>;
+
+pub fn write<W: Write>(
+    w: &mut W,
+    model: &Model,
+    anims: &[Animation],
+    image_namer: &mut ImageNamer,
+) -> Result<()> {
     let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
     let geom = geometry::build(model, &objects[..])?;
 
@@ -28,9 +35,9 @@ pub fn write<W: Write>(w: &mut W, model: &Model, anims: &[Animation], image_name
         r##"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">"##;
     )?;
     write_asset(w)?;
-    write_library_images(w, image_names)?;
+    write_library_images(w, model, image_namer)?;
     write_library_materials(w, model)?;
-    write_library_effects(w, model, image_names)?;
+    write_library_effects(w, model, image_namer)?;
     write_library_geometries(w, model, &geom)?;
     write_library_controllers(w, &geom)?;
     write_library_animations(w, model, anims, &geom)?;
@@ -56,11 +63,21 @@ fn write_asset<W: Write>(w: &mut W) -> Result<()> {
     Ok(())
 }
 
-fn write_library_images<W: Write>(w: &mut W, image_names: &ImageNames) -> Result<()> {
+fn write_library_images<W: Write>(
+    w: &mut W,
+    model: &Model,
+    image_namer: &mut ImageNamer,
+) -> Result<()> {
     write_lines!(w,
         r##"  <library_images>"##;
     )?;
-    for name in image_names.values() {
+    for mat in &model.materials {
+        let res = TexPalPair::from_material(mat)
+            .map(|pair| image_namer.get_name(pair));
+        let name = match res {
+            Some(name) => name,
+            None => continue,
+        };
         write_lines!(w,
             r##"    <image id="{name}">"##,
             r##"      <init_from>{name}.png</init_from>"##,
@@ -93,17 +110,17 @@ fn write_library_materials<W: Write>(w: &mut W, model: &Model) -> Result<()> {
     Ok(())
 }
 
-fn write_library_effects<W: Write>(w: &mut W, model: &Model, image_names: &ImageNames) -> Result<()> {
+fn write_library_effects<W: Write>(
+    w: &mut W,
+    model: &Model,
+    image_namer: &mut ImageNamer,
+) -> Result<()> {
     write_lines!(w,
         r##"  <library_effects>"##;
     )?;
     for (i, mat) in model.materials.iter().enumerate() {
-        let image_name = mat.texture_name
-            .map(|texname| TexturePalettePair {
-                texture_name: texname,
-                palette_name: mat.palette_name,
-            })
-            .and_then(|pair| image_names.get(&pair));
+        let image_name = TexPalPair::from_material(mat)
+            .map(|pair| image_namer.get_name(pair));
 
         write_lines!(w,
             r##"    <effect id="effect{i}" name="{name}">"##,
