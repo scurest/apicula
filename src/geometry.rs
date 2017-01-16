@@ -1,4 +1,5 @@
 use cgmath::Matrix4;
+use cgmath::Zero;
 use cgmath::Point2;
 use cgmath::Point3;
 use cgmath::Transform;
@@ -159,6 +160,18 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         self.joint_builder.mul_by_object(object_id);
 
         self.gpu.mul_matrix(&self.objects[object_id as usize]);
+        Ok(())
+    }
+    fn blend(&mut self, stack_pos: u8, terms: &[((u8, u8), f64)]) -> Result<()> {
+        let mut mat = Matrix4::zero();
+        for term in terms {
+            let blend_matrix = self.model.blend_matrices[(term.0).1 as usize].0;
+            mat += term.1 * self.gpu.matrix_stack[(term.0).0 as usize] * blend_matrix;
+        }
+
+        self.gpu.cur_matrix = mat;
+        self.gpu.store(stack_pos);
+
         Ok(())
     }
     fn draw(&mut self, mesh_id: u8, mat_id: u8) -> Result<()> {

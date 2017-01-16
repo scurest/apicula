@@ -2,6 +2,7 @@ pub mod render_cmds;
 mod read;
 mod xform;
 
+use cgmath::Matrix3;
 use cgmath::Matrix4;
 use nitro::name::Name;
 use nitro::tex::TextureParameters;
@@ -21,6 +22,7 @@ pub struct Model<'a> {
     pub materials: Vec<Material>,
     pub meshes: Vec<Mesh<'a>>,
     pub objects: Vec<Object>,
+    pub blend_matrices: Vec<BlendMatrixPair>,
     pub render_cmds_cur: Cur<'a>,
 }
 
@@ -46,3 +48,10 @@ pub struct Object {
     pub name: Name,
     pub xform: Matrix4<f64>,
 }
+
+/// A pair of matrices used for the blending render command (opcode 0x09).
+///
+/// The first one is used in calculating vertex positions. The second is used
+/// for normals (?) which we don't currently handle.
+#[derive(Debug, Clone)]
+pub struct BlendMatrixPair(pub Matrix4<f64>, pub Matrix3<f64>);

@@ -1,7 +1,9 @@
+use cgmath::Matrix3;
 use cgmath::Matrix4;
 use cgmath::One;
 use errors::Result;
 use nitro::info_block;
+use nitro::mdl::BlendMatrixPair;
 use nitro::mdl::Material;
 use nitro::mdl::Mdl;
 use nitro::mdl::Mesh;
@@ -12,6 +14,7 @@ use nitro::name::Name;
 use nitro::tex::TextureParameters;
 use util::bits::BitField;
 use util::cur::Cur;
+use util::fixed::fix32;
 
 pub fn read_mdl(cur: Cur) -> Result<Mdl> {
     fields!(cur, MDL0 {
@@ -35,7 +38,7 @@ fn read_model<'a>(cur: Cur<'a>, name: Name) -> Result<Model<'a>> {
         render_cmds_off: u32,
         materials_off: u32,
         mesh_off: u32,
-        unknown_off: u32,
+        blend_matrices_off: u32,
         unknown1: [u8; 3],
         num_objects: u8,
         num_materials: u8,
@@ -61,12 +64,17 @@ fn read_model<'a>(cur: Cur<'a>, name: Name) -> Result<Model<'a>> {
     let objects = read_objects(end)?;
     let materials = read_materials((cur + materials_off as usize)?)?;
     let meshes = read_meshes((cur + mesh_off as usize)?)?;
+    let blend_matrices = read_blend_matrices(
+        (cur + blend_matrices_off as usize)?,
+        num_objects as usize
+    )?;
 
     Ok(Model {
         name: name,
         materials: materials,
         meshes: meshes,
         objects: objects,
+        blend_matrices: blend_matrices,
         render_cmds_cur: render_cmds_cur,
     })
 }
@@ -226,4 +234,27 @@ fn read_object(cur: Cur, name: Name) -> Result<Object> {
         name: name,
         xform: xform,
     })
+}
+
+fn read_blend_matrices(mut cur: Cur, count: usize) -> Result<Vec<BlendMatrixPair>> {
+    let mut res = Vec::with_capacity(count);
+    for _ in 0..count {
+        let words = cur.next_n::<u32>(12 + 9)?; // one 4x3 matrix + one 3x3 matrix
+        let get = |i| fix32(words.get(i), 1, 19, 12);
+
+        let m0 = Matrix4::new(
+            get(0), get(1), get(2), 0.0,
+            get(3), get(4), get(5), 0.0,
+            get(6), get(7), get(8), 0.0,
+            get(9), get(10), get(11), 1.0,
+        );
+        let m1 = Matrix3::new(
+            get(12), get(13), get(14),
+            get(15), get(16), get(17),
+            get(18), get(19), get(20),
+        );
+
+        res.push(BlendMatrixPair(m0, m1));
+    }
+    Ok(res)
 }

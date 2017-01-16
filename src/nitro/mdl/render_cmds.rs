@@ -8,6 +8,11 @@ pub trait Sink {
     fn store_matrix(&mut self, stack_pos: u8) -> Result<()>;
     /// cur_matrix = cur_matrix * object_matrices[object_id]
     fn mul_by_object(&mut self, object_id: u8) -> Result<()>;
+    /// Blends severals matrices together and stores them on the stack.
+    ///
+    /// This compilcated command is deferred to the implementer who
+    /// will have access to model data like the blend matrices.
+    fn blend(&mut self, stack_pos: u8, combination: &[((u8, u8), f64)]) -> Result<()>;
     fn draw(&mut self, mesh_id: u8, material_id: u8) -> Result<()>;
 }
 
@@ -84,7 +89,28 @@ impl RenderInterpreterState {
                     self.cur_stack_pos += 1;
                 }
                 0x09 => {
-                    // unknown
+                    // The current matrix is set to the sum of
+                    //   weight * matrix_stack[id0] * blend_matrix[id1]
+                    // and stored to the given stack slot. If the blend matrix is
+                    //
+                    let stack_pos = params[0];
+                    let num_terms = params[1] as usize;
+                    check!(num_terms <= 4);
+
+                    let mut terms = [((0,0), 0.0); 4];
+                    let mut param_idx = 2;
+                    for i in 0..num_terms {
+                        let id0 = params[param_idx];
+                        let id1 = params[param_idx+1];
+                        let weight = params[param_idx+2] as f64 / 256.0;
+
+                        terms[i] = ((id0, id1), weight);
+
+                        param_idx += 3;
+                    }
+
+                    sink.blend(stack_pos, &terms[0..num_terms])?;
+                    self.cur_stack_pos = stack_pos;
                 }
                 _ => {
                     info!("unknown render command: {:#x} {:?}", opcode, params);
