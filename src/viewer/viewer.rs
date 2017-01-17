@@ -11,8 +11,8 @@ use cgmath::Vector2;
 use cgmath::Vector3;
 use errors::Result;
 use files::FileHolder;
-use geometry;
-use geometry::GeometryData;
+use geometry::build_without_joints as build_geometry;
+use geometry::GeometryDataWithoutJoints as GeometryData;
 use geometry::Vertex;
 use glium;
 use glium::Surface;
@@ -132,7 +132,7 @@ impl ModelData {
     pub fn new(file_holder: &FileHolder, display: &glium::Display, index: usize) -> Result<ModelData> {
         let model = &file_holder.models[index];
         let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
-        let geo_data = geometry::build(model, &objects[..])?;
+        let geo_data = build_geometry(model, &objects[..])?;
         let vertex_buffer = glium::VertexBuffer::new(
             display,
             &geo_data.vertices
@@ -258,7 +258,7 @@ impl ModelData {
             }
         }
 
-        self.geo_data = geometry::build(model, &self.objects[..])?;
+        self.geo_data = build_geometry(model, &self.objects[..])?;
         self.vertex_buffer.write(&self.geo_data.vertices);
         self.anim_data = anim_data;
 

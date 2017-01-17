@@ -3,8 +3,8 @@ use cgmath::One;
 use convert::format::FnFmt;
 use convert::format::Mat;
 use errors::Result;
-use geometry;
-use geometry::GeometryData;
+use geometry::build_with_joints as build_geometry;
+use geometry::GeometryDataWithJoints as GeometryData;
 use joint_builder::JointTree;
 use joint_builder::LinCombTerm;
 use joint_builder::Transform;
@@ -32,7 +32,7 @@ pub fn write<W: Write>(
     image_namer: &mut ImageNamer,
 ) -> Result<()> {
     let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
-    let geom = geometry::build(model, &objects[..])?;
+    let geom = build_geometry(model, &objects[..])?;
 
     write_lines!(w,
         r##"<?xml version="1.0" encoding="utf-8"?>"##,

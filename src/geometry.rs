@@ -21,6 +21,25 @@ pub struct GpuState {
     pub matrix_stack: Vec<Matrix4<f64>>,
 }
 
+impl GpuState {
+    pub fn new() -> GpuState {
+        GpuState {
+            cur_matrix: Matrix4::one(),
+            texture_matrix: Matrix4::one(),
+            matrix_stack: vec![Matrix4::one(); 32],
+        }
+    }
+    pub fn restore(&mut self, stack_pos: u8) {
+        self.cur_matrix = self.matrix_stack[stack_pos as usize];
+    }
+    pub fn store(&mut self, stack_pos: u8) {
+        self.matrix_stack[stack_pos as usize] = self.cur_matrix;
+    }
+    pub fn mul_matrix(&mut self, mat: &Matrix4<f64>) {
+        self.cur_matrix = self.cur_matrix * *mat;
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Vertex {
     pub position: [f32; 3],
@@ -47,7 +66,7 @@ pub struct DrawCall {
 }
 
 #[derive(Debug, Clone)]
-pub struct GeometryData {
+pub struct GeometryDataWithJoints {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
     pub draw_calls: Vec<DrawCall>,
@@ -55,10 +74,17 @@ pub struct GeometryData {
 }
 
 #[derive(Debug, Clone)]
+pub struct GeometryDataWithoutJoints {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u16>,
+    pub draw_calls: Vec<DrawCall>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Builder<'a, 'b: 'a, 'c> {
     model: &'a Model<'b>,
     objects: &'c [Matrix4<f64>],
-    joint_builder: JointBuilder<'a, 'b>,
+    joint_builder: Option<JointBuilder<'a, 'b>>,
     gpu: GpuState,
     cur_texture_dim: (u32, u32),
     vertices: Vec<Vertex>,
@@ -68,37 +94,40 @@ pub struct Builder<'a, 'b: 'a, 'c> {
     next_vertex: Vertex,
 }
 
-pub fn build(model: &Model, objects: &[Matrix4<f64>]) -> Result<GeometryData> {
-    let mut builder = Builder::new(model, objects);
+pub fn build_with_joints(
+    model: &Model,
+    objects: &[Matrix4<f64>]
+) -> Result<GeometryDataWithJoints> {
+    let mut builder = Builder::new(model, objects, Some(JointBuilder::new(model)));
     render_cmds::run_commands(model.render_cmds_cur, &mut builder)?;
-    Ok(builder.data())
+    let data = builder.data();
+    Ok(GeometryDataWithJoints {
+        vertices: data.0.vertices,
+        indices: data.0.indices,
+        draw_calls: data.0.draw_calls,
+        joint_data: data.1.unwrap(),
+    })
 }
 
-impl GpuState {
-    pub fn new() -> GpuState {
-        GpuState {
-            cur_matrix: Matrix4::one(),
-            texture_matrix: Matrix4::one(),
-            matrix_stack: vec![Matrix4::one(); 32],
-        }
-    }
-    pub fn restore(&mut self, stack_pos: u8) {
-        self.cur_matrix = self.matrix_stack[stack_pos as usize];
-    }
-    pub fn store(&mut self, stack_pos: u8) {
-        self.matrix_stack[stack_pos as usize] = self.cur_matrix;
-    }
-    pub fn mul_matrix(&mut self, mat: &Matrix4<f64>) {
-        self.cur_matrix = self.cur_matrix * *mat;
-    }
+pub fn build_without_joints(
+    model: &Model,
+    objects: &[Matrix4<f64>]
+) -> Result<GeometryDataWithoutJoints> {
+    let mut builder = Builder::new(model, objects, None);
+    render_cmds::run_commands(model.render_cmds_cur, &mut builder)?;
+    Ok(builder.data().0)
 }
 
 impl<'a, 'b: 'a, 'c> Builder<'a, 'b, 'c> {
-    pub fn new(model: &'a Model<'b>, objects: &'c [Matrix4<f64>]) -> Builder<'a, 'b, 'c> {
+    pub fn new(
+        model: &'a Model<'b>,
+        objects: &'c [Matrix4<f64>],
+        joint_builder: Option<JointBuilder<'a, 'b>>
+    ) -> Builder<'a, 'b, 'c> {
         Builder {
             model: model,
             objects: objects,
-            joint_builder: JointBuilder::new(model),
+            joint_builder: joint_builder,
             gpu: GpuState::new(),
             vertices: vec![],
             ind_builder: IndexBuilder::new(),
@@ -133,37 +162,47 @@ impl<'a, 'b: 'a, 'c> Builder<'a, 'b, 'c> {
         self.draw_calls.push(self.cur_draw_call.clone());
     }
 
-    pub fn data(self) -> GeometryData {
-        GeometryData {
-            vertices: self.vertices,
-            indices: self.ind_builder.indices,
-            draw_calls: self.draw_calls,
-            joint_data: self.joint_builder.data(),
-        }
+    pub fn data(self) -> (GeometryDataWithoutJoints, Option<JointData>) {
+        (
+            GeometryDataWithoutJoints {
+                vertices: self.vertices,
+                indices: self.ind_builder.indices,
+                draw_calls: self.draw_calls,
+            },
+            self.joint_builder.map(|b| b.data()),
+        )
     }
 }
 
 impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
     fn load_matrix(&mut self, stack_pos: u8) -> Result<()> {
-        self.joint_builder.load_matrix(stack_pos);
+        if let Some(ref mut b) = self.joint_builder {
+            b.load_matrix(stack_pos);
+        }
 
         self.gpu.restore(stack_pos);
         Ok(())
     }
     fn store_matrix(&mut self, stack_pos: u8) -> Result<()> {
-        self.joint_builder.store_matrix(stack_pos);
+        if let Some(ref mut b) = self.joint_builder {
+            b.store_matrix(stack_pos);
+        }
 
         self.gpu.store(stack_pos);
         Ok(())
     }
     fn mul_by_object(&mut self, object_id: u8) -> Result<()> {
-        self.joint_builder.mul_by_object(object_id);
+        if let Some(ref mut b) = self.joint_builder {
+            b.mul_by_object(object_id);
+        }
 
         self.gpu.mul_matrix(&self.objects[object_id as usize]);
         Ok(())
     }
     fn blend(&mut self, stack_pos: u8, terms: &[((u8, u8), f64)]) -> Result<()> {
-        self.joint_builder.blend(stack_pos, terms);
+        if let Some(ref mut b) = self.joint_builder {
+            b.blend(stack_pos, terms);
+        }
 
         let mut mat = Matrix4::zero();
         for term in terms {
@@ -192,7 +231,9 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
 
 impl<'a, 'b: 'a, 'c> gpu_cmds::Sink for Builder<'a, 'b, 'c> {
     fn restore(&mut self, idx: u32) {
-        self.joint_builder.load_matrix(idx as u8);
+        if let Some(ref mut b) = self.joint_builder {
+            b.load_matrix(idx as u8);
+        }
         self.gpu.restore(idx as u8);
     }
     fn scale(&mut self, sx: f64, sy: f64, sz: f64) {
@@ -219,7 +260,9 @@ impl<'a, 'b: 'a, 'c> gpu_cmds::Sink for Builder<'a, 'b, 'c> {
     }
     fn vertex(&mut self, p: Point3<f64>) {
         self.ind_builder.vertex();
-        self.joint_builder.vertex();
+        if let Some(ref mut b) = self.joint_builder {
+            b.vertex();
+        }
 
         let p = self.gpu.cur_matrix.transform_point(p);
         self.next_vertex.position = [p[0] as f32, p[1] as f32, p[2] as f32];
