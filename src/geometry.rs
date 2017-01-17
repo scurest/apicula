@@ -58,7 +58,7 @@ pub struct GeometryData {
 pub struct Builder<'a, 'b: 'a, 'c> {
     model: &'a Model<'b>,
     objects: &'c [Matrix4<f64>],
-    joint_builder: JointBuilder<'a>,
+    joint_builder: JointBuilder<'a, 'b>,
     gpu: GpuState,
     cur_texture_dim: (u32, u32),
     vertices: Vec<Vertex>,
@@ -98,7 +98,7 @@ impl<'a, 'b: 'a, 'c> Builder<'a, 'b, 'c> {
         Builder {
             model: model,
             objects: objects,
-            joint_builder: JointBuilder::new(&model.objects),
+            joint_builder: JointBuilder::new(model),
             gpu: GpuState::new(),
             vertices: vec![],
             ind_builder: IndexBuilder::new(),
@@ -163,6 +163,8 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         Ok(())
     }
     fn blend(&mut self, stack_pos: u8, terms: &[((u8, u8), f64)]) -> Result<()> {
+        self.joint_builder.blend(stack_pos, terms);
+
         let mut mat = Matrix4::zero();
         for term in terms {
             let blend_matrix = self.model.blend_matrices[(term.0).1 as usize].0;

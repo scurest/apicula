@@ -1,18 +1,22 @@
+use cgmath::Matrix4;
+use cgmath::One;
 use convert::format::FnFmt;
 use convert::format::Mat;
-use nitro::tex::texpal::TexPalPair;
 use errors::Result;
 use geometry;
 use geometry::GeometryData;
-use joint_builder::Kind;
-use joint_builder::Weight;
+use joint_builder::JointTree;
+use joint_builder::LinCombTerm;
+use joint_builder::Transform;
 use nitro::jnt;
 use nitro::jnt::Animation;
 use nitro::mdl::Model;
 use nitro::name;
+use nitro::tex::texpal::TexPalPair;
 use petgraph::Direction;
-use petgraph::Graph;
 use petgraph::graph::NodeIndex;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use time;
 use util::uniq::UniqueNamer;
@@ -331,12 +335,43 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             i = i,
         )?;
 
-        // This data should be shared by all the controllers, say, by putting it
-        // all in the first controller and referencing the sources or arrays from
-        // all the others. Blender does not seem to like this, so I duplicate it.
-        // TODO: Invetigate this more.
+        // Every vertex blends between multiple joints with different weights.
+        // However, in typical COLLADA fashion, we can't specify the weights
+        // directly. We need to build a list of all weights and reference them
+        // by index into this list.
+        //
+        // We need to be able to look up both a weight from an index and an
+        // index from a weight (see below). Hence the two maps.
+        //
+        // One more thing: we can't use floats as the key to a HashMap, so we
+        // scale them up and truncate ((w * 512.0) as u32). You must remember to
+        // invert this operation when you read a value back out.
+        let mut weight_to_index = HashMap::new();
+        let mut index_to_weight = HashMap::new();
+
+        let vrange = call.vertex_range.start as usize..call.vertex_range.end as usize;
+        for j in &geom.joint_data.vertices[vrange.clone()] {
+            for &LinCombTerm { weight, .. } in &j.0 {
+                let w = (weight * 512.0) as u32;
+                match weight_to_index.entry(w) {
+                    Entry::Vacant(v) => {
+                        let n = index_to_weight.len();
+                        v.insert(n);
+                        index_to_weight.insert(n, w);
+                    }
+                    _ => (),
+                }
+            }
+        }
 
         let num_joints = geom.joint_data.tree.node_count();
+
+        // This data (names and inverse binds) should be shared by all the controllers,
+        // say, by putting it all in the first controller and referencing the sources or
+        // arrays from all the others. Blender does not seem to like this, so I duplicate
+        // it.
+        // TODO: Invetigate this more.
+
         write_lines!(w,
             r##"        <source id="controller{i}-joints">"##,
             r##"          <Name_array id="controller{i}-joints-array" count="{num_joints}">{joints}</Name_array>"##,
@@ -348,8 +383,8 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             r##"        </source>"##;
             i = i, num_joints = num_joints,
             joints = FnFmt(|f| {
-                for n in 0..num_joints {
-                    write!(f, "joint{} ", n)?;
+                for j in 0..num_joints {
+                    write!(f, "joint{} ", j)?;
                 }
                 Ok(())
             }),
@@ -366,8 +401,8 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             r##"        </source>"##;
             i = i, num_floats = 16 * num_joints, num_joints = num_joints,
             floats = FnFmt(|f| {
-                for n in 0..num_joints {
-                    let inv_bind = geom.joint_data.tree[NodeIndex::new(n)].inv_bind_matrix;
+                for j in 0..num_joints {
+                    let inv_bind = geom.joint_data.tree[NodeIndex::new(j)].inv_bind_matrix;
                     write!(f, "{} ", Mat(&inv_bind))?;
                 }
                 Ok(())
@@ -376,14 +411,20 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
 
         write_lines!(w,
             r##"        <source id="controller{i}-weights">"##,
-            r##"          <float_array id="controller{i}-weights-array" count="1">1</float_array>"##,
+            r##"          <float_array id="controller{i}-weights-array" count="{num_weights}">{weights}</float_array>"##,
             r##"          <technique_common>"##,
             r##"            <accessor source="#controller{i}-weights-array" count="1">"##,
             r##"              <param name="WEIGHT" type="float"/>"##,
             r##"            </accessor>"##,
             r##"          </technique_common>"##,
             r##"        </source>"##;
-            i = i,
+            i = i, num_weights = weight_to_index.len(),
+            weights = FnFmt(|f| {
+                for i in 0..index_to_weight.len() {
+                    write!(f, "{} ", index_to_weight[&i] as f64 / 512.0)?;
+                }
+                Ok(())
+            })
         )?;
 
         write_lines!(w,
@@ -394,7 +435,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             i = i,
         )?;
 
-        let num_verts = call.vertex_range.end - call.vertex_range.start;
+        let num_verts = vrange.end - vrange.start;
         write_lines!(w,
             r##"        <vertex_weights count="{num_verts}">"##,
             r##"          <input semantic="JOINT" source="#controller{i}-joints" offset="0"/>"##,
@@ -404,15 +445,19 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             r##"        </vertex_weights>"##;
             i = i, num_verts = num_verts,
             vcount = FnFmt(|f| {
-                for _ in 0..num_verts {
-                    write!(f, "1 ")?;
+                for j in &geom.joint_data.vertices[vrange.clone()] {
+                    write!(f, "{} ", j.0.len())?;
                 }
                 Ok(())
             }),
             v = FnFmt(|f| {
-                let vrange = call.vertex_range.start as usize..call.vertex_range.end as usize;
-                for j in &geom.joint_data.vertices[vrange] {
-                    write!(f, "{} 0 ", j.index())?;
+                for j in &geom.joint_data.vertices[vrange.clone()] {
+                for &LinCombTerm { weight, joint_id } in &j.0 {
+                        write!(f, "{} {} ",
+                            joint_id.index(),
+                            weight_to_index[&((weight * 512.0) as u32)],
+                        )?;
+                    }
                 }
                 Ok(())
             }),
@@ -446,8 +491,8 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
 
         for joint_id in  0..num_joints {
             let joint = &geom.joint_data.tree[NodeIndex::new(joint_id)];
-            let object_id = match joint.kind {
-                Kind::Object(id) => id,
+            let object_id = match joint.transform {
+                Transform::Object(id) => id,
                 _ => continue,
             };
             let object = &anim.objects[object_id as usize];
@@ -635,31 +680,29 @@ fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
         Ok(())
     }
 
-    fn write<W: Write>(w: &mut W, model: &Model, tree: &Graph<Weight, ()>, node: NodeIndex, indent: u32) -> Result<()> {
+    fn write<W: Write>(w: &mut W, model: &Model, tree: &JointTree, node: NodeIndex, indent: u32) -> Result<()> {
         write_indent(w, indent)?;
         write_lines!(w,
             r#"<node id="joint{joint_id}" sid="joint{joint_id}" name="{name}" type="JOINT">"#;
             joint_id = node.index(),
-            name = FnFmt(|f| match tree[node].kind {
-                Kind::Root => write!(f, "__ROOT__"),
-                Kind::Object(id) => {
+            name = FnFmt(|f| match tree[node].transform {
+                Transform::Root => write!(f, "__ROOT__"),
+                Transform::Object(id) => {
                     let object = &model.objects[id as usize];
                     write!(f, "{}", name::IdFmt(&object.name))
                 }
-                Kind::UndefinedStackSlot(pos) => {
-                    write!(f, r"__STACK{}__", pos)
-                }
+                Transform::BlendDummy(id) => write!(f, "__BLEND{}__", id),
+                Transform::UnknownStackSlot(pos) => write!(f, r"__STACK{}__", pos),
             }),
         )?;
 
-        match tree[node].kind {
-            Kind::Object(id) => {
-                let mat = model.objects[id as usize].xform;
-                write_indent(w, indent + 1)?;
-                write_lines!(w, r#"<matrix sid="transform">{}</matrix>"#; Mat(&mat))?;
-            }
-            _ => (),
-        }
+        let mat = match tree[node].transform {
+            Transform::Object(id) => model.objects[id as usize].xform,
+            Transform::BlendDummy(id) => model.blend_matrices[id as usize].0,
+            _ => Matrix4::one(),
+        };
+        write_indent(w, indent + 1)?;
+        write_lines!(w, r#"<matrix sid="transform">{}</matrix>"#; Mat(&mat))?;
 
         let children = tree.neighbors_directed(node, Direction::Outgoing);
         for child in children {
