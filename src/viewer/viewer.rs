@@ -23,7 +23,6 @@ use nitro::tex::image::gen_image;
 use nitro::tex::Tex;
 use nitro::tex::texpal::find_tex;
 use nitro::tex::texpal::TexPalPair;
-
 use std::f32::consts::PI;
 use time;
 
@@ -400,7 +399,7 @@ fn run(st: &mut State) -> Result<()> {
 
     let mut move_dir = vec3(0.0, 0.0, 0.0);
 
-    let mut cur_time = time::precise_time_s() as f32;
+    let mut cur_time = time::precise_time_s();
     let mut last_time;
     let mut last_anim_time = cur_time;
 
@@ -459,8 +458,8 @@ fn run(st: &mut State) -> Result<()> {
         target.finish().unwrap();
 
         last_time = cur_time;
-        cur_time = time::precise_time_s() as f32;
-        let dt = cur_time - last_time;
+        cur_time = time::precise_time_s() ;
+        let dt = (cur_time - last_time) as f32;
 
         for ev in st.display.poll_events() {
             use glium::glutin::Event as Ev;
@@ -528,8 +527,12 @@ fn run(st: &mut State) -> Result<()> {
 
         if let Some(_) = st.model_data.anim_data {
             let frame_length = 1.0 / 60.0; // 60 fps
-            if cur_time - last_anim_time > frame_length {
-                st.model_data.next_anim_frame(&st.file_holder)?;
+            let mut time_since_last_frame = cur_time - last_anim_time;
+            if time_since_last_frame > frame_length {
+                while time_since_last_frame > frame_length {
+                    st.model_data.next_anim_frame(&st.file_holder)?;
+                    time_since_last_frame -= frame_length;
+                }
                 last_anim_time = cur_time;
             }
         }
