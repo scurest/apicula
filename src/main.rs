@@ -29,6 +29,11 @@ mod viewer;
 
 use errors::Result;
 
+pub static VERSION: &'static str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " (", include_str!(concat!(env!("OUT_DIR"), "/git_rev")), ")"
+);
+
 fn main() {
     let ret_code = main2();
     std::process::exit(ret_code);
@@ -48,7 +53,7 @@ fn main2() -> i32 {
 fn main3() -> Result<()> {
     let app = clap_app!(apicula =>
         (@setting SubcommandRequiredElseHelp)
-        (version: "0.1")
+        (version: VERSION)
         (about: "NSBMD model viewer/converter")
         (@subcommand view =>
             (about: "View a model")

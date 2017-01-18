@@ -3,6 +3,7 @@ name = "apicula"
 version = "0.1.0"
 authors = ["scurest <scurest@users.noreply.github.com>"]
 license = "CC0-1.0"
+build = "build.rs"
 
 [dependencies]
 cgmath = "0.12.0"
