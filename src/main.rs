@@ -46,7 +46,7 @@ fn main2() -> i32 {
 }
 
 fn main3() -> Result<()> {
-    let app = clap_app!(demense =>
+    let app = clap_app!(apicula =>
         (@setting SubcommandRequiredElseHelp)
         (version: "0.1")
         (about: "NSBMD model viewer/converter")
