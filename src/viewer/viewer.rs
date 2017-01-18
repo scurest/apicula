@@ -15,6 +15,7 @@ use geometry::build_without_joints as build_geometry;
 use geometry::GeometryDataWithoutJoints as GeometryData;
 use geometry::Vertex;
 use glium;
+use glium::backend::glutin_backend::WinRef;
 use glium::Surface;
 use nitro::jnt::object::to_matrix as bca_object_to_matrix;
 use nitro::mdl::Material;
@@ -93,6 +94,19 @@ struct MouseState {
 enum GrabState {
     NotGrabbed,
     Grabbed { saved_pos: (i32, i32) },
+}
+
+impl MouseState {
+    // Performs "best-effort" setting of the cursor position. If
+    // setting the position fails, no error is signalled, but
+    // self.pos is also not updated.
+    fn set_position(&mut self, window: &WinRef, (x, y): (i32, i32)) {
+        let res = window.set_cursor_position(x, y);
+        match res {
+            Ok(()) => self.pos = (x,y),
+            Err(_) => (),
+        }
+    }
 }
 
 struct State<'a> {
@@ -403,12 +417,12 @@ fn run(st: &mut State) -> Result<()> {
     let mut last_time;
     let mut last_anim_time = cur_time;
 
+    let window = st.display.get_window().unwrap();
+
     loop {
-        let (w, h) = st.display.get_window().unwrap()
-            .get_inner_size_pixels().unwrap();
+        let (w,h) = window.get_inner_size_pixels().unwrap();
         let (w,h) = (w as i32, h as i32);
-        let asp = w as f32 / h as f32;
-        st.eye.aspect_ratio = asp;
+        st.eye.aspect_ratio = w as f32 / h as f32;
 
         let mut target = st.display.draw();
 
@@ -467,6 +481,7 @@ fn run(st: &mut State) -> Result<()> {
             use glium::glutin::VirtualKeyCode as K;
             match ev {
                 Ev::Closed => return Ok(()),
+
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::W)) => move_dir.x = 1.0,
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::S)) => move_dir.x = -1.0,
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::A)) => move_dir.y = -1.0,
@@ -483,30 +498,45 @@ fn run(st: &mut State) -> Result<()> {
 
                 Ev::MouseInput(Es::Pressed, glium::glutin::MouseButton::Left) => {
                     mouse.grabbed = GrabState::Grabbed { saved_pos: mouse.pos };
-                    st.display.get_window().unwrap().set_cursor_position(w/2, h/2);
-                    st.display.get_window().unwrap().set_cursor_state(glium::glutin::CursorState::Hide)?;
+                    mouse.set_position(&window, (w/2, h/2));
+                    let _ = window.set_cursor_state(glium::glutin::CursorState::Hide);
                 }
                 Ev::MouseInput(Es::Released, glium::glutin::MouseButton::Left) => {
                     if let GrabState::Grabbed { saved_pos } = mouse.grabbed {
-                        st.display.get_window().unwrap().set_cursor_state(glium::glutin::CursorState::Normal)?;
-                        st.display.get_window().unwrap().set_cursor_position(saved_pos.0, saved_pos.1);
+                        let _ = window.set_cursor_state(glium::glutin::CursorState::Normal);
+                        mouse.set_position(&window, saved_pos);
                     }
                     mouse.grabbed = GrabState::NotGrabbed;
                 }
+                Ev::MouseMoved(x,y) => {
+                    let last_pos = mouse.pos;
+                    mouse.pos = (x,y);
+                    if let GrabState::Grabbed { .. } = mouse.grabbed {
+                        let (dx, dy) = (x - last_pos.0, y - last_pos.1);
+
+                        // Warping the mouse (with set_position) appears to generate
+                        // these MouseMoved events. In particular, the initial warp to
+                        // the center of the window can generate a large displacement
+                        // that makes the camera jump. Since there's no real way to tell
+                        // which events are caused by warps and which are "real", we
+                        // sovle this issue by just ignoring large displacements.
+                        let ignore_cutoff = 20;
+                        let ignore = dx.abs() > ignore_cutoff || dy.abs() > ignore_cutoff;
+
+                        if !ignore {
+                            let dv = 0.01 * vec2(dx as f32, dy as f32);
+                            st.eye.free_look(dv);
+                            mouse.set_position(&window, (w/2, h/2));
+                        }
+                    }
+                }
+
                 Ev::Focused(false) => {
-                    st.display.get_window().unwrap().set_cursor_state(glium::glutin::CursorState::Normal)?;
+                    let _ = window.set_cursor_state(glium::glutin::CursorState::Normal);
                     mouse.grabbed = GrabState::NotGrabbed;
                     move_dir = vec3(0.0, 0.0, 0.0);
                 }
-                Ev::MouseMoved(x,y) => {
-                    mouse.pos = (x,y);
-                    if let GrabState::Grabbed { .. } = mouse.grabbed {
-                        let (dx, dy) = (x - w/2, y - h/2);
-                        let dv = 0.01 * vec2(dx as f32, dy as f32);
-                        st.eye.free_look(dv);
-                        st.display.get_window().unwrap().set_cursor_position(w/2, h/2);
-                    }
-                }
+
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::Comma)) => {
                     st.model_data.prev_model(&st.file_holder, &st.display)?;
                 }
@@ -521,6 +551,7 @@ fn run(st: &mut State) -> Result<()> {
                     st.model_data.next_anim(&st.file_holder)?;
                     last_anim_time = cur_time;
                 }
+
                 _ => ()
             }
         }
