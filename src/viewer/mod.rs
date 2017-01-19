@@ -1,3 +1,5 @@
+mod eye;
+mod state;
 mod viewer;
 
 use clap::ArgMatches;

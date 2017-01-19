@@ -1,90 +1,19 @@
-use cgmath::EuclideanSpace;
 use cgmath::InnerSpace;
-use cgmath::Matrix4;
-use cgmath::PerspectiveFov;
 use cgmath::Point3;
-use cgmath::Rad;
-use cgmath::Transform;
 use cgmath::vec2;
 use cgmath::vec3;
-use cgmath::Vector2;
-use cgmath::Vector3;
 use errors::Result;
 use files::FileHolder;
-use geometry::build_without_joints as build_geometry;
-use geometry::GeometryDataWithoutJoints as GeometryData;
 use geometry::Vertex;
 use glium;
 use glium::backend::glutin_backend::WinRef;
 use glium::Surface;
-use nitro::jnt::object::to_matrix as bca_object_to_matrix;
-use nitro::mdl::Material;
-use nitro::mdl::Model;
-use nitro::tex::image::gen_image;
-use nitro::tex::Tex;
-use nitro::tex::texpal::find_tex;
-use nitro::tex::texpal::TexPalPair;
-use std::f32::consts::PI;
 use time;
+use viewer::eye::Eye;
+use viewer::state::ModelData;
+use viewer::state::State;
 
 implement_vertex!(Vertex, position, texcoord, color);
-
-struct Eye {
-    pub position: Point3<f32>,
-    pub azimuth: f32,
-    pub altitude: f32,
-    pub aspect_ratio: f32,
-}
-
-impl Eye {
-    pub fn model_view(&self) -> Matrix4<f32> {
-        let mv =
-            Matrix4::from_angle_x(Rad(-self.altitude)) *
-            Matrix4::from_angle_y(Rad(-self.azimuth)) *
-            Matrix4::from_translation(-self.position.to_vec());
-        mv
-    }
-    pub fn model_view_persp(&self) -> Matrix4<f32> {
-        let persp = PerspectiveFov {
-            fovy: Rad(1.1),
-            aspect: self.aspect_ratio,
-            near: 0.01,
-            far: 100.0,
-        };
-        Matrix4::from(persp) * self.model_view()
-    }
-    pub fn move_by(&mut self, dv: Vector3<f32>) {
-        // Treating the eye as if it were inclined neither up nor down,
-        // transform the forward/side/up basis in camera space into
-        // world space.
-        let t = Matrix4::from_angle_y(Rad(self.azimuth));
-        let forward = t.transform_vector(vec3(0.0, 0.0, -1.0));
-        let side = t.transform_vector(vec3(1.0, 0.0, 0.0));
-        let up = t.transform_vector(vec3(0.0, 1.0, 0.0));
-
-        self.position += forward * dv.x + side * dv.y + up * dv.z;
-    }
-    pub fn free_look(&mut self, dv: Vector2<f32>) {
-        self.azimuth -= dv.x;
-        self.altitude -= dv.y;
-
-        // Wrap once (expect dv to be small) for azimuth
-        if self.azimuth >= 2.0 * PI {
-            self.azimuth -= 2.0 * PI;
-        } else if self.azimuth < 0.0 {
-            self.azimuth += 2.0 * PI;
-        }
-
-        // Clamp into allowable altitude range to avoid singularities
-        // at the poles.
-        let max_alt = 0.499 * PI;
-        let min_alt = -max_alt;
-        self.altitude =
-            if self.altitude < min_alt { min_alt }
-            else if self.altitude > max_alt { max_alt }
-            else { self.altitude };
-    }
-}
 
 struct MouseState {
     pos: (i32, i32),
@@ -109,201 +38,6 @@ impl MouseState {
     }
 }
 
-struct State<'a> {
-    file_holder: FileHolder<'a>,
-    eye: Eye,
-    model_data: ModelData,
-    display: glium::Display,
-    program: glium::Program,
-    default_texture: glium::texture::Texture2d,
-}
-
-/// Data needed to render a specific model.
-struct ModelData {
-    index: usize,
-    geo_data: GeometryData,
-    vertex_buffer: glium::VertexBuffer<Vertex>,
-    index_buffer: glium::IndexBuffer<u16>,
-    textures: Vec<Option<glium::texture::Texture2d>>,
-    objects: Vec<Matrix4<f64>>,
-    anim_data: Option<AnimData>,
-}
-
-#[derive(Copy, Clone)]
-struct AnimData {
-    index: usize,
-    cur_frame: u16,
-}
-
-impl<'a> State<'a> {
-    pub fn model(&self) -> &Model {
-        &self.file_holder.models[self.model_data.index]
-    }
-}
-
-impl ModelData {
-    pub fn new(file_holder: &FileHolder, display: &glium::Display, index: usize) -> Result<ModelData> {
-        let model = &file_holder.models[index];
-        let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
-        let geo_data = build_geometry(model, &objects[..])?;
-        let vertex_buffer = glium::VertexBuffer::new(
-            display,
-            &geo_data.vertices
-        )?;
-        let index_buffer = glium::IndexBuffer::new(
-            display,
-            glium::index::PrimitiveType::TrianglesList,
-            &geo_data.indices
-        )?;
-        let textures = build_textures(
-            display,
-            &model.materials[..],
-            &file_holder.texs[..]
-        );
-        let anim_data = None;
-        Ok(ModelData {
-            index: index,
-            geo_data: geo_data,
-            vertex_buffer: vertex_buffer,
-            index_buffer: index_buffer,
-            textures: textures,
-            objects: objects,
-            anim_data: anim_data,
-        })
-    }
-    pub fn prev_model(&mut self, file_holder: &FileHolder, display: &glium::Display) -> Result<()> {
-        let id = self.index;
-        let max_id = file_holder.models.len() - 1;
-        let next_id = if id == 0 { max_id } else { id - 1 };
-        *self = ModelData::new(file_holder, display, next_id)?;
-        Ok(())
-    }
-    pub fn next_model(&mut self, file_holder: &FileHolder, display: &glium::Display) -> Result<()> {
-        let id = self.index;
-        let max_id = file_holder.models.len() - 1;
-        let next_id = if id == max_id { 0 } else { id + 1 };
-        *self = ModelData::new(file_holder, display, next_id)?;
-        Ok(())
-    }
-    pub fn prev_anim(&mut self, file_holder: &FileHolder) -> Result<()> {
-        if file_holder.animations.is_empty() { return Ok(()); }
-
-        let mut anim_id = self.anim_data.as_ref().map(|a| a.index);
-        let max_anim_id = file_holder.animations.len() - 1;
-        let num_objects = file_holder.models[self.index].objects.len();
-        loop {
-            anim_id = match anim_id {
-                None => Some(max_anim_id),
-                Some(i) if i == 0 => None,
-                Some(i) => Some(i - 1),
-            };
-            // Skip over any animations with the wrong number of objects
-            if let Some(i) = anim_id {
-                if file_holder.animations[i].objects.len() != num_objects {
-                    continue;
-                }
-            }
-            break;
-        }
-
-        self.set_anim_data(file_holder, anim_id.map(|id| AnimData {
-            index: id,
-            cur_frame: 0,
-        }))?;
-
-        Ok(())
-    }
-    pub fn next_anim(&mut self, file_holder: &FileHolder) -> Result<()> {
-        if file_holder.animations.is_empty() { return Ok(()); }
-
-        let mut anim_id = self.anim_data.as_ref().map(|a| a.index);
-        let max_anim_id = file_holder.animations.len() - 1;
-        let num_objects = file_holder.models[self.index].objects.len();
-        loop {
-            anim_id = match anim_id {
-                None => Some(0),
-                Some(i) if i == max_anim_id => None,
-                Some(i) => Some(i + 1),
-            };
-            // Skip over any animations with the wrong number of objects
-            if let Some(i) = anim_id {
-                if file_holder.animations[i].objects.len() != num_objects {
-                    continue;
-                }
-            }
-            break;
-        }
-
-        self.set_anim_data(file_holder, anim_id.map(|id| AnimData {
-            index: id,
-            cur_frame: 0,
-        }))?;
-
-        Ok(())
-    }
-    pub fn next_anim_frame(&mut self, file_holder: &FileHolder) -> Result<()> {
-        let mut anim_data = self.anim_data
-            .expect("next frame called on unanimated model");
-        let anim = &file_holder.animations[anim_data.index];
-
-        let next_frame = anim_data.cur_frame + 1;
-        let next_frame = if next_frame == anim.num_frames { 0 } else { next_frame };
-
-        anim_data.cur_frame = next_frame;
-
-        self.set_anim_data(file_holder, Some(anim_data))
-    }
-    pub fn set_anim_data(&mut self, file_holder: &FileHolder, anim_data: Option<AnimData>) -> Result<()> {
-        let model = &file_holder.models[self.index];
-
-        if let Some(anim_data) = anim_data {
-            let anim = &file_holder.animations[anim_data.index];
-            let it = self.objects.iter_mut()
-                .zip(anim.objects.iter());
-            for (obj, anim_obj) in it {
-                *obj = bca_object_to_matrix(anim_obj, anim, anim_data.cur_frame)?;
-            }
-        } else {
-            let it = self.objects.iter_mut()
-                .zip(model.objects.iter());
-            for (obj, model_obj) in it {
-                *obj = model_obj.xform;
-            }
-        }
-
-        self.geo_data = build_geometry(model, &self.objects[..])?;
-        self.vertex_buffer.write(&self.geo_data.vertices);
-        self.anim_data = anim_data;
-
-        Ok(())
-    }
-}
-
-fn build_textures(display: &glium::Display, materials: &[Material], texs: &[Tex])
--> Vec<Option<glium::texture::Texture2d>> {
-    materials.iter()
-        .map(|material| -> Result<Option<_>> {
-            let pair = match TexPalPair::from_material(material) {
-                Some(pair) => pair,
-                None => return Ok(None), // no texture
-            };
-            let (tex, texinfo, palinfo) = find_tex(&texs[..], pair)
-                .ok_or_else(|| format!("couldn't find texture named {}", pair.0))?;
-
-            let rgba = gen_image(tex, texinfo, palinfo)?;
-            let dim = (texinfo.params.width(), texinfo.params.height());
-            let image = glium::texture::RawImage2d::from_raw_rgba_reversed(rgba, dim);
-            Ok(Some(glium::texture::Texture2d::new(display, image)?))
-        })
-        .map(|res| {
-            res.unwrap_or_else(|e| {
-                error!("error generating texture: {:?}", e);
-                None
-            })
-        })
-        .collect()
-}
-
 pub fn viewer(file_holder: FileHolder) -> Result<()> {
     let num_models = file_holder.models.len();
     let num_animations = file_holder.animations.len();
@@ -315,7 +49,7 @@ pub fn viewer(file_holder: FileHolder) -> Result<()> {
         return Ok(())
     }
 
-    let initial_win_dim = (512, 384);
+    let initial_win_dim = (512, 384); // 2x DS resolution
 
     use glium::DisplayBuild;
     let display = glium::glutin::WindowBuilder::new()
@@ -335,33 +69,8 @@ pub fn viewer(file_holder: FileHolder) -> Result<()> {
     );
     let default_texture = glium::texture::Texture2d::new(&display, default_image).unwrap();
 
-    let vertex_shader_src = r#"
-        #version 140
-        in vec3 position;
-        in vec2 texcoord;
-        in vec3 color;
-        out vec2 v_texcoord;
-        out vec3 v_color;
-        uniform mat4 matrix;
-        void main() {
-            v_texcoord = texcoord;
-            v_color = color;
-            gl_Position = matrix * vec4(position, 1.0);
-        }
-    "#;
-
-    let fragment_shader_src = r#"
-        #version 140
-        in vec2 v_texcoord;
-        in vec3 v_color;
-        out vec4 color;
-        uniform sampler2D tex;
-        void main() {
-            vec4 sample = texture(tex, v_texcoord);
-            if (sample.w == 0.0) discard;
-            color = sample * vec4(v_color, 1.0);
-        }
-    "#;
+    let vertex_shader_src = include_str!("shaders/vert.glsl");
+    let fragment_shader_src = include_str!("shaders/frag.glsl");
 
     let program = glium::Program::new(&display,
         glium::program::ProgramCreationInput::SourceCode {
@@ -392,11 +101,23 @@ pub fn viewer(file_holder: FileHolder) -> Result<()> {
         default_texture: default_texture,
     };
 
+    print_controls();
     run(&mut st)
 }
 
+fn print_controls() {
+    print!(concat!(
+        "Controls\n",
+        "  WASD         Forward/Left/Back/Right\n",
+        "  EQ           Up/Down\n",
+        "  Left Mouse   Free Look\n",
+        "  []           Prev/Next Animation\n",
+        "  ,.           Prev/Next Model\n",
+    ));
+}
+
 fn run(st: &mut State) -> Result<()> {
-    let drawparams = glium::DrawParameters {
+    let draw_params = glium::DrawParameters {
         depth: glium::Depth {
             test: glium::draw_parameters::DepthTest::IfLess,
             write: true,
@@ -429,45 +150,7 @@ fn run(st: &mut State) -> Result<()> {
         let middle_grey = (0.4666, 0.4666, 0.4666, 1.0);
         target.clear_color_srgb_and_depth(middle_grey, 1.0);
 
-        let mat = st.eye.model_view_persp();
-
-        for call in st.model_data.geo_data.draw_calls.iter() {
-            let model = st.model();
-
-            let texture = st.model_data.textures[call.mat_id as usize].as_ref()
-                .unwrap_or(&st.default_texture);
-            let mut sampler = glium::uniforms::Sampler::new(texture)
-                .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
-                .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest);
-            let wrap_fn = |repeat, mirror| {
-                use glium::uniforms::SamplerWrapFunction as Wrap;
-                match (repeat, mirror) {
-                    (false, _) => Wrap::Clamp,
-                    (true, false) => Wrap::Repeat,
-                    (true, true) => Wrap::Mirror,
-                }
-            };
-            let params = model.materials[call.mat_id as usize].params;
-            sampler.1.wrap_function.0 = wrap_fn(params.repeat_s(), params.mirror_s());
-            sampler.1.wrap_function.1 = wrap_fn(params.repeat_t(), params.mirror_t());
-
-            let uniforms = uniform! {
-                matrix: [
-                    [mat.x.x, mat.x.y, mat.x.z, mat.x.w],
-                    [mat.y.x, mat.y.y, mat.y.z, mat.y.w],
-                    [mat.z.x, mat.z.y, mat.z.z, mat.z.w],
-                    [mat.w.x, mat.w.y, mat.w.z, mat.w.w],
-                ],
-                tex: sampler,
-            };
-            target.draw(
-                &st.model_data.vertex_buffer,
-                &st.model_data.index_buffer.slice(call.index_range.clone()).unwrap(),
-                &st.program,
-                &uniforms,
-                &drawparams,
-            ).unwrap();
-        }
+        st.draw(&mut target, &draw_params)?;
 
         target.finish().unwrap();
 
@@ -486,15 +169,15 @@ fn run(st: &mut State) -> Result<()> {
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::S)) => move_dir.x = -1.0,
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::A)) => move_dir.y = -1.0,
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::D)) => move_dir.y = 1.0,
-                Ev::KeyboardInput(Es::Pressed, _, Some(K::F)) => move_dir.z = -1.0,
-                Ev::KeyboardInput(Es::Pressed, _, Some(K::R)) => move_dir.z = 1.0,
+                Ev::KeyboardInput(Es::Pressed, _, Some(K::Q)) => move_dir.z = -1.0,
+                Ev::KeyboardInput(Es::Pressed, _, Some(K::E)) => move_dir.z = 1.0,
 
                 Ev::KeyboardInput(Es::Released, _, Some(K::W)) => move_dir.x = 0.0,
                 Ev::KeyboardInput(Es::Released, _, Some(K::S)) => move_dir.x = 0.0,
                 Ev::KeyboardInput(Es::Released, _, Some(K::A)) => move_dir.y = 0.0,
                 Ev::KeyboardInput(Es::Released, _, Some(K::D)) => move_dir.y = 0.0,
-                Ev::KeyboardInput(Es::Released, _, Some(K::F)) => move_dir.z = 0.0,
-                Ev::KeyboardInput(Es::Released, _, Some(K::R)) => move_dir.z = 0.0,
+                Ev::KeyboardInput(Es::Released, _, Some(K::Q)) => move_dir.z = 0.0,
+                Ev::KeyboardInput(Es::Released, _, Some(K::E)) => move_dir.z = 0.0,
 
                 Ev::MouseInput(Es::Pressed, glium::glutin::MouseButton::Left) => {
                     mouse.grabbed = GrabState::Grabbed { saved_pos: mouse.pos };
@@ -556,7 +239,7 @@ fn run(st: &mut State) -> Result<()> {
             }
         }
 
-        if let Some(_) = st.model_data.anim_data {
+        if st.model_data.has_animation() {
             let frame_length = 1.0 / 60.0; // 60 fps
             let mut time_since_last_frame = cur_time - last_anim_time;
             if time_since_last_frame > frame_length {
