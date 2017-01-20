@@ -15,10 +15,9 @@ use nitro::name;
 use nitro::tex::texpal::TexPalPair;
 use petgraph::Direction;
 use petgraph::graph::NodeIndex;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use time;
+use util::ins_set::InsOrderSet;
 use util::uniq::UniqueNamer;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
@@ -335,34 +334,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             i = i,
         )?;
 
-        // Every vertex blends between multiple joints with different weights.
-        // However, in typical COLLADA fashion, we can't specify the weights
-        // directly. We need to build a list of all weights and reference them
-        // by index into this list.
-        //
-        // We need to be able to look up both a weight from an index and an
-        // index from a weight (see below). Hence the two maps.
-        //
-        // One more thing: we can't use floats as the key to a HashMap, so we
-        // scale them up and truncate ((w * 512.0) as u32). You must remember to
-        // invert this operation when you read a value back out.
-        let mut weight_to_index = HashMap::new();
-        let mut index_to_weight = HashMap::new();
-
         let vrange = call.vertex_range.start as usize..call.vertex_range.end as usize;
-        for j in &geom.joint_data.vertices[vrange.clone()] {
-            for &LinCombTerm { weight, .. } in &j.0 {
-                let w = (weight * 512.0) as u32;
-                match weight_to_index.entry(w) {
-                    Entry::Vacant(v) => {
-                        let n = index_to_weight.len();
-                        v.insert(n);
-                        index_to_weight.insert(n, w);
-                    }
-                    _ => (),
-                }
-            }
-        }
 
         let num_joints = geom.joint_data.tree.node_count();
 
@@ -409,6 +381,25 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             }),
         )?;
 
+        // We have a weight for each joint each vertex is attached to. COLLADA
+        // doesn't take the weights directly; we need to place them all in a
+        // list and reference them by index into this list. Build the list of
+        // all weights here.
+        //
+        // One more thing: we can't use floats in the set because of their weird
+        // equality, so we represent f64s as u32s in a fixed point format with
+        // `encode` and `decode`. There is likely not any loss of precision here
+        // because weights are stored as 8-bit fixed point numbers in the Nitro
+        // format and they aren't usually multiplied.
+        let encode = |x: f64| (x * 4096.0) as u32;
+        let decode = |x: u32| x as f64 / 4096.0;
+        let mut all_weights = InsOrderSet::new();
+        for j in &geom.joint_data.vertices[vrange.clone()] {
+            for &LinCombTerm { weight, .. } in &j.0 {
+                all_weights.insert(encode(weight));
+            }
+        }
+
         write_lines!(w,
             r##"        <source id="controller{i}-weights">"##,
             r##"          <float_array id="controller{i}-weights-array" count="{num_weights}">{weights}</float_array>"##,
@@ -418,10 +409,10 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             r##"            </accessor>"##,
             r##"          </technique_common>"##,
             r##"        </source>"##;
-            i = i, num_weights = weight_to_index.len(),
+            i = i, num_weights = all_weights.len(),
             weights = FnFmt(|f| {
-                for i in 0..index_to_weight.len() {
-                    write!(f, "{} ", index_to_weight[&i] as f64 / 512.0)?;
+                for &weight in all_weights.iter() {
+                    write!(f, "{} ", decode(weight))?;
                 }
                 Ok(())
             })
@@ -452,10 +443,10 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             }),
             v = FnFmt(|f| {
                 for j in &geom.joint_data.vertices[vrange.clone()] {
-                for &LinCombTerm { weight, joint_id } in &j.0 {
+                    for &LinCombTerm { weight, joint_id } in &j.0 {
                         write!(f, "{} {} ",
                             joint_id.index(),
-                            weight_to_index[&((weight * 512.0) as u32)],
+                            all_weights.get_index_from_value(&encode(weight)).unwrap(),
                         )?;
                     }
                 }
