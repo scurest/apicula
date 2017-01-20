@@ -336,13 +336,22 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
 
         let vrange = call.vertex_range.start as usize..call.vertex_range.end as usize;
 
-        let num_joints = geom.joint_data.tree.node_count();
-
-        // This data (names and inverse binds) should be shared by all the controllers,
-        // say, by putting it all in the first controller and referencing the sources or
-        // arrays from all the others. Blender does not seem to like this, so I duplicate
-        // it.
-        // TODO: Invetigate this more.
+        // We have one or more joints which each vertex is attached to. We don't
+        // provide them directly: we need to place all the joints we're going to
+        // use for this draw call into a list and reference them by index later on.
+        // This is what `IncOrderSet` is for.
+        let mut all_joints = InsOrderSet::new();
+        for j in &geom.joint_data.vertices[vrange.clone()] {
+            for &LinCombTerm { joint_id, .. } in &j.0 {
+                // Insert every joint which appears and all its ancestors.
+                all_joints.insert(joint_id);
+                let mut parents = geom.joint_data.tree.neighbors_directed(joint_id, Direction::Incoming);
+                while let Some(parent) = parents.next() {
+                    all_joints.insert(parent);
+                    parents = geom.joint_data.tree.neighbors_directed(parent, Direction::Incoming)
+                }
+            }
+        }
 
         write_lines!(w,
             r##"        <source id="controller{i}-joints">"##,
@@ -353,10 +362,10 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             r##"            </accessor>"##,
             r##"          </technique_common>"##,
             r##"        </source>"##;
-            i = i, num_joints = num_joints,
+            i = i, num_joints = all_joints.len(),
             joints = FnFmt(|f| {
-                for j in 0..num_joints {
-                    write!(f, "joint{} ", j)?;
+                for &j in all_joints.iter() {
+                    write!(f, "joint{} ", j.index())?;
                 }
                 Ok(())
             }),
@@ -371,20 +380,19 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             r##"            </accessor>"##,
             r##"          </technique_common>"##,
             r##"        </source>"##;
-            i = i, num_floats = 16 * num_joints, num_joints = num_joints,
+            i = i, num_floats = 16 * all_joints.len(), num_joints = all_joints.len(),
             floats = FnFmt(|f| {
-                for j in 0..num_joints {
-                    let inv_bind = geom.joint_data.tree[NodeIndex::new(j)].inv_bind_matrix;
-                    write!(f, "{} ", Mat(&inv_bind))?;
+                for &j in all_joints.iter() {
+                    let inv_bind = &geom.joint_data.tree[j].inv_bind_matrix;
+                    write!(f, "{} ", Mat(inv_bind))?;
                 }
                 Ok(())
             }),
         )?;
 
-        // We have a weight for each joint each vertex is attached to. COLLADA
-        // doesn't take the weights directly; we need to place them all in a
-        // list and reference them by index into this list. Build the list of
-        // all weights here.
+        // We also have a weight for each joint attched to a vertex. Again, we
+        // need indices into a list, so do the same thing we did above for the
+        // joints.
         //
         // One more thing: we can't use floats in the set because of their weird
         // equality, so we represent f64s as u32s in a fixed point format with
@@ -445,7 +453,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
                 for j in &geom.joint_data.vertices[vrange.clone()] {
                     for &LinCombTerm { weight, joint_id } in &j.0 {
                         write!(f, "{} {} ",
-                            joint_id.index(),
+                            all_joints.get_index_from_value(&joint_id).unwrap(),
                             all_weights.get_index_from_value(&encode(weight)).unwrap(),
                         )?;
                     }
@@ -475,13 +483,12 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
     let num_objects = model.objects.len();
     let matching_anims = anims.iter().enumerate()
         .filter(|&(_, ref a)| a.objects.len() == num_objects);
-    let num_joints = geom.joint_data.tree.node_count();
 
     for (anim_id, anim) in matching_anims {
         let num_frames = anim.num_frames;
 
-        for joint_id in  0..num_joints {
-            let joint = &geom.joint_data.tree[NodeIndex::new(joint_id)];
+        for joint_id in geom.joint_data.tree.node_indices() {
+            let joint = &geom.joint_data.tree[joint_id];
             let object_id = match joint.transform {
                 Transform::Object(id) => id,
                 _ => continue,
@@ -490,7 +497,7 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
 
             write_lines!(w,
                 r##"    <animation id="anim{anim_id}-joint{joint_id}">"##;
-                anim_id = anim_id, joint_id = joint_id,
+                anim_id = anim_id, joint_id = joint_id.index(),
             )?;
 
             write_lines!(w,
@@ -502,7 +509,7 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
                 r##"          </accessor>"##,
                 r##"        </technique_common>"##,
                 r##"      </source>"##;
-                anim_id = anim_id, joint_id = joint_id, num_frames = num_frames,
+                anim_id = anim_id, joint_id = joint_id.index(), num_frames = num_frames,
                 times = FnFmt(|f| {
                     for frame in 0..num_frames {
                         write!(f, "{} ", frame as f64 * FRAME_LENGTH)?;
@@ -513,11 +520,11 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
 
             write_lines!(w,
                 r##"      <source id="anim{anim_id}-joint{joint_id}-matrix">"##;
-                anim_id = anim_id, joint_id = joint_id,
+                anim_id = anim_id, joint_id = joint_id.index(),
             )?;
             write!(w,
                 r##"        <float_array id="anim{anim_id}-joint{joint_id}-matrix-array" count="{num_floats}">"##,
-                anim_id = anim_id, joint_id = joint_id, num_floats = 16 * num_frames,
+                anim_id = anim_id, joint_id = joint_id.index(), num_floats = 16 * num_frames,
             )?;
             for frame in 0..num_frames {
                 // The reason we can't do this with a FnFmt like the others is that getting the matrix
@@ -534,7 +541,7 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
                 r##"          </accessor>"##,
                 r##"        </technique_common>"##,
                 r##"      </source>"##;
-                anim_id = anim_id, joint_id = joint_id, num_frames = num_frames,
+                anim_id = anim_id, joint_id = joint_id.index(), num_frames = num_frames,
             )?;
 
             write_lines!(w,
@@ -546,7 +553,7 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
                 r##"          </accessor>"##,
                 r##"        </technique_common>"##,
                 r##"      </source>"##;
-                anim_id = anim_id, joint_id = joint_id, num_frames = num_frames,
+                anim_id = anim_id, joint_id = joint_id.index(), num_frames = num_frames,
                 interps = FnFmt(|f| {
                     for _ in 0..num_frames {
                         write!(f, "LINEAR ")?;
@@ -561,12 +568,12 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
                 r##"        <input semantic="OUTPUT" source="#anim{anim_id}-joint{joint_id}-matrix"/>"##,
                 r##"        <input semantic="INTERPOLATION" source="#anim{anim_id}-joint{joint_id}-interpolation"/>"##,
                 r##"      </sampler>"##;
-                anim_id = anim_id, joint_id = joint_id,
+                anim_id = anim_id, joint_id = joint_id.index(),
             )?;
 
             write_lines!(w,
                 r##"      <channel source="#anim{anim_id}-joint{joint_id}-sampler" target="joint{joint_id}/transform"/>"##;
-                anim_id = anim_id, joint_id = joint_id,
+                anim_id = anim_id, joint_id = joint_id.index(),
             )?;
 
             write_lines!(w,
@@ -591,7 +598,6 @@ fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[An
     let num_objects = model.objects.len();
     let matching_anims = anims.iter().enumerate()
         .filter(|&(_, ref a)| a.objects.len() == num_objects);
-    let num_joints = geom.joint_data.tree.node_count();
 
     for (anim_id, anim) in matching_anims {
         check!(anim.num_frames != 0);
@@ -601,10 +607,10 @@ fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[An
             r##"    <animation_clip id="anim{anim_id}" name="{name}" end="{end_time}">"##;
             anim_id = anim_id, name = name::IdFmt(&anim.name), end_time = end_time,
         )?;
-        for joint_id in  0..num_joints {
+        for joint_id in geom.joint_data.tree.node_indices() {
             write_lines!(w,
                 r##"      <instance_animation url="#anim{anim_id}-joint{joint_id}"/>"##;
-                anim_id = anim_id, joint_id = joint_id,
+                anim_id = anim_id, joint_id = joint_id.index(),
             )?;
         }
         write_lines!(w,
@@ -633,11 +639,12 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
         write_lines!(w,
             r##"      <node id="node{i}" name="{mesh_name}" type="NODE">"##,
             r##"        <instance_controller url="#controller{i}">"##,
-            r##"          <skeleton>#joint0</skeleton>"##,
+            r##"          <skeleton>#joint{root_id}</skeleton>"##,
             r##"          <bind_material>"##,
             r##"            <technique_common>"##,
             r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}">"##;
-            i = i, mesh_name = name::IdFmt(&mesh.name), mat_id = call.mat_id,
+            i = i, mesh_name = name::IdFmt(&mesh.name),
+            root_id = geom.joint_data.root.index(), mat_id = call.mat_id,
         )?;
         if model.materials[call.mat_id as usize].texture_name.is_some() {
             write_lines!(w,

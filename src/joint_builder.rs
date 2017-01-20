@@ -50,12 +50,14 @@ use cgmath::One;
 use cgmath::SquareMatrix;
 use nitro::mdl::Model;
 use petgraph::Direction;
-use petgraph::Graph;
+use petgraph::stable_graph::StableGraph;
 use petgraph::graph::NodeIndex;
 
 /// Tree of joints. The convention for edges is that they run _from_
 /// the parent _to_ the child.
-pub type JointTree = Graph<Node, ()>;
+///
+/// See JointBuilder::data for the reason we use a `StableGraph`.
+pub type JointTree = StableGraph<Node, ()>;
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -102,6 +104,7 @@ pub struct JointBuilder<'a, 'b: 'a> {
     model: &'a Model<'b>,
     cur_matrix: LinComb,
     matrix_stack: Vec<Option<LinComb>>,
+    root_was_used: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -114,7 +117,7 @@ pub struct JointData {
 
 impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
     pub fn new(model: &'a Model<'b>) -> JointBuilder<'a, 'b> {
-        let mut tree = Graph::new();
+        let mut tree = StableGraph::new();
         let root = tree.add_node(Node {
             transform: Transform::Root,
             inv_bind_matrix: Matrix4::one(),
@@ -131,7 +134,25 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
         }
     }
     pub fn data(self) -> JointData {
-        self.data
+        let mut data = self.data;
+
+        // If there is a single child of the dummy root node, delete
+        // out dummy and use its single child as the new root. This
+        // results in a slightly cleaner skeleton. This is only reason
+        // we need a `StableGraph` instead of a `Graph`.
+        //
+        // NOTE: it is very unlikely, but possible, that a vertex actually
+        // _uses_ the dummy root. Check for this.
+        let root = data.root;
+        let root_child = get_single(
+            data.tree.neighbors_directed(root, Direction::Outgoing)
+        );
+        if let Some(r) = root_child {
+            data.tree.remove_node(root);
+            data.root = r;
+        }
+
+        data
     }
     pub fn load_matrix(&mut self, stack_pos: u8) {
         self.cur_matrix = self.get_from_stack(stack_pos);
@@ -225,6 +246,18 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
             Transform::UnknownStackSlot(_) => Matrix4::one(),
         }
     }
+}
+
+/// If `iter` yields exactly one element, returns that element. Otherwise,
+/// returns `None`.
+fn get_single<I: Iterator>(mut iter: I) -> Option<<I as Iterator>::Item> {
+    let first = iter.next();
+    if let Some(x) = first {
+        if iter.next().is_none() {
+            return Some(x);
+        }
+    }
+    None
 }
 
 impl LinComb {
