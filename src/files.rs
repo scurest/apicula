@@ -1,3 +1,11 @@
+//! File reading and collecting.
+//!
+//! This module reads input files (from the command-line) into an owning
+//! `BufferHolder`, and then tries to parse each as a Nitro file. The resulting
+//! Nitro files are sorted by kind into vectors for models, animations, etc.
+//! The resulting `FileHolder` is all the input data for this invocation of
+//! the program.
+
 use errors::Result;
 use nitro::bca::Bca;
 use nitro::bca::read_bca;

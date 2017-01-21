@@ -3,6 +3,7 @@ use std::fmt;
 use std::ops::Add;
 use util::view::{View, Viewable};
 
+/// A pointer into a buffer of bytes. Used for binary file parsing.
 #[derive(Copy, Clone)]
 pub struct Cur<'a> {
     buf_: &'a [u8],

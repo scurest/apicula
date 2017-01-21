@@ -1,3 +1,5 @@
+//! Nitro texture and palette data.
+
 use nitro::name::Name;
 use util::bits::BitField;
 

@@ -75,7 +75,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         };
 
         let path = out_dir.join(&format!("{}.png", image_name));
-        png::write(&path, &rgba[..], texinfo.params.width(), texinfo.params.height())?;
+        png::write_rgba(&path, &rgba[..], texinfo.params.width(), texinfo.params.height())?;
     }
 
     Ok(())

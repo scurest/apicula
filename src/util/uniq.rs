@@ -4,6 +4,12 @@ use std::collections::HashSet;
 use std::hash::Hash;
 use std::string::ToString;
 
+/// A set which also assigns to each of its members a unique name.
+///
+/// Ideally, each element is named by converting it to a string (with
+/// `ToString`). But if there is already an element with that name in
+/// the set, sucessive numbers will be appended to the name until a
+/// free name is found.
 pub struct UniqueNamer<T> {
     map_: HashMap<T, String>,
     taken_names: HashSet<String>,

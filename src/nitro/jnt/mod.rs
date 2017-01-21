@@ -1,3 +1,18 @@
+//! Nitro animations.
+//!
+//! A Nitro skinned animation. An animation is essentially a function
+//! which takes time as input and outputs the object matrices for an
+//! MDL model; see the `mdl` module. Each object of the JNT file stores
+//! information about how to animate the corresponding object of the
+//! MDL. The output matrix is the composition of multiple components,
+//! each of which is either fixed, or references an array of key frame
+//! data.
+//!
+//! For the rotation component, this array has another layer of indirection.
+//! It doens't store the rotation values themselves, but indices into one
+//! of two different tables of rotation matrices which are global to the
+//! animation file (`pivot_data` and `basis_data`).
+
 pub mod object;
 mod read;
 
