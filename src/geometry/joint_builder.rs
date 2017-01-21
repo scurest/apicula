@@ -104,7 +104,6 @@ pub struct JointBuilder<'a, 'b: 'a> {
     model: &'a Model<'b>,
     cur_matrix: LinComb,
     matrix_stack: Vec<Option<LinComb>>,
-    root_was_used: bool,
 }
 
 #[derive(Debug, Clone)]

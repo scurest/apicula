@@ -1,3 +1,18 @@
+//! Consumes Nitro data and produces geometry data.
+//!
+//! This modules produces an intermediate data structure used by the viewer and
+//! converter, called `GeometryData`, which converts between the NDS GPU commands
+//! and Nitro rendering commands and a standard geometry representation with vertex
+//! buffers, triangle indices, etc.
+//!
+//! The geometry data can be produced either with or without joint data. The joint
+//! tree is used by the COLLADA exporter, but is expensive to build, so we provide
+//! the option to forego it for the viewer, which rebuilds this intermediate
+//! structure every time a model animation advances.
+
+pub mod joint_builder;
+mod index_builder;
+
 use cgmath::Matrix4;
 use cgmath::Zero;
 use cgmath::Point2;
@@ -5,9 +20,9 @@ use cgmath::Point3;
 use cgmath::Transform;
 use cgmath::vec4;
 use errors::Result;
-use index_builder::IndexBuilder;
-use joint_builder::JointBuilder;
-use joint_builder::JointData;
+use geometry::index_builder::IndexBuilder;
+use geometry::joint_builder::JointBuilder;
+use geometry::joint_builder::JointData;
 use nitro::gpu_cmds;
 use nitro::mdl::Model;
 use nitro::mdl::render_cmds;
@@ -15,18 +30,34 @@ use std::default::Default;
 use std::ops::Range;
 
 #[derive(Debug, Clone)]
+pub struct GeometryDataWithJoints {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u16>,
+    pub draw_calls: Vec<DrawCall>,
+    pub joint_data: JointData,
+}
+
+#[derive(Debug, Clone)]
+pub struct GeometryDataWithoutJoints {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u16>,
+    pub draw_calls: Vec<DrawCall>,
+}
+
+#[derive(Debug, Clone)]
 pub struct GpuState {
     pub cur_matrix: Matrix4<f64>,
-    pub texture_matrix: Matrix4<f64>,
     pub matrix_stack: Vec<Matrix4<f64>>,
+    /// TODO: texture transforms are barely implemented atm
+    pub texture_matrix: Matrix4<f64>,
 }
 
 impl GpuState {
     pub fn new() -> GpuState {
         GpuState {
             cur_matrix: Matrix4::one(),
-            texture_matrix: Matrix4::one(),
             matrix_stack: vec![Matrix4::one(); 32],
+            texture_matrix: Matrix4::one(),
         }
     }
     pub fn restore(&mut self, stack_pos: u8) {
@@ -57,27 +88,21 @@ impl Default for Vertex {
     }
 }
 
+/// Info about the result of a draw call, ie. the result of drawing a mesh (a set
+/// of GPU commands) while in a particular GPU state (matrix stack, bound material,
+/// etc.).
 #[derive(Debug, Clone)]
 pub struct DrawCall {
+    /// Executing a draw call for a mesh (a set of GPU commands) results in pushing
+    /// a set of vertices and indices onto those buffers. This is the range of
+    /// of `vertices` that this call produced.
     pub vertex_range: Range<u16>,
+    /// The range of `indices` that this call produced.
     pub index_range: Range<usize>,
+    /// The index of the material that was bound when the draw call ran.
     pub mat_id: u8,
+    /// The index of the mesh that was drawn.
     pub mesh_id: u8,
-}
-
-#[derive(Debug, Clone)]
-pub struct GeometryDataWithJoints {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u16>,
-    pub draw_calls: Vec<DrawCall>,
-    pub joint_data: JointData,
-}
-
-#[derive(Debug, Clone)]
-pub struct GeometryDataWithoutJoints {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u16>,
-    pub draw_calls: Vec<DrawCall>,
 }
 
 #[derive(Debug, Clone)]

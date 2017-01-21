@@ -21,10 +21,8 @@ mod util;
 mod convert;
 mod files;
 mod geometry;
-mod index_builder;
-mod joint_builder;
-mod png;
 mod nitro;
+mod png;
 mod viewer;
 
 use errors::Result;
