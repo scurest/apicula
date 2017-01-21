@@ -327,6 +327,9 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         r##"  <library_controllers>"##;
     )?;
 
+    let mut all_joints = InsOrderSet::new();
+    let mut all_weights = InsOrderSet::new();
+
     for (i, call) in geom.draw_calls.iter().enumerate() {
         write_lines!(w,
             r##"    <controller id="controller{i}">"##,
@@ -340,7 +343,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         // provide them directly: we need to place all the joints we're going to
         // use for this draw call into a list and reference them by index later on.
         // This is what `IncOrderSet` is for.
-        let mut all_joints = InsOrderSet::new();
+        all_joints.clear();
         for j in &geom.joint_data.vertices[vrange.clone()] {
             for &LinCombTerm { joint_id, .. } in &j.0 {
                 // Insert every joint which appears and all its ancestors.
@@ -401,7 +404,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         // format and they aren't usually multiplied.
         let encode = |x: f64| (x * 4096.0) as u32;
         let decode = |x: u32| x as f64 / 4096.0;
-        let mut all_weights = InsOrderSet::new();
+        all_weights.clear();
         for j in &geom.joint_data.vertices[vrange.clone()] {
             for &LinCombTerm { weight, .. } in &j.0 {
                 all_weights.insert(encode(weight));
@@ -476,13 +479,19 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
 }
 
 fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
+    let num_objects = model.objects.len();
+    let any_animations = anims.iter().any(|a| a.objects.len() == num_objects);
+
+    if !any_animations {
+        return Ok(()); // no matching animations
+    }
+
+    let matching_anims = anims.iter().enumerate()
+        .filter(|&(_, ref a)| a.objects.len() == num_objects);
+
     write_lines!(w,
         r##"  <library_animations>"##;
     )?;
-
-    let num_objects = model.objects.len();
-    let matching_anims = anims.iter().enumerate()
-        .filter(|&(_, ref a)| a.objects.len() == num_objects);
 
     for (anim_id, anim) in matching_anims {
         let num_frames = anim.num_frames;
@@ -591,13 +600,19 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
 
 
 fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
+    let num_objects = model.objects.len();
+    let any_animations = anims.iter().any(|a| a.objects.len() == num_objects);
+
+    if !any_animations {
+        return Ok(()); // no matching animations
+    }
+
+    let matching_anims = anims.iter().enumerate()
+        .filter(|&(_, ref a)| a.objects.len() == num_objects);
+
     write_lines!(w,
         r##"  <library_animation_clips>"##;
     )?;
-
-    let num_objects = model.objects.len();
-    let matching_anims = anims.iter().enumerate()
-        .filter(|&(_, ref a)| a.objects.len() == num_objects);
 
     for (anim_id, anim) in matching_anims {
         check!(anim.num_frames != 0);
@@ -678,7 +693,7 @@ fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
         Ok(())
     }
 
-    fn write<W: Write>(w: &mut W, model: &Model, tree: &JointTree, node: NodeIndex, indent: u32) -> Result<()> {
+    fn write_rec<W: Write>(w: &mut W, model: &Model, tree: &JointTree, node: NodeIndex, indent: u32) -> Result<()> {
         write_indent(w, indent)?;
         write_lines!(w,
             r#"<node id="joint{joint_id}" sid="joint{joint_id}" name="{name}" type="JOINT">"#;
@@ -704,14 +719,14 @@ fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
 
         let children = tree.neighbors_directed(node, Direction::Outgoing);
         for child in children {
-            write(w, model, tree, child, indent + 1)?;
+            write_rec(w, model, tree, child, indent + 1)?;
         }
 
         write_indent(w, indent)?;
         write!(w, "</node>\n")?;
         Ok(())
     }
-    write(w, model, &geom.joint_data.tree, geom.joint_data.root, 0)
+    write_rec(w, model, &geom.joint_data.tree, geom.joint_data.root, 0)
 }
 
 fn write_scene<W: Write>(w: &mut W) -> Result<()> {
