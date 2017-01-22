@@ -36,9 +36,9 @@ pub struct ModelData {
 }
 
 #[derive(Copy, Clone)]
-struct AnimData {
-    index: usize,
-    cur_frame: u16,
+pub struct AnimData {
+    pub index: usize,
+    pub cur_frame: u16,
 }
 
 impl<'a> State<'a> {
@@ -125,6 +125,14 @@ impl ModelData {
 
     pub fn has_animation(&self) -> bool {
         self.anim_data.is_some()
+    }
+
+    pub fn model_index(&self) -> usize {
+        self.index
+    }
+
+    pub fn animation_data(&self) -> Option<&AnimData> {
+        self.anim_data.as_ref()
     }
 
     pub fn prev_model(&mut self, file_holder: &FileHolder, display: &glium::Display) -> Result<()> {

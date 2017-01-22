@@ -8,6 +8,7 @@ use geometry::Vertex;
 use glium;
 use glium::backend::glutin_backend::WinRef;
 use glium::Surface;
+use std::fmt::Write;
 use time;
 use viewer::eye::Eye;
 use viewer::state::ModelData;
@@ -38,11 +39,31 @@ impl MouseState {
     }
 }
 
+struct FpsTracker {
+    last_fps: f64,
+    last_fps_update_time: f64,
+    frames_since_last_update: u32,
+}
+
+impl FpsTracker {
+    /// Give the FPS tracker the chance to update itself.
+    fn tick(&mut self, cur_time: f64) {
+        let time_since_last_fps_update = cur_time - self.last_fps_update_time;
+        if time_since_last_fps_update >= 2.0 { // Update every two seconds
+            self.last_fps =
+                self.frames_since_last_update as f64 / time_since_last_fps_update;
+            self.frames_since_last_update = 0;
+            self.last_fps_update_time = cur_time;
+        }
+    }
+}
+
 pub fn viewer(file_holder: FileHolder) -> Result<()> {
     let num_models = file_holder.models.len();
     let num_animations = file_holder.animations.len();
-    println!("Found {} models.", num_models);
-    println!("Found {} animations.", num_animations);
+    let suf = |x| if x != 1 { "s" } else { "" };
+    println!("Found {} model{}.", num_models, suf(num_models));
+    println!("Found {} animation{}.", num_animations, suf(num_animations));
 
     if num_models == 0 {
         println!("Nothing to do.");
@@ -116,6 +137,27 @@ fn print_controls() {
     ));
 }
 
+fn write_title(s: &mut String, st: &State, fps: f64) {
+    write!(s, "{model_name}[{model_num}/{num_models}] === ",
+        model_name = st.model().name,
+        model_num = st.model_data.model_index() + 1,
+        num_models = st.file_holder.models.len(),
+    ).unwrap();
+    if let Some(anim_data) = st.model_data.animation_data() {
+        let anim = &st.file_holder.animations[anim_data.index];
+        write!(s, "{anim_name}[{anim_num}/{num_anims}] ({cur_frame}/{max_frame}) === ",
+            anim_name = anim.name,
+            anim_num = anim_data.index + 1,
+            num_anims = st.file_holder.animations.len(),
+            cur_frame = anim_data.cur_frame,
+            max_frame = anim.num_frames,
+        ).unwrap()
+    } else {
+        write!(s, "Bind Pose === ").unwrap()
+    }
+    write!(s, "{:5.2}fps", fps).unwrap();
+}
+
 fn run(st: &mut State) -> Result<()> {
     let draw_params = glium::DrawParameters {
         depth: glium::Depth {
@@ -138,9 +180,21 @@ fn run(st: &mut State) -> Result<()> {
     let mut last_time;
     let mut last_anim_time = cur_time;
 
+    let mut fps_tracker = FpsTracker {
+        last_fps: 0.0,
+        last_fps_update_time: cur_time,
+        frames_since_last_update: 0,
+    };
+
     let window = st.display.get_window().unwrap();
 
+    let mut title = String::new();
+
     loop {
+        title.clear();
+        write_title(&mut title, st, fps_tracker.last_fps);
+        window.set_title(&title);
+
         let (w,h) = window.get_inner_size_pixels().unwrap();
         let (w,h) = (w as i32, h as i32);
         st.eye.aspect_ratio = w as f32 / h as f32;
@@ -154,9 +208,13 @@ fn run(st: &mut State) -> Result<()> {
 
         target.finish().unwrap();
 
+        fps_tracker.frames_since_last_update += 1;
+
         last_time = cur_time;
         cur_time = time::precise_time_s() ;
         let dt = (cur_time - last_time) as f32;
+
+        fps_tracker.tick(cur_time);
 
         for ev in st.display.poll_events() {
             use glium::glutin::Event as Ev;
