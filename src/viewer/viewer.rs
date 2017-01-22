@@ -131,6 +131,7 @@ fn print_controls() {
         "Controls\n",
         "  WASD         Forward/Left/Back/Right\n",
         "  EQ           Up/Down\n",
+        "  Left Shift   Move Faster\n",
         "  Left Mouse   Free Look\n",
         "  OP           Prev/Next Animation\n",
         "  ,.           Prev/Next Model\n",
@@ -175,6 +176,7 @@ fn run(st: &mut State) -> Result<()> {
     };
 
     let mut move_dir = vec3(0.0, 0.0, 0.0);
+    let mut speed = 1.0;
 
     let mut cur_time = time::precise_time_s();
     let mut last_time;
@@ -237,6 +239,9 @@ fn run(st: &mut State) -> Result<()> {
                 Ev::KeyboardInput(Es::Released, _, Some(K::Q)) => move_dir.z = 0.0,
                 Ev::KeyboardInput(Es::Released, _, Some(K::E)) => move_dir.z = 0.0,
 
+                Ev::KeyboardInput(Es::Pressed, _, Some(K::LShift)) => speed = 10.0,
+                Ev::KeyboardInput(Es::Released, _, Some(K::LShift)) => speed = 1.0,
+
                 Ev::MouseInput(Es::Pressed, glium::glutin::MouseButton::Left) => {
                     mouse.grabbed = GrabState::Grabbed { saved_pos: mouse.pos };
                     mouse.set_position(&window, (w/2, h/2));
@@ -276,6 +281,7 @@ fn run(st: &mut State) -> Result<()> {
                     let _ = window.set_cursor_state(glium::glutin::CursorState::Normal);
                     mouse.grabbed = GrabState::NotGrabbed;
                     move_dir = vec3(0.0, 0.0, 0.0);
+                    speed = 1.0;
                 }
 
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::Comma)) => {
@@ -311,7 +317,7 @@ fn run(st: &mut State) -> Result<()> {
 
         let mag = move_dir.magnitude();
         if mag != 0.0 {
-            let vel = dt * move_dir / mag;
+            let vel = dt * speed * move_dir / mag;
             st.eye.move_by(vel);
         }
     }
