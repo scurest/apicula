@@ -111,7 +111,7 @@ fn print_controls() {
         "  WASD         Forward/Left/Back/Right\n",
         "  EQ           Up/Down\n",
         "  Left Mouse   Free Look\n",
-        "  []           Prev/Next Animation\n",
+        "  OP           Prev/Next Animation\n",
         "  ,.           Prev/Next Model\n",
     ));
 }
@@ -226,11 +226,11 @@ fn run(st: &mut State) -> Result<()> {
                 Ev::KeyboardInput(Es::Pressed, _, Some(K::Period)) => {
                     st.model_data.next_model(&st.file_holder, &st.display)?;
                 }
-                Ev::KeyboardInput(Es::Pressed, _, Some(K::LBracket)) => {
+                Ev::KeyboardInput(Es::Pressed, _, Some(K::O)) => {
                     st.model_data.prev_anim(&st.file_holder)?;
                     last_anim_time = cur_time;
                 }
-                Ev::KeyboardInput(Es::Pressed, _, Some(K::RBracket)) => {
+                Ev::KeyboardInput(Es::Pressed, _, Some(K::P)) => {
                     st.model_data.next_anim(&st.file_holder)?;
                     last_anim_time = cur_time;
                 }
