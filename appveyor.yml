@@ -1,0 +1,57 @@
+environment:
+  global:
+    PROJECT_NAME: apicula
+  matrix:
+    # Stable channel
+    - TARGET: i686-pc-windows-msvc
+      CHANNEL: stable
+    - TARGET: x86_64-pc-windows-msvc
+      CHANNEL: stable
+
+# Install Rust and Cargo
+# (Based on japaric/trust)
+install:
+  - ps: >-
+      If ($env:TARGET -eq 'x86_64-pc-windows-gnu') {
+        $env:PATH += ';C:\msys64\mingw64\bin'
+      } ElseIf ($Env:TARGET -eq 'i686-pc-windows-gnu') {
+        $env:PATH += ';C:\msys64\mingw32\bin'
+      }
+  - curl -sSf -o rustup-init.exe https://win.rustup.rs/
+  - rustup-init.exe -y --default-host %TARGET% --default-toolchain %CHANNEL%
+  - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
+  - rustc -Vv
+  - cargo -V
+
+# 'cargo test' takes care of building for us, so disable Appveyor's build stage.
+# This prevents the "directory does not contain a project or solution file" error.
+# source: https://github.com/starkat99/appveyor-rust/blob/master/appveyor.yml#L113
+build: false
+
+# Equivalent to Travis' `script` phase
+test_script:
+  - cargo build --verbose
+  - cargo test
+
+before_deploy:
+  # Generate artifacts for release
+  - cargo build --release
+  - mkdir staging
+  - copy target\release\apicula.exe staging
+  - cd staging
+  - 7z a ../%PROJECT_NAME%-latest-%TARGET%.zip *
+  - appveyor PushArtifact ../%PROJECT_NAME%-latest-%TARGET%.zip
+
+deploy:
+  provider: S3
+  access_key_id: $(S3_ACCESS_KEY)
+  secret_access_key: $(S3_SECRET_KEY)
+  bucket: apicula
+  set_public: true
+  artifact: /.*\.zip/
+  on:
+    CHANNEL: stable
+
+branches:
+  only:
+    - master
