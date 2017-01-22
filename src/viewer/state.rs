@@ -139,7 +139,7 @@ impl ModelData {
         let num_models = file_holder.models.len();
         if num_models == 1 { return Ok(()); }
 
-        let index = (self.index - 1 + num_models) % num_models;
+        let index = (self.index + num_models - 1) % num_models;
         *self = ModelData::new(file_holder, display, index)?;
 
         Ok(())
