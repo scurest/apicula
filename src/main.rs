@@ -13,12 +13,14 @@ extern crate env_logger;
 extern crate time;
 extern crate petgraph;
 extern crate png as pnglib;
+extern crate regex;
 
 #[macro_use]
 mod errors;
 #[macro_use]
 mod util;
 mod convert;
+mod extract;
 mod files;
 mod geometry;
 mod nitro;
@@ -64,12 +66,19 @@ fn main3() -> Result<()> {
             (@arg INPUT: +required +multiple "BMD0 file")
             (@arg OUTPUT: -o --output +required +takes_value "output directory")
         )
+        (@subcommand extract =>
+            (about: "Extract Nitro files from a ROM or archive")
+            (alias: "x")
+            (@arg INPUT: +required "Input file")
+            (@arg OUTPUT: -o --output +required +takes_value "output directory")
+        )
     );
     let matches = app.get_matches();
 
     match matches.subcommand() {
         ("view", Some(m)) => viewer::main(m)?,
         ("convert", Some(m)) => convert::main(m)?,
+        ("extract", Some(m)) => extract::main(m)?,
         _ => {}
     };
     Ok(())

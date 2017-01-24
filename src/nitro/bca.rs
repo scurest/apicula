@@ -5,6 +5,7 @@ use errors::Result;
 
 #[derive(Debug, Clone)]
 pub struct Bca<'a> {
+    pub file_size: u32,
     pub jnts: Vec<Jnt<'a>>,
 }
 
@@ -28,6 +29,7 @@ pub fn read_bca(cur: Cur) -> Result<Bca> {
         .collect::<Result<_>>()?;
 
     Ok(Bca {
+        file_size: file_size,
         jnts: jnts,
     })
 }

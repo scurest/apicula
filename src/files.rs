@@ -106,8 +106,12 @@ impl<'a> FileHolder<'a> {
             File::Jnt(mut jnt) => self.animations.append(&mut jnt.animations),
             File::Tex(tex) => self.texs.push(tex),
             File::Bmd(bmd) => {
-                self.add_file(File::Mdl(bmd.mdl));
-                self.add_file(File::Tex(bmd.tex));
+                for mdl in bmd.mdls {
+                    self.add_file(File::Mdl(mdl));
+                }
+                for tex in bmd.texs {
+                    self.add_file(File::Tex(tex));
+                }
             }
             File::Bca(bca) => {
                 for jnt in bca.jnts {

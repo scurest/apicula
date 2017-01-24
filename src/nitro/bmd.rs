@@ -7,8 +7,9 @@ use errors::Result;
 
 #[derive(Debug, Clone)]
 pub struct Bmd<'a> {
-    pub mdl: Mdl<'a>,
-    pub tex: Tex<'a>,
+    pub file_size: u32,
+    pub mdls: Vec<Mdl<'a>>,
+    pub texs: Vec<Tex<'a>>,
 }
 
 pub fn read_bmd(cur: Cur) -> Result<Bmd> {
@@ -26,14 +27,24 @@ pub fn read_bmd(cur: Cur) -> Result<Bmd> {
     check!(header_size == 16);
     check!(num_sections > 0);
 
-    let mdl_cur = (cur + section_offs.get(0) as usize)?;
-    let tex_cur = (cur + section_offs.get(1) as usize)?;
+    let mut mdls = vec![];
+    let mut texs = vec![];
 
-    let mdl = read_mdl(mdl_cur)?;
-    let tex = read_tex(tex_cur)?;
+    for section_off in section_offs {
+        let section_cur = (cur + section_off as usize)?;
+        let stamp = section_cur.clone().next_n_u8s(4)?;
+        match stamp {
+            b"MDL0" => mdls.push(read_mdl(section_cur)?),
+            b"TEX0" => texs.push(read_tex(section_cur)?),
+            _ => {
+                info!("section with unknown stamp {:?} in BMD", stamp);
+            }
+        }
+    }
 
     Ok(Bmd {
-        mdl: mdl,
-        tex: tex,
+        file_size: file_size,
+        mdls: mdls,
+        texs: texs,
     })
 }
