@@ -164,49 +164,44 @@ pub fn gen_compressed_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &Palett
             let texel = block.bits(texel_off, texel_off+2);
 
             let pal_addr = (extra.bits(0,14) as usize) << 1;
-            let colors = [
-                rgb555a5(palette.get(pal_addr+0), 31),
-                rgb555a5(palette.get(pal_addr+1), 31),
-                rgb555a5(palette.get(pal_addr+2), 31),
-                rgb555a5(palette.get(pal_addr+3), 31),
-            ];
+            let color = |n| rgb555a5(palette.get(pal_addr+n), 31);
 
             let mode = extra.bits(14,16);
 
             let color = match mode {
                 0 => {
                     match texel {
-                        0 => colors[0],
-                        1 => colors[1],
-                        2 => colors[2],
+                        0 => color(0),
+                        1 => color(1),
+                        2 => color(2),
                         3 => [0, 0, 0, 0],
                         _ => unreachable!(),
                     }
                 }
                 1 => {
                     match texel {
-                        0 => colors[0],
-                        1 => colors[1],
-                        2 => avg(colors[0], colors[1]),
+                        0 => color(0),
+                        1 => color(1),
+                        2 => avg(color(0), color(1)),
                         3 => [0, 0, 0, 0],
                         _ => unreachable!(),
                     }
                 }
                 2 => {
                     match texel {
-                        0 => colors[0],
-                        1 => colors[1],
-                        2 => colors[2],
-                        3 => colors[3],
+                        0 => color(0),
+                        1 => color(1),
+                        2 => color(2),
+                        3 => color(3),
                         _ => unreachable!(),
                     }
                 }
                 3 => {
                     match texel {
-                        0 => colors[0],
-                        1 => colors[1],
-                        2 => avg358(colors[1], colors[0]),
-                        3 => avg358(colors[0], colors[1]),
+                        0 => color(0),
+                        1 => color(1),
+                        2 => avg358(color(1), color(0)),
+                        3 => avg358(color(0), color(1)),
                         _ => unreachable!(),
                     }
                 }
