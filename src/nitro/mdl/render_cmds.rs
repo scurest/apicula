@@ -95,9 +95,10 @@ impl RenderInterpreterState {
                     //
                     let stack_pos = params[0];
                     let num_terms = params[1] as usize;
-                    check!(num_terms <= 4);
 
+                    check!(num_terms <= 4)?;
                     let mut terms = [((0,0), 0.0); 4];
+
                     let mut param_idx = 2;
                     for i in 0..num_terms {
                         let id0 = params[param_idx];

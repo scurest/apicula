@@ -22,10 +22,10 @@ pub fn read_bmd(cur: Cur) -> Result<Bmd> {
         num_sections: u16,
         section_offs: [u32; num_sections],
     });
-    check!(stamp == b"BMD0");
-    check!(bom == 0xfeff);
-    check!(header_size == 16);
-    check!(num_sections > 0);
+    check!(stamp == b"BMD0")?;
+    check!(bom == 0xfeff)?;
+    check!(header_size == 16)?;
+    check!(num_sections > 0)?;
 
     let mut mdls = vec![];
     let mut texs = vec![];

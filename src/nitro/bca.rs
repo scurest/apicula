@@ -19,10 +19,10 @@ pub fn read_bca(cur: Cur) -> Result<Bca> {
         num_sections: u16,
         section_offs: [u32; num_sections],
     });
-    check!(stamp == b"BCA0");
-    check!(bom == 0xfeff);
-    check!(header_size == 16);
-    check!(num_sections > 0);
+    check!(stamp == b"BCA0")?;
+    check!(bom == 0xfeff)?;
+    check!(header_size == 16)?;
+    check!(num_sections > 0)?;
 
     let jnts = section_offs
         .map(|off| read_jnt((cur + off as usize)?))

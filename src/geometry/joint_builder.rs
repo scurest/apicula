@@ -17,7 +17,7 @@
 //!
 //! --------
 //!
-//! First, a brief survey of render_cmds:
+//! First, a brief survey of the render commands:
 //!
 //! 1. initially, the current matrix is the identity and the matrix stack
 //!    contains unknown data
@@ -56,7 +56,7 @@ use petgraph::graph::NodeIndex;
 /// Tree of joints. The convention for edges is that they run _from_
 /// the parent _to_ the child.
 ///
-/// See JointBuilder::data for the reason we use a `StableGraph`.
+/// See `JointBuilder::data` for the reason we use a `StableGraph`.
 pub type JointTree = StableGraph<Node, ()>;
 
 #[derive(Debug, Clone)]

@@ -13,8 +13,13 @@ error_chain! {
 macro_rules! check {
     ($b:expr) => {
         if !$b {
-            error!("expected: {})", stringify!($b));
-            return Err("sanity check failed".into());
+            use ::errors::Error;
+            use ::errors::ErrorKind;
+            Err(Error::from_kind(
+                ErrorKind::Msg(format!("sanity check failed: {}", stringify!($b)))
+            ))
+        } else {
+            Ok(())
         }
     };
 }

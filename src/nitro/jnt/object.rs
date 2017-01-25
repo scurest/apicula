@@ -117,7 +117,8 @@ pub fn to_matrix<'a>(object: &Object<'a>, anim: &Animation<'a>, frame: u16) -> R
     let tz = object.trans_z.as_ref().and_then(&decode_trans).unwrap_or(0.0);
     let trans = Matrix4::from_translation(vec3(tx, ty, tz));
 
-    let rot = object.rotation.as_ref().and_then(&decode_rot).unwrap_or(Ok(Matrix4::one()))?;
+    let rot = object.rotation.as_ref().and_then(&decode_rot)
+        .unwrap_or_else(|| Ok(Matrix4::one()))?;
 
     let sx = object.scale_x.as_ref().and_then(&decode_scale).unwrap_or(1.0);
     let sy = object.scale_y.as_ref().and_then(&decode_scale).unwrap_or(1.0);

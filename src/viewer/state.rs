@@ -49,7 +49,7 @@ impl<'a> State<'a> {
     pub fn draw(&self, target: &mut Frame, draw_params: &glium::DrawParameters) -> Result<()> {
         let mat = self.eye.model_view_persp();
 
-        for call in self.model_data.geom.draw_calls.iter() {
+        for call in &self.model_data.geom.draw_calls {
             let model = self.model();
 
             let texture = self.model_data.textures[call.mat_id as usize].as_ref()
@@ -84,7 +84,7 @@ impl<'a> State<'a> {
                 &self.model_data.index_buffer.slice(call.index_range.clone()).unwrap(),
                 &self.program,
                 &uniforms,
-                &draw_params,
+                draw_params,
             ).unwrap();
         }
 

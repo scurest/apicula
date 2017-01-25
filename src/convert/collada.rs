@@ -487,7 +487,7 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
     }
 
     let matching_anims = anims.iter().enumerate()
-        .filter(|&(_, ref a)| a.objects.len() == num_objects);
+        .filter(|&(_, a)| a.objects.len() == num_objects);
 
     write_lines!(w,
         r##"  <library_animations>"##;
@@ -608,14 +608,14 @@ fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[An
     }
 
     let matching_anims = anims.iter().enumerate()
-        .filter(|&(_, ref a)| a.objects.len() == num_objects);
+        .filter(|&(_, a)| a.objects.len() == num_objects);
 
     write_lines!(w,
         r##"  <library_animation_clips>"##;
     )?;
 
     for (anim_id, anim) in matching_anims {
-        check!(anim.num_frames != 0);
+        check!(anim.num_frames != 0)?;
         let end_time = (anim.num_frames - 1) as f64 * FRAME_LENGTH;
 
         write_lines!(w,

@@ -22,7 +22,7 @@ pub fn read_mdl(cur: Cur) -> Result<Mdl> {
         section_size: u32,
         end: Cur,
     });
-    check!(stamp == b"MDL0");
+    check!(stamp == b"MDL0")?;
 
     let models = info_block::read::<u32>(end)?
         .map(|(off, name)| read_model((cur + off as usize)?, name))
@@ -31,7 +31,7 @@ pub fn read_mdl(cur: Cur) -> Result<Mdl> {
     Ok(Mdl { models: models })
 }
 
-fn read_model<'a>(cur: Cur<'a>, name: Name) -> Result<Model<'a>> {
+fn read_model(cur: Cur, name: Name) -> Result<Model> {
     trace!("model: {}", name);
     fields!(cur, model {
         section_size: u32,
@@ -94,8 +94,8 @@ fn read_mesh(cur: Cur, name: Name) -> Result<Mesh> {
         commands_off: u32,
         commands_len: u32,
     });
-    check!(section_size == 16);
-    check!(commands_len % 4 == 0);
+    check!(section_size == 16)?;
+    check!(commands_len % 4 == 0)?;
 
     let commands = (cur + commands_off as usize)?
         .next_n_u8s(commands_len as usize)?;

@@ -29,8 +29,8 @@ pub fn read<T>(cur: Cur) -> Result<Iterator<T>> where
         names: [Name; count],
     });
 
-    check!(dummy == 0);
-    check!(size_of_datum as usize == <T as Viewable>::size());
+    check!(dummy == 0)?;
+    check!(size_of_datum as usize == <T as Viewable>::size())?;
 
     Ok(data.zip(names))
 }
