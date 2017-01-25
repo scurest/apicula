@@ -12,7 +12,7 @@ pub trait Sink {
     fn restore(&mut self, idx: u32);
 
     /// Precompose the current matrix with a scaling.
-    fn scale(&mut self, sx: f64, sy: f64, sz: f64);
+    fn scale(&mut self, scale: (f64, f64, f64));
 
     /// Begin a primitive group (eg. triangles, quads, etc).
     fn begin(&mut self, prim_type: u32);
@@ -87,7 +87,7 @@ impl GpuInterpreterState {
                 let sx = fix32(params.get(0), 1, 19, 12);
                 let sy = fix32(params.get(1), 1, 19, 12);
                 let sz = fix32(params.get(2), 1, 19, 12);
-                sink.scale(sx, sy, sz);
+                sink.scale((sx, sy, sz));
             }
             0x40 => {
                 // BEGIN_VTXS - Start of Vertex List

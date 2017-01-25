@@ -69,6 +69,9 @@ impl GpuState {
     pub fn mul_matrix(&mut self, mat: &Matrix4<f64>) {
         self.cur_matrix = self.cur_matrix * *mat;
     }
+    pub fn scale(&mut self, (sx, sy, sz): (f64, f64, f64)) {
+        self.mul_matrix(&Matrix4::from_nonuniform_scale(sx,sy,sz));
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -240,6 +243,10 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
 
         Ok(())
     }
+    fn scale(&mut self, scale: (f64, f64, f64)) -> Result<()> {
+        self.gpu.scale(scale);
+        Ok(())
+    }
     fn draw(&mut self, mesh_id: u8, mat_id: u8) -> Result<()> {
         let mat = &self.model.materials[mat_id as usize];
         let dim = (mat.width as u32, mat.height as u32);
@@ -261,8 +268,8 @@ impl<'a, 'b: 'a, 'c> gpu_cmds::Sink for Builder<'a, 'b, 'c> {
         }
         self.gpu.restore(idx as u8);
     }
-    fn scale(&mut self, sx: f64, sy: f64, sz: f64) {
-        self.gpu.mul_matrix(&Matrix4::from_nonuniform_scale(sx, sy, sz));
+    fn scale(&mut self, scale: (f64, f64, f64)) {
+        self.gpu.scale(scale);
     }
     fn begin(&mut self, prim_type: u32) {
         self.ind_builder.begin(prim_type);

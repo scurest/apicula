@@ -8,11 +8,12 @@ pub trait Sink {
     fn store_matrix(&mut self, stack_pos: u8) -> Result<()>;
     /// cur_matrix = cur_matrix * object_matrices[object_id]
     fn mul_by_object(&mut self, object_id: u8) -> Result<()>;
-    /// Blends severals matrices together and stores them on the stack.
-    ///
-    /// This compilcated command is deferred to the implementer who
-    /// will have access to model data like the blend matrices.
-    fn blend(&mut self, stack_pos: u8, combination: &[((u8, u8), f64)]) -> Result<()>;
+    /// cur_matrix = ∑_{t in terms} term.2 * matrix_stack[t.0.0] * blend_matrix[t.0.1]
+    /// matrix_stack[stack_pos] = cur_matrix
+    fn blend(&mut self, stack_pos: u8, terms: &[((u8, u8), f64)]) -> Result<()>;
+    /// cur_matrix = cur_matrix * diag(scale, 1.0)
+    fn scale(&mut self, scale: (f64, f64, f64)) -> Result<()>;
+    /// Draw meshes[mesh_id] using materials[material_id]
     fn draw(&mut self, mesh_id: u8, material_id: u8) -> Result<()>;
 }
 
@@ -49,7 +50,16 @@ impl RenderInterpreterState {
                     return Ok(())
                 }
                 0x02 => {
-                    // unknown
+                    // Unknown
+                    // Here's what I know about it:
+                    // * there is always one of them in a model, after the initial matrix
+                    //   stack setup but before the 0x03/0x04/0x05 command sequences
+                    // * the first parameter is num_objects - 1 (ie. the index of the last
+                    //   object)
+                    // * the second parameter is always 1; if this 1 is changed to a zero
+                    //   using a debugger, the model is not drawn (this is probably why
+                    //   other people called this command "visibility")
+                    // * running it emits no GPU commands
                 }
                 0x03 => {
                     // Load a matrix from the stack
@@ -91,8 +101,7 @@ impl RenderInterpreterState {
                 0x09 => {
                     // The current matrix is set to the sum of
                     //   weight * matrix_stack[id0] * blend_matrix[id1]
-                    // and stored to the given stack slot. If the blend matrix is
-                    //
+                    // and stored to the given stack slot.
                     let stack_pos = params[0];
                     let num_terms = params[1] as usize;
 
@@ -112,6 +121,14 @@ impl RenderInterpreterState {
 
                     sink.blend(stack_pos, &terms[0..num_terms])?;
                     self.cur_stack_pos = stack_pos;
+                }
+                0x0b => {
+                    // Scale up by a constant
+                    sink.scale((8.0, 8.0, 8.0))?;
+                }
+                0x2b => {
+                    // Scale down by a constant
+                    sink.scale((1.0/8.0, 1.0/8.0, 1.0/8.0))?;
                 }
                 _ => {
                     info!("unknown render command: {:#x} {:?}", opcode, params);
