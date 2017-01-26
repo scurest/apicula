@@ -30,7 +30,7 @@ impl Eye {
             fovy: Rad(1.1),
             aspect: self.aspect_ratio,
             near: 0.01,
-            far: 100.0,
+            far: 400.0,
         };
         Matrix4::from(persp) * self.model_view()
     }
