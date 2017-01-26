@@ -227,19 +227,19 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         self.gpu.mul_matrix(&self.objects[object_id as usize]);
         Ok(())
     }
-    fn blend(&mut self, stack_pos: u8, terms: &[((u8, u8), f64)]) -> Result<()> {
+    fn blend(&mut self, terms: &[(u8, u8, f64)]) -> Result<()> {
         if let Some(ref mut b) = self.joint_builder {
-            b.blend(stack_pos, terms);
+            b.blend(terms);
         }
 
         let mut mat = Matrix4::zero();
         for term in terms {
-            let blend_matrix = self.model.blend_matrices[(term.0).1 as usize].0;
-            mat += term.1 * self.gpu.matrix_stack[(term.0).0 as usize] * blend_matrix;
+            mat +=
+                term.2 *
+                self.gpu.matrix_stack[term.0 as usize] *
+                self.model.blend_matrices[term.1 as usize].0;
         }
-
         self.gpu.cur_matrix = mat;
-        self.gpu.store(stack_pos);
 
         Ok(())
     }

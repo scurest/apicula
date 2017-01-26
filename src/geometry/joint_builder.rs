@@ -164,13 +164,13 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
     pub fn store_matrix(&mut self, stack_pos: u8) {
         self.matrix_stack[stack_pos as usize] = Some(self.cur_matrix.clone());
     }
-    pub fn blend(&mut self, stack_pos: u8, terms: &[((u8, u8), f64)]) {
-        // Set the current matrix to Σ (weight * stack_matrix * blend_matrix)
-        // and store it to the stack. IME, these never compose (ie. stack_matrix
-        // is never a non-trivial linear combination) but we still handle that
-        // case by distributing and grouping like terms.
+    pub fn blend(&mut self, terms: &[(u8, u8, f64)]) {
+        // Set the current matrix to Σ (weight * stack_matrix * blend_matrix).
+        // IME, these never compose (ie. stack_matrix is never a non-trivial
+        // linear combination) but we still handle that case by distributing
+        // and grouping like terms.
         let mut distributed = LinComb(terms.iter()
-            .flat_map(|&((stack_id, blend_id), weight)| {
+            .flat_map(|&(stack_id, blend_id, weight)| {
                 let stack = self.get_from_stack(stack_id);
                 let mut stack_times_blend = self.mul_comb(stack, Transform::BlendDummy(blend_id));
                 stack_times_blend.mul_scalar_in_place(weight); // distribute scalar
@@ -179,8 +179,8 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
             .collect::<Vec<_>>()
         );
         distributed.group_like_terms_in_place();
+
         self.cur_matrix = distributed;
-        self.store_matrix(stack_pos);
     }
     pub fn vertex(&mut self) {
         self.data.vertices.push(self.cur_matrix.clone());

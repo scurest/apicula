@@ -8,9 +8,8 @@ pub trait Sink {
     fn store_matrix(&mut self, stack_pos: u8) -> Result<()>;
     /// cur_matrix = cur_matrix * object_matrices[object_id]
     fn mul_by_object(&mut self, object_id: u8) -> Result<()>;
-    /// cur_matrix = ∑_{t in terms} term.2 * matrix_stack[t.0.0] * blend_matrix[t.0.1]
-    /// matrix_stack[stack_pos] = cur_matrix
-    fn blend(&mut self, stack_pos: u8, terms: &[((u8, u8), f64)]) -> Result<()>;
+    /// cur_matrix = ∑_{t in terms} term.2 * matrix_stack[t.0] * blend_matrix[t.1]
+    fn blend(&mut self, terms: &[(u8, u8, f64)]) -> Result<()>;
     /// cur_matrix = cur_matrix * diag(scale, 1.0)
     fn scale(&mut self, scale: (f64, f64, f64)) -> Result<()>;
     /// Draw meshes[mesh_id] using materials[material_id]
@@ -100,26 +99,27 @@ impl RenderInterpreterState {
                 }
                 0x09 => {
                     // The current matrix is set to the sum of
-                    //   weight * matrix_stack[id0] * blend_matrix[id1]
+                    //    weight * matrix_stack[stack_id] * blend_matrix[blend_id]
                     // and stored to the given stack slot.
                     let stack_pos = params[0];
                     let num_terms = params[1] as usize;
 
                     check!(num_terms <= 4)?;
-                    let mut terms = [((0,0), 0.0); 4];
+                    let mut terms = [(0, 0, 0.0); 4];
 
                     let mut param_idx = 2;
                     for i in 0..num_terms {
-                        let id0 = params[param_idx];
-                        let id1 = params[param_idx+1];
+                        let stack_id = params[param_idx];
+                        let blend_id = params[param_idx+1];
                         let weight = params[param_idx+2] as f64 / 256.0;
 
-                        terms[i] = ((id0, id1), weight);
+                        terms[i] = (stack_id, blend_id, weight);
 
                         param_idx += 3;
                     }
 
-                    sink.blend(stack_pos, &terms[0..num_terms])?;
+                    sink.blend(&terms[0..num_terms])?;
+                    sink.store_matrix(stack_pos)?;
                     self.cur_stack_pos = stack_pos;
                 }
                 0x0b => {
