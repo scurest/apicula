@@ -40,7 +40,24 @@ your package manager or by following the installation instructions on the Rust s
 
 ## Usage
 
-TODO
+To view a set of Nitro files
+
+    apicula view <INPUT FILES>
+
+To convert a set of Nitro files to COLLADA, placing the generated files in the given directory
+
+    apicula convert <INPUT FILES> -o <OUTPUT DIR>
+
+To extract files from a ROM or other packed file, placing Nitro files in the given directory
+
+    apicula extract <INPUT FILE> -o <OUTPUT DIR>
+
+To receive help
+
+    apicula -h
+
+See also a short [tutorial](https://github.com/scurest/apicula/wiki/TUTORIAL) on using apicula
+to convert a model and animation to a COLLADA file.
 
 ## Scope
 
@@ -48,6 +65,7 @@ apicula was tested with Nitro files from the following games
 
 * Kingdom Hearts: 358/2 Days
 * Ore ga Omae o Mamoru
+* Rune Factory 3: A Fantasy Harvest Moon
 
 Importing the COLLADA files we generate has been tested in the following programs:
 
@@ -58,10 +76,11 @@ If you can test in others (Maya, 3DS Max), that would be appreciated :)
 
 ## Special Thanks
 
-* **kiwi.ds** For models and documentation for Nitro formats. All NDS model viewers seem to be derived from here. Now defunct :(
-* **Gericom and [MKDS Course Modifier](https://gbatemp.net/threads/mkds-course-modifier.299444/)** For animations, especially for the meaning of the basis rotations.
-* **Lowlines and [Console Tool](http://llref.emutalk.net/projects/ctool/)** For animations and documentation for Nitro formats. I also use Console Tool for extracting files from DS ROMs.
-* **[deSmuME](http://desmume.org/)** `_3D_LOG_EXEC` and the GDB stub were invaluable.
+* **kiwi.ds** — For models and documentation for Nitro formats. All NDS model viewers seem to be derived from here. Now defunct :(
+* **Gericom and [MKDS Course Modifier](https://gbatemp.net/threads/mkds-course-modifier.299444/)** — For animations, especially for the meaning of the basis rotations.
+* **Lowlines and [Console Tool](http://llref.emutalk.net/projects/ctool/)** — For animations and documentation for Nitro formats. I also use Console Tool for extracting files from DS ROMs.
+* **[GBATEK](http://problemkaputt.de/gbatek.htm#ds3dvideo)** — For DS hardware documentation.
+* **[deSmuME](http://desmume.org/)** — `_3D_LOG_EXEC` and the GDB stub were invaluable.
 
 ## License
 
