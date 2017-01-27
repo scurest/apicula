@@ -58,6 +58,8 @@ pub struct Model<'a> {
     pub objects: Vec<Object>,
     pub blend_matrices: Vec<BlendMatrixPair>,
     pub render_cmds_cur: Cur<'a>,
+    pub up_scale: f64,
+    pub down_scale: f64,
 }
 
 #[derive(Debug, Clone)]

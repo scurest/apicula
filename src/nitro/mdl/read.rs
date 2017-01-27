@@ -44,8 +44,8 @@ fn read_model(cur: Cur, name: Name) -> Result<Model> {
         num_materials: u8,
         num_meshes: u8,
         unknown2: [u8; 2],
-        scale: (fix32(1,19,12)),
-        bounding_box_scale: (fix32(1,19,12)),
+        up_scale: (fix32(1,19,12)),
+        down_scale: (fix32(1,19,12)),
         num_verts: u16,
         num_surfs: u16,
         num_tris: u16,
@@ -76,6 +76,8 @@ fn read_model(cur: Cur, name: Name) -> Result<Model> {
         objects: objects,
         blend_matrices: blend_matrices,
         render_cmds_cur: render_cmds_cur,
+        up_scale: up_scale,
+        down_scale: down_scale,
     })
 }
 

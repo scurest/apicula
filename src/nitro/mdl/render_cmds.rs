@@ -10,8 +10,10 @@ pub trait Sink {
     fn mul_by_object(&mut self, object_id: u8) -> Result<()>;
     /// cur_matrix = ∑_{t in terms} term.2 * matrix_stack[t.0] * blend_matrix[t.1]
     fn blend(&mut self, terms: &[(u8, u8, f64)]) -> Result<()>;
-    /// cur_matrix = cur_matrix * diag(scale, 1.0)
-    fn scale(&mut self, scale: (f64, f64, f64)) -> Result<()>;
+    /// cur_matrix = cur_matrix * scale(model.up_scale)
+    fn scale_up(&mut self) -> Result<()>;
+    /// cur_matrix = cur_matrix * scale(model.down_scale)
+    fn scale_down(&mut self) -> Result<()>;
     /// Draw meshes[mesh_id] using materials[material_id]
     fn draw(&mut self, mesh_id: u8, material_id: u8) -> Result<()>;
 }
@@ -122,13 +124,13 @@ impl RenderInterpreterState {
                     sink.store_matrix(stack_pos)?;
                     self.cur_stack_pos = stack_pos;
                 }
-                0x0b => {
-                    // Scale up by a constant
-                    sink.scale((8.0, 8.0, 8.0))?;
-                }
-                0x2b => {
-                    // Scale down by a constant
-                    sink.scale((1.0/8.0, 1.0/8.0, 1.0/8.0))?;
+                0x0b | 0x2b => {
+                    // Scale by a constant in the model file
+                    match opcode {
+                        0x0b => sink.scale_up()?,
+                        0x2b => sink.scale_down()?,
+                        _ => unreachable!(),
+                    }
                 }
                 _ => {
                     info!("unknown render command: {:#x} {:?}", opcode, params);
