@@ -1,4 +1,5 @@
 use errors::Result;
+use util::bits::BitField;
 use util::cur::Cur;
 
 pub trait Sink {
@@ -23,20 +24,31 @@ pub fn run_commands<S: Sink>(cur: Cur, sink: &mut S) -> Result<()> {
     state.run_commands(sink, cur)
 }
 
-pub struct RenderInterpreterState {
-    pub cur_material: u8,
-    pub cur_stack_pos: u8,
+struct RenderInterpreterState {
+    cur_material: u8,
+    cur_stack_pos: u8,
 }
 
 impl RenderInterpreterState {
-    pub fn new() -> RenderInterpreterState {
+    fn new() -> RenderInterpreterState {
         RenderInterpreterState {
             cur_material: 0,
             cur_stack_pos: 0,
         }
     }
 
-    pub fn run_commands<S: Sink>(&mut self, sink: &mut S, mut cur: Cur) -> Result<()> {
+    /// Set the stack position. The DS only reads the low 5-bits
+    /// (the stack is 32 elements) so we mask down here.
+    fn set_stack_pos(&mut self, new_pos: u8) {
+        self.cur_stack_pos = new_pos.bits(0,5);
+    }
+
+    fn inc_stack_pos(&mut self) {
+        let new_pos = self.cur_stack_pos + 1;
+        self.set_stack_pos(new_pos);
+    }
+
+    fn run_commands<S: Sink>(&mut self, sink: &mut S, mut cur: Cur) -> Result<()> {
         loop {
             let opcode = cur.next::<u8>()?;
             let num_params = cmd_size(opcode, cur)?;
@@ -94,10 +106,10 @@ impl RenderInterpreterState {
                     }
                     sink.mul_by_object(object_id)?;
                     if let Some(stack_id) = stack_id {
-                        self.cur_stack_pos = stack_id;
+                        self.set_stack_pos(stack_id);
                     }
                     sink.store_matrix(self.cur_stack_pos)?;
-                    self.cur_stack_pos += 1;
+                    self.inc_stack_pos();
                 }
                 0x09 => {
                     // The current matrix is set to the sum of
@@ -121,8 +133,9 @@ impl RenderInterpreterState {
                     }
 
                     sink.blend(&terms[0..num_terms])?;
-                    sink.store_matrix(stack_pos)?;
-                    self.cur_stack_pos = stack_pos;
+                    self.set_stack_pos(stack_pos);
+                    sink.store_matrix(self.cur_stack_pos)?;
+                    self.inc_stack_pos();
                 }
                 0x0b | 0x2b => {
                     // Scale by a constant in the model file
