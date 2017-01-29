@@ -34,7 +34,6 @@
 
 pub mod render_cmds;
 mod read;
-mod xform;
 
 use cgmath::Matrix3;
 use cgmath::Matrix4;
@@ -43,7 +42,6 @@ use nitro::tex::TextureParameters;
 use util::cur::Cur;
 
 pub use self::read::read_mdl;
-pub use self::xform::pivot_mat;
 
 #[derive(Debug, Clone)]
 pub struct Mdl<'a> {

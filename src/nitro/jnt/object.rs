@@ -1,4 +1,3 @@
-use cgmath::Matrix3;
 use cgmath::Matrix4;
 use cgmath::One;
 use cgmath::vec3;
@@ -11,7 +10,8 @@ use nitro::jnt::ScalingData;
 use nitro::jnt::Timing;
 use nitro::jnt::Translation;
 use nitro::jnt::TranslationData;
-use nitro::mdl::pivot_mat;
+use nitro::rotation::basis_mat;
+use nitro::rotation::pivot_mat;
 use std::cmp;
 use util::bits::BitField;
 use util::fixed::fix16;
@@ -37,26 +37,7 @@ fn get_pivot(anim: &Animation, idx: u16) -> Result<Matrix4<f64>> {
 
 fn get_basis(anim: &Animation, idx: u16) -> Result<Matrix4<f64>> {
     let d = anim.basis_data.nth::<(u16, u16, u16, u16, u16)>(idx as usize)?;
-
-    let a1 = fix16(d.0.bits(3,16), 1, 0, 12);
-    let a2 = fix16(d.1.bits(3,16), 1, 0, 12);
-    let a3 = fix16(d.2.bits(3,16), 1, 0, 12);
-    let a = vec3(a1, a2, a3);
-
-    let b1 = fix16(d.3.bits(3,16), 1, 0, 12);
-    let b2 = fix16(d.4.bits(3,16), 1, 0, 12);
-    let b3_val =
-        (d.4.bits(0,3) << 12) |
-        (d.0.bits(0,3) << 9) |
-        (d.1.bits(0,3) << 6) |
-        (d.2.bits(0,3) << 3) |
-        (d.3.bits(0,3) << 0);
-    let b3 = fix16(b3_val, 1, 0, 12);
-    let b = vec3(b1, b2, b3);
-
-    let c = a.cross(b);
-
-    Ok(Matrix3::from_cols(a, b, c).into())
+    Ok(basis_mat(d))
 }
 
 pub fn to_matrix<'a>(object: &Object<'a>, anim: &Animation<'a>, frame: u16) -> Result<Matrix4<f64>> {

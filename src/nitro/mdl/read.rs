@@ -1,6 +1,7 @@
 use cgmath::Matrix3;
 use cgmath::Matrix4;
 use cgmath::One;
+use cgmath::vec3;
 use errors::Result;
 use nitro::info_block;
 use nitro::mdl::BlendMatrixPair;
@@ -9,8 +10,8 @@ use nitro::mdl::Mdl;
 use nitro::mdl::Mesh;
 use nitro::mdl::Model;
 use nitro::mdl::Object;
-use nitro::mdl::xform;
 use nitro::name::Name;
+use nitro::rotation::pivot_mat;
 use nitro::tex::TextureParameters;
 use util::bits::BitField;
 use util::cur::Cur;
@@ -215,20 +216,63 @@ fn read_object(cur: Cur, name: Name) -> Result<Object> {
     let mut cur = end;
     let mut xform = Matrix4::one();
 
+    // Translation
     if t == 0 {
-        let translation = xform::read_translation(&mut cur)?;
+        fields!(cur, translation {
+            x: (fix32(1,19,12)),
+            y: (fix32(1,19,12)),
+            z: (fix32(1,19,12)),
+            end: Cur,
+        });
+        cur = end;
+
+        let translation = Matrix4::from_translation(vec3(x, y, z));
         xform = translation;
     }
+
+    // 3x3 Matrix (typically a rotation)
     if p == 1 {
-        let rotation = xform::read_rotation(&mut cur, flags)?;
+        fields!(cur, pivot_rot {
+            a: (fix16(1,3,12)),
+            b: (fix16(1,3,12)),
+            end: Cur,
+        });
+        cur = end;
+
+        let select = flags.bits(4,8);
+        let neg = flags.bits(8,12);
+        let rotation = pivot_mat(select, neg, a, b)?;
         xform = xform * rotation;
     }
     if p == 0 && r == 0 {
-        let matrix = xform::read_matrix(&mut cur, m0)?;
+        fields!(cur, rot {
+            m1: (fix16(1,3,12)),
+            m2: (fix16(1,3,12)),
+            m3: (fix16(1,3,12)),
+            m4: (fix16(1,3,12)),
+            m5: (fix16(1,3,12)),
+            m6: (fix16(1,3,12)),
+            m7: (fix16(1,3,12)),
+            m8: (fix16(1,3,12)),
+            end: Cur,
+        });
+        cur = end;
+        let matrix: Matrix4<_> = Matrix3::new(
+            m0,  m1,  m2,
+            m3,  m4,  m5,
+            m6,  m7,  m8,
+        ).into();
         xform = xform * matrix;
     }
+
+    // Scale
     if s == 0 {
-        let scale = xform::read_scale(&mut cur)?;
+        fields!(cur, scale {
+            sx: (fix32(1,19,12)),
+            sy: (fix32(1,19,12)),
+            sz: (fix32(1,19,12)),
+        });
+        let scale = Matrix4::from_nonuniform_scale(sx, sy, sz);
         xform = xform * scale;
     }
 

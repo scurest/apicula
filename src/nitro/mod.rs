@@ -23,3 +23,4 @@ pub mod mdl;
 pub mod name;
 pub mod tex;
 mod info_block;
+mod rotation;
