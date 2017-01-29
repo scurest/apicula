@@ -34,7 +34,7 @@ your package manager or by following the installation instructions on the Rust s
         $ cd apicula
         $ cargo build --release
 
-    This may take awhile.
+    This may take a while.
 
 4. You're done! The binary is located at `apicula/target/release/apicula`.
 

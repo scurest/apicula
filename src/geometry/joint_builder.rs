@@ -11,7 +11,7 @@
 //! then skinned by multiplying it with a weighted combination of these joint
 //! matrices.
 //!
-//! To correct this impedence mismatch, this module performs abstract
+//! To correct this impedance mismatch, this module performs abstract
 //! interpretation of the render commands for the model to build the data
 //! structures for COLLADA.
 //!
@@ -42,7 +42,7 @@
 //! nodes. The tree structure is just determined by the structure of
 //! multiplication (eg. premultiplication <=> parent-child relationship).
 //! The second kind is represented as a formal linear combination of these
-//! indices which we manipulate algebarically. Every matrix used by the GPU
+//! indices which we manipulate algebraically. Every matrix used by the GPU
 //! is one of these linear combinations.
 
 use cgmath::Matrix4;
@@ -211,7 +211,7 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
     /// Returns a child of the node `at` with the given transform value. If one exists
     /// (there should be at most one), it will be used; otherwise, one is created.
     ///
-    /// This corresponds to multiplying the matrix reprented by `at` by the given transform.
+    /// This corresponds to multiplying the matrix represented by `at` by the given transform.
     fn find_or_add_child(&mut self, at: NodeIndex, transform: Transform) -> NodeIndex {
         let found = self.data.tree
             .neighbors_directed(at, Direction::Outgoing)

@@ -23,7 +23,7 @@ impl ToString for TexPalPair {
     }
 }
 
-/// Search `texs` for a `TextureInfo` wjpse name matches the texture
+/// Search `texs` for a `TextureInfo` whose name matches the texture
 /// name in pair.
 ///
 /// If one is found, the `Tex` it was contained in and any matching

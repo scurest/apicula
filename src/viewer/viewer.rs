@@ -265,7 +265,7 @@ fn run(st: &mut State) -> Result<()> {
                         // the center of the window can generate a large displacement
                         // that makes the camera jump. Since there's no real way to tell
                         // which events are caused by warps and which are "real", we
-                        // sovle this issue by just ignoring large displacements.
+                        // solve this issue by just ignoring large displacements.
                         let ignore_cutoff = 20;
                         let ignore = dx.abs() > ignore_cutoff || dy.abs() > ignore_cutoff;
 

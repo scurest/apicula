@@ -9,7 +9,7 @@
 //! data.
 //!
 //! For the rotation component, this array has another layer of indirection.
-//! It doens't store the rotation values themselves, but indices into one
+//! It doesn't store the rotation values themselves, but indices into one
 //! of two different tables of rotation matrices which are global to the
 //! animation file (`pivot_data` and `basis_data`).
 

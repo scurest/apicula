@@ -393,7 +393,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             }),
         )?;
 
-        // We also have a weight for each joint attched to a vertex. Again, we
+        // We also have a weight for each joint attached to a vertex. Again, we
         // need indices into a list, so do the same thing we did above for the
         // joints.
         //
@@ -647,7 +647,7 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
         model_name = name::IdFmt(&model.name),
     )?;
 
-    write_joint_heirarchy(w, model, geom)?;
+    write_joint_hierarchy(w, model, geom)?;
 
     for (i, call) in geom.draw_calls.iter().enumerate() {
         let mesh = &model.meshes[call.mesh_id as usize];
@@ -683,7 +683,7 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
     Ok(())
 }
 
-fn write_joint_heirarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
+fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
     fn write_indent<W: Write>(w: &mut W, indent: u32) -> Result<()> {
         // Base indent
         write!(w, "      ")?;

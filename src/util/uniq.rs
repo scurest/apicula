@@ -8,7 +8,7 @@ use std::string::ToString;
 ///
 /// Ideally, each element is named by converting it to a string (with
 /// `ToString`). But if there is already an element with that name in
-/// the set, sucessive numbers will be appended to the name until a
+/// the set, successive numbers will be appended to the name until a
 /// free name is found.
 pub struct UniqueNamer<T> {
     map_: HashMap<T, String>,

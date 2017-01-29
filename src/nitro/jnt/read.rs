@@ -40,7 +40,7 @@ fn read_animation(cur: Cur, name: Name) -> Result<Animation> {
         basis_data_off: u32,
         object_offs: [u16; num_objects],
     });
-    check!(stamp == b"J\0AC")?; // I don't think the DS actaully reads that bizarre NUL byte
+    check!(stamp == b"J\0AC")?; // I don't think the DS actually reads that bizarre NUL byte
 
     let pivot_data = (cur + pivot_data_off as usize)?;
     let basis_data = (cur + basis_data_off as usize)?;

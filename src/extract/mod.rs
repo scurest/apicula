@@ -65,7 +65,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
             Err(_) => {
                 // There was an error parsing the Nitro file:
                 // assume that means the four character matched
-                // spriously, skip them, and go on.
+                // spuriously, skip them, and go on.
                 cur_slice = &cur_slice[found.start() + 4..];
             },
         }

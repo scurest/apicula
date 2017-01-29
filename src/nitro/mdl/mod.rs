@@ -1,6 +1,6 @@
 //! Nitro model.
 //!
-//! A Nitro model is rendered by interpretting a list of "render commands".
+//! A Nitro model is rendered by interpreting a list of "render commands".
 //! The rest of the data in this file is useful only insofar as it is referenced
 //! from these commands. Typical commands are "multiply current matrix by object
 //! matrix and store to GPU", "bind material", and "render mesh".
@@ -15,7 +15,7 @@
 //!
 //! An object is a matrix which the render commands can multiply by and store
 //! to the GPU's matrix stack. They are basically joints (eg. for a character,
-//! names "Arm", "Leg", etc. are typical). They are multipled to form a joint
+//! names "Arm", "Leg", etc. are typical). They are multiplied to form a joint
 //! hierarchy and the commands in a mesh reference those multiplied matrices
 //! stored in the stack.
 //!

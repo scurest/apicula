@@ -7,7 +7,7 @@ use util::bits::BitField;
 use util::cur::Cur;
 
 pub fn read_translation(cur: &mut Cur) -> Result<Matrix4<f64>> {
-    fields!(*cur, tranlation {
+    fields!(*cur, translation {
         x: (fix32(1,19,12)),
         y: (fix32(1,19,12)),
         z: (fix32(1,19,12)),
