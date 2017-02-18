@@ -118,21 +118,19 @@ impl RenderInterpreterState {
                     let stack_pos = params[0];
                     let num_terms = params[1] as usize;
 
-                    check!(num_terms <= 4)?;
-                    let mut terms = [(0, 0, 0.0); 4];
-
                     let mut param_idx = 2;
-                    for i in 0..num_terms {
-                        let stack_id = params[param_idx];
-                        let blend_id = params[param_idx+1];
-                        let weight = params[param_idx+2] as f64 / 256.0;
+                    let terms = (0..num_terms)
+                        .map(|_| {
+                            let stack_id = params[param_idx];
+                            let blend_id = params[param_idx+1];
+                            let weight = params[param_idx+2] as f64 / 256.0;
+                            param_idx += 3;
 
-                        terms[i] = (stack_id, blend_id, weight);
+                            (stack_id, blend_id, weight)
+                        })
+                        .collect::<Vec<_>>();
 
-                        param_idx += 3;
-                    }
-
-                    sink.blend(&terms[0..num_terms])?;
+                    sink.blend(&terms[..])?;
                     self.set_stack_pos(stack_pos);
                     sink.store_matrix(self.cur_stack_pos)?;
                     self.inc_stack_pos();
