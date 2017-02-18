@@ -176,6 +176,7 @@ fn cmd_size(opcode: u8, cur: Cur) -> Result<usize> {
         0x40 => 0,
         0x44 => 1,
         0x46 => 4,
+        0x47 => 1,
         0x66 => 5,
         0x80 => 0,
         _ => return Err(format!("unknown render command opcode: {:#x}", opcode).into()),
