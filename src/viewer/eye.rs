@@ -9,6 +9,7 @@ use cgmath::Vector2;
 use cgmath::Vector3;
 use std::f32::consts::PI;
 
+#[derive(Clone)]
 pub struct Eye {
     pub position: Point3<f32>,
     pub azimuth: f32,

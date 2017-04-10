@@ -1,277 +1,88 @@
-use cgmath::Matrix4;
-use errors::Result;
 use files::FileHolder;
-use geometry::build_without_joints as build_geometry;
-use geometry::GeometryDataWithoutJoints as GeometryData;
-use geometry::Vertex;
-use glium;
-use glium::Frame;
-use glium::Surface;
-use nitro::jnt::object::to_matrix as bca_object_to_matrix;
-use nitro::mdl::Material;
-use nitro::mdl::Model;
-use nitro::tex::image::gen_image;
-use nitro::tex::Tex;
-use nitro::tex::texpal::find_tex;
-use nitro::tex::texpal::TexPalPair;
+use std::ops::Range;
 use viewer::eye::Eye;
 
-pub struct State<'a> {
-    pub file_holder: FileHolder<'a>,
+/// Which model/animation is being viewed and where it is being
+/// viewed from.
+///
+/// This is all the info you'd need to be able to tell what should
+/// be drawn to the screen.
+#[derive(Clone)]
+pub struct ViewState {
+    pub model_id: usize,
+    pub anim_state: Option<AnimState>,
     pub eye: Eye,
-    pub model_data: ModelData,
-    pub display: glium::Display,
-    pub program: glium::Program,
-    pub default_texture: glium::texture::Texture2d,
 }
 
-pub struct ModelData {
-    index: usize,
-    geom: GeometryData,
-    vertex_buffer: glium::VertexBuffer<Vertex>,
-    index_buffer: glium::IndexBuffer<u16>,
-    textures: Vec<Option<glium::texture::Texture2d>>,
-    objects: Vec<Matrix4<f64>>,
-    anim_data: Option<AnimData>,
-}
-
-#[derive(Copy, Clone)]
-pub struct AnimData {
-    pub index: usize,
+#[derive(Clone, PartialEq, Eq)]
+pub struct AnimState {
+    pub anim_id: usize,
     pub cur_frame: u16,
 }
 
-impl<'a> State<'a> {
-    pub fn model(&self) -> &Model {
-        &self.file_holder.models[self.model_data.index]
-    }
+#[derive(Copy, Clone)]
+pub enum Dir { Next, Prev }
 
-    pub fn draw(&self, target: &mut Frame, draw_params: &glium::DrawParameters) -> Result<()> {
-        let mat = self.eye.model_view_persp();
-
-        for call in &self.model_data.geom.draw_calls {
-            let model = self.model();
-
-            let texture = self.model_data.textures[call.mat_id as usize].as_ref()
-                .unwrap_or(&self.default_texture);
-            let mut sampler = glium::uniforms::Sampler::new(texture)
-                .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
-                .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest);
-            let wrap_fn = |repeat, mirror| {
-                use glium::uniforms::SamplerWrapFunction as Wrap;
-                match (repeat, mirror) {
-                    (false, _) => Wrap::Clamp,
-                    (true, false) => Wrap::Repeat,
-                    (true, true) => Wrap::Mirror,
-                }
-            };
-            let params = model.materials[call.mat_id as usize].params;
-            sampler.1.wrap_function.0 = wrap_fn(params.repeat_s(), params.mirror_s());
-            sampler.1.wrap_function.1 = wrap_fn(params.repeat_t(), params.mirror_t());
-
-            let uniforms = uniform! {
-                matrix: [
-                    [mat.x.x, mat.x.y, mat.x.z, mat.x.w],
-                    [mat.y.x, mat.y.y, mat.y.z, mat.y.w],
-                    [mat.z.x, mat.z.y, mat.z.z, mat.z.w],
-                    [mat.w.x, mat.w.y, mat.w.z, mat.w.w],
-                ],
-                tex: sampler,
-            };
-
-            target.draw(
-                &self.model_data.vertex_buffer,
-                &self.model_data.index_buffer.slice(call.index_range.clone()).unwrap(),
-                &self.program,
-                &uniforms,
-                draw_params,
-            ).unwrap();
-        }
-
-        Ok(())
+/// Given `x` in the given range, regard the range as a circle (ie. `start`
+/// comes after `end - 1`) and return the element that comes either before
+/// or after `x`, depending on `dir`.
+fn advance(x: usize, Range { start, end }: Range<usize>, dir: Dir) -> usize {
+    assert!(start <= x && x < end);
+    match dir {
+        Dir::Next =>
+            if x + 1 == end { start } else { x + 1 },
+        Dir::Prev =>
+            if x == start { end - 1 } else { x - 1 },
     }
 }
 
-impl ModelData {
-    pub fn new(file_holder: &FileHolder, display: &glium::Display, index: usize) -> Result<ModelData> {
-        let model = &file_holder.models[index];
-        let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
-        let geom = build_geometry(model, &objects[..])?;
-        let vertex_buffer = glium::VertexBuffer::new(
-            display,
-            &geom.vertices
-        )?;
-        let index_buffer = glium::IndexBuffer::new(
-            display,
-            glium::index::PrimitiveType::TrianglesList,
-            &geom.indices
-        )?;
-        let textures = build_textures(
-            display,
-            &model.materials[..],
-            &file_holder.texs[..]
-        );
-        let anim_data = None;
-        Ok(ModelData {
-            index: index,
-            geom: geom,
-            vertex_buffer: vertex_buffer,
-            index_buffer: index_buffer,
-            textures: textures,
-            objects: objects,
-            anim_data: anim_data,
-        })
+impl ViewState {
+    pub fn advance_model(&mut self, fh: &FileHolder, dir: Dir) {
+        let num_models = fh.models.len();
+
+        self.model_id = advance(self.model_id, 0..num_models, dir);
+        self.anim_state = None;
     }
 
-    pub fn has_animation(&self) -> bool {
-        self.anim_data.is_some()
-    }
+    pub fn advance_anim(&mut self, fh: &FileHolder, dir: Dir) {
+        let num_animations = fh.animations.len();
+        let num_objects = fh.models[self.model_id].objects.len();
 
-    pub fn model_index(&self) -> usize {
-        self.index
-    }
+        // Represent anim_id as anim_id+1, freeing up 0 to represent "no animation".
+        let mut id = self.anim_state.as_ref()
+            .map(|anim_state| anim_state.anim_id + 1)
+            .unwrap_or(0);
 
-    pub fn animation_data(&self) -> Option<&AnimData> {
-        self.anim_data.as_ref()
-    }
+        // An animations can be applied to a model only if they have the same
+        // number of objects.
+        let is_good = |id: usize| {
+            id == 0 || fh.animations[id - 1].objects.len() == num_objects
+        };
 
-    pub fn prev_model(&mut self, file_holder: &FileHolder, display: &glium::Display) -> Result<()> {
-        let num_models = file_holder.models.len();
-        if num_models == 1 { return Ok(()); }
-
-        let index = (self.index + num_models - 1) % num_models;
-        *self = ModelData::new(file_holder, display, index)?;
-
-        Ok(())
-    }
-    pub fn next_model(&mut self, file_holder: &FileHolder, display: &glium::Display) -> Result<()> {
-        let num_models = file_holder.models.len();
-        if num_models == 1 { return Ok(()); }
-
-        let index = (self.index + 1) % num_models;
-        *self = ModelData::new(file_holder, display, index)?;
-
-        Ok(())
-    }
-
-    pub fn prev_anim(&mut self, file_holder: &FileHolder) -> Result<()> {
-        let num_animations = file_holder.animations.len();
-        if num_animations == 0 { return Ok(()); }
-
-        // The index of the animation, or None for the rest pose.
-        let mut anim_id = self.anim_data.as_ref().map(|a| a.index);
-
-        let max_anim_id = file_holder.animations.len() - 1;
-        let num_objects = file_holder.models[self.index].objects.len();
         loop {
-            anim_id = match anim_id {
-                None => Some(max_anim_id),
-                Some(i) if i == 0 => None,
-                Some(i) => Some(i - 1),
-            };
-            // Skip over any animations with the wrong number of objects
-            if let Some(i) = anim_id {
-                if file_holder.animations[i].objects.len() != num_objects {
-                    continue;
-                }
-            }
-            break;
+            id = advance(id, 0..num_animations + 1, dir);
+            if is_good(id) { break; }
         }
 
-        self.set_anim_data(file_holder, anim_id.map(|id|
-            AnimData { index: id, cur_frame: 0 }
-        ))?;
-
-        Ok(())
-    }
-    pub fn next_anim(&mut self, file_holder: &FileHolder) -> Result<()> {
-        if file_holder.animations.is_empty() { return Ok(()); }
-
-        let mut anim_id = self.anim_data.as_ref().map(|a| a.index);
-
-        let max_anim_id = file_holder.animations.len() - 1;
-        let num_objects = file_holder.models[self.index].objects.len();
-        loop {
-            anim_id = match anim_id {
-                None => Some(0),
-                Some(i) if i == max_anim_id => None,
-                Some(i) => Some(i + 1),
-            };
-            if let Some(i) = anim_id {
-                if file_holder.animations[i].objects.len() != num_objects {
-                    continue;
-                }
-            }
-            break;
-        }
-
-        self.set_anim_data(file_holder, anim_id.map(|id|
-            AnimData { index: id, cur_frame: 0 }
-        ))?;
-
-        Ok(())
-    }
-
-    pub fn next_anim_frame(&mut self, file_holder: &FileHolder) -> Result<()> {
-        let mut anim_data = self.anim_data
-            .expect("next frame called on unanimated model");
-        let anim = &file_holder.animations[anim_data.index];
-
-        let next_frame = anim_data.cur_frame + 1;
-        let next_frame = if next_frame == anim.num_frames { 0 } else { next_frame };
-
-        anim_data.cur_frame = next_frame;
-
-        self.set_anim_data(file_holder, Some(anim_data))
-    }
-
-    fn set_anim_data(&mut self, file_holder: &FileHolder, anim_data: Option<AnimData>) -> Result<()> {
-        let model = &file_holder.models[self.index];
-
-        if let Some(anim_data) = anim_data {
-            let anim = &file_holder.animations[anim_data.index];
-            let it = self.objects.iter_mut()
-                .zip(anim.objects.iter());
-            for (obj, anim_obj) in it {
-                *obj = bca_object_to_matrix(anim_obj, anim, anim_data.cur_frame)?;
-            }
-        } else {
-            let it = self.objects.iter_mut()
-                .zip(model.objects.iter());
-            for (obj, model_obj) in it {
-                *obj = model_obj.xform;
-            }
-        }
-
-        self.geom = build_geometry(model, &self.objects[..])?;
-        self.vertex_buffer.write(&self.geom.vertices);
-        self.anim_data = anim_data;
-
-        Ok(())
-    }
-}
-
-fn build_textures(display: &glium::Display, materials: &[Material], texs: &[Tex])
--> Vec<Option<glium::texture::Texture2d>> {
-    materials.iter()
-        .map(|material| -> Result<Option<_>> {
-            let pair = match TexPalPair::from_material(material) {
-                Some(pair) => pair,
-                None => return Ok(None), // no texture
-            };
-            let (tex, texinfo, palinfo) = find_tex(&texs[..], pair)
-                .ok_or_else(|| format!("couldn't find texture named {}", pair.0))?;
-
-            let rgba = gen_image(tex, texinfo, palinfo)?;
-            let dim = (texinfo.params.width(), texinfo.params.height());
-            let image = glium::texture::RawImage2d::from_raw_rgba_reversed(rgba, dim);
-            Ok(Some(glium::texture::Texture2d::new(display, image)?))
-        })
-        .map(|res| {
-            res.unwrap_or_else(|e| {
-                error!("error generating texture: {:?}", e);
+        self.anim_state =
+            if id == 0 {
                 None
-            })
-        })
-        .collect()
+            } else {
+                Some(AnimState {
+                    anim_id: id - 1,
+                    cur_frame: 0,
+                })
+            };
+    }
+
+    pub fn next_frame(&mut self, fh: &FileHolder) {
+        self.anim_state.as_mut().map(|anim_state| {
+            let anim = &fh.animations[anim_state.anim_id];
+
+            anim_state.cur_frame += 1;
+            if anim_state.cur_frame >= anim.num_frames {
+                anim_state.cur_frame = 0;
+            }
+        });
+    }
 }
