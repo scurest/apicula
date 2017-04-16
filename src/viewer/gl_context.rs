@@ -7,6 +7,7 @@ pub struct GlContext {
     pub display: glium::Display,
     pub program: glium::Program,
     pub default_texture: glium::texture::Texture2d,
+    pub error_texture: glium::texture::Texture2d,
 }
 
 impl GlContext {
@@ -26,21 +27,29 @@ impl GlContext {
             };
         let program = glium::Program::new(&display, program_args).unwrap();
 
-        // The default image is just a 1x1 white texture. Or it should be. For some reason
-        // I don't understand, on the Windows box I'm testing on, 1x1 textures don't seem
-        // to work. The work-around is just to make it 2x1. :(
+        // 1x1 white texture
         let default_image =
             glium::texture::RawImage2d::from_raw_rgba(
-                vec![255u8,255,255,255,255u8,255,255,255],
-                (2,1),
+                vec![255, 255, 255, 255u8],
+                (1,1),
             );
         let default_texture =
             glium::texture::Texture2d::new(&display, default_image).unwrap();
+
+        // 1x1 magenta texture
+        let error_image =
+            glium::texture::RawImage2d::from_raw_rgba(
+                vec![255, 0, 255, 255u8],
+                (1,1),
+            );
+        let error_texture =
+            glium::texture::Texture2d::new(&display, error_image).unwrap();
 
         Ok(GlContext {
             display: display,
             program: program,
             default_texture: default_texture,
+            error_texture: error_texture,
         })
     }
 }

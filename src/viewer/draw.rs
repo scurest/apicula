@@ -21,7 +21,11 @@ implement_vertex!(Vertex, position, texcoord, color);
 /// GL data needed to render the scene.
 pub struct DrawingData {
     obj_geom_data: Result<ObjectGeometryData>,
-    textures: Vec<Option<glium::texture::Texture2d>>,
+    /// textures[i] contains the GL texture that needs to be
+    /// bound for materials[i]; either `Ok(None)` (use default
+    /// texture), `Ok(Some(tex))` (use tex), or `Err(e)` (use
+    /// error texture).
+    textures: Vec<Result<Option<glium::texture::Texture2d>>>,
     /// Cache of the `ViewState` that was used to generate the
     /// other members. Caching it lets us update less data when
     /// we need to change this (eg. we don't need to rebuild the
@@ -106,8 +110,12 @@ impl DrawingData {
             let mvp = self.view_state.eye.model_view_persp();
 
             for call in &obj_geom_data.geom.draw_calls {
-                let texture = self.textures[call.mat_id as usize].as_ref()
-                    .unwrap_or(&ctx.default_texture);
+                let texture =
+                    match self.textures[call.mat_id as usize] {
+                        Ok(Some(ref tex)) => tex,
+                        Ok(None) => &ctx.default_texture,
+                        Err(_) => &ctx.error_texture,
+                    };
 
                 let sampler = {
                     use glium::uniforms as uni;
@@ -198,26 +206,29 @@ impl ObjectGeometryData {
 }
 
 fn build_textures(display: &glium::Display, materials: &[Material], texs: &[Tex])
--> Vec<Option<glium::texture::Texture2d>> {
-    materials.iter()
-        .map(|material| -> Result<Option<_>> {
-            let pair = match TexPalPair::from_material(material) {
-                Some(pair) => pair,
-                None => return Ok(None), // no texture
-            };
-            let (tex, texinfo, palinfo) = find_tex(&texs[..], pair)
-                .ok_or_else(|| format!("couldn't find texture named {}", pair.0))?;
+-> Vec<Result<Option<glium::texture::Texture2d>>> {
+    let build_texture = |material| {
+        let pair = match TexPalPair::from_material(material) {
+            Some(pair) => pair,
+            None => return Ok(None), // no texture
+        };
 
-            let rgba = gen_image(tex, texinfo, palinfo)?;
-            let dim = (texinfo.params.width(), texinfo.params.height());
-            let image = glium::texture::RawImage2d::from_raw_rgba_reversed(rgba, dim);
-            Ok(Some(glium::texture::Texture2d::new(display, image)?))
-        })
-        .map(|res| {
-            res.unwrap_or_else(|e| {
-                error!("error generating texture: {:?}", e);
-                None
-            })
+        let (tex, texinfo, palinfo) = find_tex(&texs[..], pair)
+            .ok_or_else(|| format!("couldn't find texture named {}", pair.0))?;
+
+        let rgba = gen_image(tex, texinfo, palinfo)?;
+        let dim = (texinfo.params.width(), texinfo.params.height());
+        let image = glium::texture::RawImage2d::from_raw_rgba_reversed(rgba, dim);
+        Ok(Some(glium::texture::Texture2d::new(display, image)?))
+    };
+
+    materials.iter().enumerate()
+        .map(|(id, material)| {
+            let res = build_texture(material);
+            if let Err(ref e) = res {
+                error!("error generating texture for material {}: {:?}", id, e);
+            }
+            res
         })
         .collect()
 }
