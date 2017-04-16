@@ -5,7 +5,7 @@ use std::path::Path;
 use std::io::Write;
 
 fn main() {
-    // Write the current git hash to ${OUT_DIR}/git_commit
+    // Write the current git hash to ${OUT_DIR}/git_rev
     // so it's available to main.rs
 
     let out_dir = env::var("OUT_DIR").unwrap();

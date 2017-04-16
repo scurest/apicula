@@ -31,7 +31,7 @@ use errors::Result;
 
 pub static VERSION: &'static str = concat!(
     env!("CARGO_PKG_VERSION"),
-    " (", include_str!(concat!(env!("OUT_DIR"), "/git_rev")), ")"
+    " (", include_str!(concat!(env!("OUT_DIR"), "/git_rev")), ")",
 );
 
 fn main() {

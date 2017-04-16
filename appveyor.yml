@@ -11,6 +11,7 @@ environment:
 # Install Rust and Cargo
 # (Based on japaric/trust)
 install:
+  - cd C:\
   - ps: >-
       If ($env:TARGET -eq 'x86_64-pc-windows-gnu') {
         $env:PATH += ';C:\msys64\mingw64\bin'
@@ -22,6 +23,7 @@ install:
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
   - rustc -Vv
   - cargo -V
+  - cd C:\projects\apicula
 
 # 'cargo test' takes care of building for us, so disable Appveyor's build stage.
 # This prevents the "directory does not contain a project or solution file" error.
