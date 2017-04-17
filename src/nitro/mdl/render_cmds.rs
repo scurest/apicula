@@ -1,5 +1,4 @@
 use errors::Result;
-use util::bits::BitField;
 use util::cur::Cur;
 
 pub trait Sink {
@@ -26,26 +25,13 @@ pub fn run_commands<S: Sink>(cur: Cur, sink: &mut S) -> Result<()> {
 
 struct RenderInterpreterState {
     cur_material: u8,
-    cur_stack_pos: u8,
 }
 
 impl RenderInterpreterState {
     fn new() -> RenderInterpreterState {
         RenderInterpreterState {
             cur_material: 0,
-            cur_stack_pos: 0,
         }
-    }
-
-    /// Set the stack position. The DS only reads the low 5-bits
-    /// (the stack is 32 elements) so we mask down here.
-    fn set_stack_pos(&mut self, new_pos: u8) {
-        self.cur_stack_pos = new_pos.bits(0,5);
-    }
-
-    fn inc_stack_pos(&mut self) {
-        let new_pos = self.cur_stack_pos + 1;
-        self.set_stack_pos(new_pos);
     }
 
     fn run_commands<S: Sink>(&mut self, sink: &mut S, mut cur: Cur) -> Result<()> {
@@ -88,8 +74,8 @@ impl RenderInterpreterState {
                 }
                 0x06 | 0x26 | 0x46 | 0x66 => {
                     // Multiply the current matrix by an object matrix, possibly
-                    // loading a matrix from the stack beforehand, and store the
-                    // result to a stack location.
+                    // loading a matrix from the stack beforehand, and possibly
+                    // storing the result to a stack location after.
                     let object_id = params[0];
                     let _parent_id = params[1];
                     let _dummy = params[2];
@@ -106,10 +92,8 @@ impl RenderInterpreterState {
                     }
                     sink.mul_by_object(object_id)?;
                     if let Some(stack_id) = stack_id {
-                        self.set_stack_pos(stack_id);
+                        sink.store_matrix(stack_id)?;
                     }
-                    sink.store_matrix(self.cur_stack_pos)?;
-                    self.inc_stack_pos();
                 }
                 0x09 => {
                     // The current matrix is set to the sum of
@@ -131,9 +115,7 @@ impl RenderInterpreterState {
                         .collect::<Vec<_>>();
 
                     sink.blend(&terms[..])?;
-                    self.set_stack_pos(stack_pos);
-                    sink.store_matrix(self.cur_stack_pos)?;
-                    self.inc_stack_pos();
+                    sink.store_matrix(stack_pos)?;
                 }
                 0x0b | 0x2b => {
                     // Scale by a constant in the model file
