@@ -6,7 +6,7 @@ use errors::Result;
 use geometry::build_with_joints as build_geometry;
 use geometry::GeometryDataWithJoints as GeometryData;
 use geometry::joint_builder::JointTree;
-use geometry::joint_builder::LinCombTerm;
+use geometry::joint_builder::SymbolicTerm;
 use geometry::joint_builder::Transform;
 use nitro::jnt;
 use nitro::jnt::Animation;
@@ -15,6 +15,7 @@ use nitro::name;
 use nitro::tex::texpal::TexPalPair;
 use petgraph::Direction;
 use petgraph::graph::NodeIndex;
+use std::fmt;
 use std::fmt::Write;
 use time;
 use util::ins_set::InsOrderSet;
@@ -345,7 +346,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         // This is what `IncOrderSet` is for.
         all_joints.clear();
         for j in &geom.joint_data.vertices[vrange.clone()] {
-            for &LinCombTerm { joint_id, .. } in &j.0 {
+            for &SymbolicTerm { joint_id, .. } in &j.terms {
                 // Insert every joint which appears and all its ancestors.
                 all_joints.insert(joint_id);
                 let mut parents = geom.joint_data.tree.neighbors_directed(joint_id, Direction::Incoming);
@@ -406,7 +407,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         let decode = |x: u32| x as f64 / 4096.0;
         all_weights.clear();
         for j in &geom.joint_data.vertices[vrange.clone()] {
-            for &LinCombTerm { weight, .. } in &j.0 {
+            for &SymbolicTerm { weight, .. } in &j.terms {
                 all_weights.insert(encode(weight));
             }
         }
@@ -448,13 +449,13 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             i = i, num_verts = num_verts,
             vcount = FnFmt(|f| {
                 for j in &geom.joint_data.vertices[vrange.clone()] {
-                    write!(f, "{} ", j.0.len())?;
+                    write!(f, "{} ", j.terms.len())?;
                 }
                 Ok(())
             }),
             v = FnFmt(|f| {
                 for j in &geom.joint_data.vertices[vrange.clone()] {
-                    for &LinCombTerm { weight, joint_id } in &j.0 {
+                    for &SymbolicTerm { weight, joint_id } in &j.terms {
                         write!(f, "{} {} ",
                             all_joints.get_index_from_value(&joint_id).unwrap(),
                             all_weights.get_index_from_value(&encode(weight)).unwrap(),
@@ -693,26 +694,29 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
         Ok(())
     }
 
+    /// Write the name for a joint that will appear in DCC programs.
+    fn write_joint_name<W: Write>(w: &mut W, model: &Model, tree: &JointTree, node: NodeIndex) -> fmt::Result {
+        match tree[node].transform {
+            Transform::Root => write!(w, "__ROOT__"),
+            Transform::Object(id) => write!(w, "{}", name::IdFmt(&model.objects[id as usize].name)),
+            Transform::Blend(id) => write!(w, "__BLEND{}", id),
+            Transform::UnknownStackSlot(id) => write!(w, "__STACK{}", id),
+        }
+    }
+
     fn write_rec<W: Write>(w: &mut W, model: &Model, tree: &JointTree, node: NodeIndex, indent: u32) -> Result<()> {
         write_indent(w, indent)?;
         write_lines!(w,
             r#"<node id="joint{joint_id}" sid="joint{joint_id}" name="{name}" type="JOINT">"#;
             joint_id = node.index(),
-            name = FnFmt(|f| match tree[node].transform {
-                Transform::Root => write!(f, "__ROOT__"),
-                Transform::Object(id) => {
-                    let object = &model.objects[id as usize];
-                    write!(f, "{}", name::IdFmt(&object.name))
-                }
-                Transform::BlendDummy(id) => write!(f, "__BLEND{}__", id),
-                Transform::UnknownStackSlot(pos) => write!(f, r"__STACK{}__", pos),
-            }),
+            name = FnFmt(|f| write_joint_name(f, model, tree, node)),
         )?;
 
         let mat = match tree[node].transform {
+            Transform::Root => Matrix4::one(),
             Transform::Object(id) => model.objects[id as usize].xform,
-            Transform::BlendDummy(id) => model.blend_matrices[id as usize].0,
-            _ => Matrix4::one(),
+            Transform::Blend(id) => model.blend_matrices[id as usize].0,
+            Transform::UnknownStackSlot(_) => Matrix4::one(),
         };
         write_indent(w, indent + 1)?;
         write_lines!(w, r#"<matrix sid="transform">{}</matrix>"#; Mat(&mat))?;
