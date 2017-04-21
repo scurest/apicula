@@ -27,7 +27,10 @@ mod nitro;
 mod png;
 mod viewer;
 
+use env_logger::LogBuilder;
 use errors::Result;
+use log::LogLevelFilter;
+use std::env;
 
 pub static VERSION: &'static str = concat!(
     env!("CARGO_PKG_VERSION"),
@@ -40,7 +43,7 @@ fn main() {
 }
 
 fn main2() -> i32 {
-    env_logger::init().unwrap();
+    init_logger();
     match main3() {
         Ok(()) => 0,
         Err(e) => {
@@ -48,6 +51,19 @@ fn main2() -> i32 {
             1
         }
     }
+}
+
+fn init_logger() {
+    let mut builder = LogBuilder::new();
+
+    // Show warnings by default
+    builder.filter(None, LogLevelFilter::Warn);
+
+    if env::var("RUST_LOG").is_ok() {
+       builder.parse(&env::var("RUST_LOG").unwrap());
+    }
+
+    builder.init().unwrap();
 }
 
 fn main3() -> Result<()> {
