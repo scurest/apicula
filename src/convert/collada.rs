@@ -699,7 +699,6 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
         match tree[node].transform {
             Transform::Root => write!(w, "__ROOT__"),
             Transform::Object(id) => write!(w, "{}", name::IdFmt(&model.objects[id as usize].name)),
-            Transform::Blend(id) => write!(w, "__BLEND{}", id),
             Transform::UnknownStackSlot(id) => write!(w, "__STACK{}", id),
         }
     }
@@ -715,7 +714,6 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
         let mat = match tree[node].transform {
             Transform::Root => Matrix4::one(),
             Transform::Object(id) => model.objects[id as usize].xform,
-            Transform::Blend(id) => model.blend_matrices[id as usize].0,
             Transform::UnknownStackSlot(_) => Matrix4::one(),
         };
         write_indent(w, indent + 1)?;

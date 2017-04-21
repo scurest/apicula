@@ -54,7 +54,7 @@ pub struct Model<'a> {
     pub materials: Vec<Material>,
     pub meshes: Vec<Mesh<'a>>,
     pub objects: Vec<Object>,
-    pub blend_matrices: Vec<BlendMatrixPair>,
+    pub inv_bind_matrices: Vec<InvBindMatrixPair>,
     pub render_cmds_cur: Cur<'a>,
     pub up_scale: f64,
     pub down_scale: f64,
@@ -83,9 +83,8 @@ pub struct Object {
     pub xform: Matrix4<f64>,
 }
 
-/// A pair of matrices used for the blending render command (opcode 0x09).
-///
-/// The first one is used in calculating vertex positions. The second is used
-/// for normals (?) which we don't currently handle.
+/// The first matrix is an inverse bind matrix for some local-to-world
+/// transform used by render command 0x09; see the comment there for
+/// details. I don't know what the second is for (normals??).
 #[derive(Debug, Clone)]
-pub struct BlendMatrixPair(pub Matrix4<f64>, pub Matrix3<f64>);
+pub struct InvBindMatrixPair(pub Matrix4<f64>, pub Matrix3<f64>);

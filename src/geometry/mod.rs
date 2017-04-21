@@ -234,7 +234,7 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
             mat +=
                 term.2 *
                 self.gpu.matrix_stack[term.0 as usize] *
-                self.model.blend_matrices[term.1 as usize].0;
+                self.model.inv_bind_matrices[term.1 as usize].0;
         }
         self.gpu.cur_matrix = mat;
 

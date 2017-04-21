@@ -4,7 +4,7 @@ use cgmath::One;
 use cgmath::vec3;
 use errors::Result;
 use nitro::info_block;
-use nitro::mdl::BlendMatrixPair;
+use nitro::mdl::InvBindMatrixPair;
 use nitro::mdl::Material;
 use nitro::mdl::Mdl;
 use nitro::mdl::Mesh;
@@ -39,7 +39,7 @@ fn read_model(cur: Cur, name: Name) -> Result<Model> {
         render_cmds_off: u32,
         materials_off: u32,
         mesh_off: u32,
-        blend_matrices_off: u32,
+        inv_bind_matrices_off: u32,
         unknown1: [u8; 3],
         num_objects: u8,
         num_materials: u8,
@@ -65,8 +65,8 @@ fn read_model(cur: Cur, name: Name) -> Result<Model> {
     let objects = read_objects(end)?;
     let materials = read_materials((cur + materials_off as usize)?)?;
     let meshes = read_meshes((cur + mesh_off as usize)?)?;
-    let blend_matrices = read_blend_matrices(
-        (cur + blend_matrices_off as usize)?,
+    let inv_bind_matrices = read_inv_bind_matrices(
+        (cur + inv_bind_matrices_off as usize)?,
         num_objects as usize
     )?;
 
@@ -75,7 +75,7 @@ fn read_model(cur: Cur, name: Name) -> Result<Model> {
         materials: materials,
         meshes: meshes,
         objects: objects,
-        blend_matrices: blend_matrices,
+        inv_bind_matrices: inv_bind_matrices,
         render_cmds_cur: render_cmds_cur,
         up_scale: up_scale,
         down_scale: down_scale,
@@ -282,7 +282,7 @@ fn read_object(cur: Cur, name: Name) -> Result<Object> {
     })
 }
 
-fn read_blend_matrices(mut cur: Cur, count: usize) -> Result<Vec<BlendMatrixPair>> {
+fn read_inv_bind_matrices(mut cur: Cur, count: usize) -> Result<Vec<InvBindMatrixPair>> {
     let mut res = Vec::with_capacity(count);
     for _ in 0..count {
         let words = cur.next_n::<u32>(12 + 9)?; // one 4x3 matrix + one 3x3 matrix
@@ -300,7 +300,7 @@ fn read_blend_matrices(mut cur: Cur, count: usize) -> Result<Vec<BlendMatrixPair
             get(18), get(19), get(20),
         );
 
-        res.push(BlendMatrixPair(m0, m1));
+        res.push(InvBindMatrixPair(m0, m1));
     }
     Ok(res)
 }

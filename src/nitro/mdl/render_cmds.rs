@@ -8,7 +8,7 @@ pub trait Sink {
     fn store_matrix(&mut self, stack_pos: u8) -> Result<()>;
     /// cur_matrix = cur_matrix * object_matrices[object_id]
     fn mul_by_object(&mut self, object_id: u8) -> Result<()>;
-    /// cur_matrix = ∑_{t in terms} term.2 * matrix_stack[t.0] * blend_matrix[t.1]
+    /// cur_matrix = ∑_{t in terms} term.2 * matrix_stack[t.0] * inv_bind_matrices[t.1]
     fn blend(&mut self, terms: &[(u8, u8, f64)]) -> Result<()>;
     /// cur_matrix = cur_matrix * scale(model.up_scale)
     fn scale_up(&mut self) -> Result<()>;
@@ -96,9 +96,20 @@ impl RenderInterpreterState {
                     }
                 }
                 0x09 => {
-                    // The current matrix is set to the sum of
-                    //    weight * matrix_stack[stack_id] * blend_matrix[blend_id]
-                    // and stored to the given stack slot.
+                    // Blends multiple transforms and stores the result to a
+                    // stack location.
+                    //
+                    // The formula is
+                    //
+                    //   ∑ weight * matrix_stack[stack_id] * inv_bind_matrix[inv_bind_id]
+                    //
+                    // The inverse bind matrix should be the inverse of the value of
+                    // matrix_stack[stack_id] when the model is in the bind pose.
+                    // Vertices to which these blended matrices are applied are specified
+                    // in their bind pose world space position (unlike vertices which an
+                    // unblended matrix is applied to, which are specified in the local
+                    // space for that joint), and the inverse bind matrices are needed to
+                    // to transform into the local space that each stack entry acts on.
                     let stack_pos = params[0];
                     let num_terms = params[1] as usize;
 

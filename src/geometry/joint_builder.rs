@@ -8,37 +8,10 @@
 //!
 //! --------
 //!
-//! In brief, in COLLADA, we have a tree of "joints". Each joint is
-//! associated with a matrix that transform from its local space to
-//! its parent's space. The local-to-world transform for the joint
-//! is the concatenation of its matrix with all of its ancestors' up
-//! to the root. Each vertex in the model is then transformed by a
-//! weighted combination of the joints.
-//!
-//!        A        For example, in this tree, a vertex which was
-//!       / \       skinned by E with weight 0.2 and by B with
-//!      B   C      weight 0.8 would be transformed into world space
-//!         / \     by 0.2 A * C * E + 0.8 B * A.
-//!        D   E
-//!
-//! On the DS, each vertex is transformed into world space by the current
-//! matrix on the GPU. The render commands in an MDL allow different
-//! matrices to be loaded into GOU stack slots. The commands are such
-//! that the general form of a matrix that they can create is
-//! Σ (scalar) * (pure matrix), where a "pure matrix" is a composition
-//! of object matrices and blend matrices.
-//!
-//! Comparing these, what we have to do is obvious. We'll make the joint
-//! tree out of the pure matrices--a product (obj1)*(obj2)*(blend1) will
-//! just become a set of ancestors (obj1)->(obj2)->(blend1)--and the
-//! scalars will become the vertex weights.
-//!
-//! We interpret the render commands, but using symbolic algebra instead
-//! of computing numerically, so a GPU matrix will be a symbolic expression
-//! for the weighted sum of pure matrices. The pure matrices are represented
-//! as indices into the joint tree that we are building up as we execute the
-//! commands.
+//! TODO: rewrite documentation after the blend matrix -> inv bind matrix
+//! transition.
 
+use cgmath::ApproxEq;
 use cgmath::Matrix4;
 use cgmath::One;
 use cgmath::SquareMatrix;
@@ -48,8 +21,7 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::graph::NodeIndex;
 use util::first_if_only::first_if_only;
 
-/// Tree of joints. Each joint represents a "meaningful" matrix. The
-/// local-to-world transform of a node is the
+/// Tree of joints.
 ///
 /// The convention for edges is that they run _from_ the parent
 /// _to_ the child.
@@ -72,11 +44,8 @@ pub enum Transform {
     /// A dummy root. We insert this to ensure the graph is a tree and not
     /// just a forest.
     Root,
-    /// The objects matrix with the given index. We're computing the bind pose,
-    /// so the value of these is what is given in the MDL file.
+    /// The object matrix with the given id.
     Object(u8),
-    /// The blend matrix in the MDL file with the given index.
-    Blend(u8),
     /// An unassigned stack slot. We treat it as having the identity as its
     /// value. If this shows up, there's probably a bug.
     UnknownStackSlot(u8),
@@ -200,22 +169,51 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
     }
 
     pub fn blend(&mut self, blend_terms: &[(u8, u8, f64)]) {
-        // Set the current matrix to Σ (weight * stack_matrix * blend_matrix).
+        // Set the current matrix to Σ (weight * stack_matrix * inv_bind_matrix).
 
-        // First, distribute the sum over the linear combination for each
-        // stack matrix.
+        // First, check that each stack matrix is a pure matrix (otherwise, it
+        // can't have an inverse bind matrix), and if it is, check that the
+        // inverse bind we computed is close to the one stored in the model.
+        for &(stack_id, inv_bind_id, _weight) in blend_terms {
+            let stack_matrix = self.get_from_stack(stack_id);
+            if stack_matrix.terms.len() != 1 {
+                warn!(
+                    "a blended matrix was blended again; this will be ignored\
+                     but there will likely by errors in the model's skeleton"
+                );
+            } else {
+                let our_inv_bind = self.data.tree[stack_matrix.terms[0].joint_id].inv_bind_matrix;
+                let stored_inv_bind = self.model.inv_bind_matrices[inv_bind_id as usize].0;
+                let close_enough = our_inv_bind.relative_eq(
+                    &stored_inv_bind,
+                    0.005, // fairly generous epsilon
+                    <Matrix4<f64> as ApproxEq>::default_max_relative(),
+                );
+                if !close_enough {
+                    warn!(
+                        "an inverse bind matrix stored in the model file differed\
+                        significantly from the inverse bind computed while building\
+                        the joint tree; this will be ignored but there will likely\
+                        be errors in the model's skeleton"
+                    );
+                }
+
+            }
+        }
+
+        // Ok, now assuming the inverse bind matrices are correct, we can
+        // just compute Σ (weight * stack_matrix)
+        // Distribute over the sum, then group like terms.
         let terms = blend_terms.iter()
-            .flat_map(|&(stack_id, blend_id, weight)| {
-                let stack_matrix = self.get_from_stack(stack_id);
-                let mut res = self.mul_comb(stack_matrix, Transform::Blend(blend_id));
-                res.mul_scalar_in_place(weight);
-                res.terms
+            .flat_map(|&(stack_id, _inv_bind_id, weight)| {
+                let mut m = self.get_from_stack(stack_id);
+                m.mul_scalar_in_place(weight);
+                m.terms
             })
             .collect::<Vec<_>>();
         let mut distributed = SymbolicMatrix { terms: terms };
-
-        // Now, group like terms.
         distributed.group_like_terms_in_place();
+
         self.cur_matrix = distributed;
     }
 
@@ -229,9 +227,9 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
     }
 
     /// Premultiplies a symbolic matrix by the given transform.
-    fn mul_comb(&mut self, v: SymbolicMatrix, xform: Transform) -> SymbolicMatrix {
-        // v * xform = (Σ weight * node) * xform = Σ weight * (node * xform)
-        let terms = v.terms.iter()
+    fn mul_comb(&mut self, m: SymbolicMatrix, xform: Transform) -> SymbolicMatrix {
+        // m * xform = (Σ weight * node) * xform = Σ weight * (node * xform)
+        let terms = m.terms.iter()
             .map(|&SymbolicTerm { weight, joint_id }| {
                 SymbolicTerm {
                     weight: weight,
@@ -295,13 +293,12 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
         match transform {
             Transform::Root => Matrix4::one(),
             Transform::Object(id) => self.model.objects[id as usize].xform,
-            Transform::Blend(id) => self.model.blend_matrices[id as usize].0,
             Transform::UnknownStackSlot(_) => Matrix4::one(),
         }
     }
 }
 
-/// Pass to clean up the joint data, making it a little nicer for human users.
+/// Pass to clean up the joint data, making it a little nicer for humans.
 fn cleanup(mut data: JointData) -> JointData {
     // If the dummy root was inserted has a single child, delete the
     // dummy and make its child the new root.
