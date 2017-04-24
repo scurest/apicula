@@ -24,6 +24,7 @@ use geometry::index_builder::IndexBuilder;
 use geometry::joint_builder::JointBuilder;
 use geometry::joint_builder::JointData;
 use nitro::gpu_cmds;
+use nitro::mdl::InvBindMatrixPair;
 use nitro::mdl::Model;
 use nitro::mdl::render_cmds;
 use std::default::Default;
@@ -231,10 +232,11 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
 
         let mut mat = Matrix4::zero();
         for term in terms {
-            mat +=
-                term.2 *
-                self.gpu.matrix_stack[term.0 as usize] *
-                self.model.inv_bind_matrices[term.1 as usize].0;
+            let weight = term.2;
+            let stack_matrix = self.gpu.matrix_stack[term.0 as usize];
+            let inv_bind_matrix = self.model.inv_bind_matrices_cur
+                .nth::<InvBindMatrixPair>(term.1 as usize)?.0;
+            mat += weight * stack_matrix * inv_bind_matrix;
         }
         self.gpu.cur_matrix = mat;
 

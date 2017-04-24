@@ -15,10 +15,11 @@ use cgmath::ApproxEq;
 use cgmath::Matrix4;
 use cgmath::One;
 use cgmath::SquareMatrix;
+use nitro::mdl::InvBindMatrixPair;
 use nitro::mdl::Model;
 use petgraph::Direction;
-use petgraph::stable_graph::StableGraph;
 use petgraph::graph::NodeIndex;
+use petgraph::stable_graph::StableGraph;
 use util::first_if_only::first_if_only;
 
 /// Tree of joints.
@@ -183,7 +184,9 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
                 );
             } else {
                 let our_inv_bind = self.data.tree[stack_matrix.terms[0].joint_id].inv_bind_matrix;
-                let stored_inv_bind = self.model.inv_bind_matrices[inv_bind_id as usize].0;
+                let stored_inv_bind = self.model.inv_bind_matrices_cur
+                    .nth::<InvBindMatrixPair>(inv_bind_id as usize).unwrap() // TODO...
+                    .0;
                 let close_enough = our_inv_bind.relative_eq(
                     &stored_inv_bind,
                     0.005, // fairly generous epsilon

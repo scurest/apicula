@@ -4,7 +4,6 @@ use cgmath::One;
 use cgmath::vec3;
 use errors::Result;
 use nitro::info_block;
-use nitro::mdl::InvBindMatrixPair;
 use nitro::mdl::Material;
 use nitro::mdl::Mdl;
 use nitro::mdl::Mesh;
@@ -15,7 +14,6 @@ use nitro::rotation::pivot_mat;
 use nitro::tex::TextureParameters;
 use util::bits::BitField;
 use util::cur::Cur;
-use util::fixed::fix32;
 
 pub fn read_mdl(cur: Cur) -> Result<Mdl> {
     fields!(cur, MDL0 {
@@ -65,17 +63,14 @@ fn read_model(cur: Cur, name: Name) -> Result<Model> {
     let objects = read_objects(end)?;
     let materials = read_materials((cur + materials_off as usize)?)?;
     let meshes = read_meshes((cur + mesh_off as usize)?)?;
-    let inv_bind_matrices = read_inv_bind_matrices(
-        (cur + inv_bind_matrices_off as usize)?,
-        num_objects as usize
-    )?;
+    let inv_bind_matrices_cur = (cur + inv_bind_matrices_off as usize)?;
 
     Ok(Model {
         name: name,
         materials: materials,
         meshes: meshes,
         objects: objects,
-        inv_bind_matrices: inv_bind_matrices,
+        inv_bind_matrices_cur: inv_bind_matrices_cur,
         render_cmds_cur: render_cmds_cur,
         up_scale: up_scale,
         down_scale: down_scale,
@@ -280,27 +275,4 @@ fn read_object(cur: Cur, name: Name) -> Result<Object> {
         name: name,
         xform: xform,
     })
-}
-
-fn read_inv_bind_matrices(mut cur: Cur, count: usize) -> Result<Vec<InvBindMatrixPair>> {
-    let mut res = Vec::with_capacity(count);
-    for _ in 0..count {
-        let words = cur.next_n::<u32>(12 + 9)?; // one 4x3 matrix + one 3x3 matrix
-        let get = |i| fix32(words.get(i), 1, 19, 12);
-
-        let m0 = Matrix4::new(
-            get(0), get(1), get(2), 0.0,
-            get(3), get(4), get(5), 0.0,
-            get(6), get(7), get(8), 0.0,
-            get(9), get(10), get(11), 1.0,
-        );
-        let m1 = Matrix3::new(
-            get(12), get(13), get(14),
-            get(15), get(16), get(17),
-            get(18), get(19), get(20),
-        );
-
-        res.push(InvBindMatrixPair(m0, m1));
-    }
-    Ok(res)
 }

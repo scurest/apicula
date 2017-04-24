@@ -40,6 +40,8 @@ use cgmath::Matrix4;
 use nitro::name::Name;
 use nitro::tex::TextureParameters;
 use util::cur::Cur;
+use util::fixed::fix32;
+use util::view::Viewable;
 
 pub use self::read::read_mdl;
 
@@ -54,7 +56,7 @@ pub struct Model<'a> {
     pub materials: Vec<Material>,
     pub meshes: Vec<Mesh<'a>>,
     pub objects: Vec<Object>,
-    pub inv_bind_matrices: Vec<InvBindMatrixPair>,
+    pub inv_bind_matrices_cur: Cur<'a>,
     pub render_cmds_cur: Cur<'a>,
     pub up_scale: f64,
     pub down_scale: f64,
@@ -88,3 +90,31 @@ pub struct Object {
 /// details. I don't know what the second is for (normals??).
 #[derive(Debug, Clone)]
 pub struct InvBindMatrixPair(pub Matrix4<f64>, pub Matrix3<f64>);
+
+impl Viewable for InvBindMatrixPair {
+    fn size() -> usize {
+        // One 4 x 3 = 12 matrix and one 3 x 3 = 9 matrix
+        // Each entry is 4 bytes (for a 1,19,12-format fixed point number)
+        (12 + 9) * 4
+    }
+
+    fn view(buf: &[u8]) -> InvBindMatrixPair {
+        let mut cur = Cur::new(buf);
+        let entries = cur.next_n::<u32>(12 + 9).unwrap();
+        let get = |i| fix32(entries.get(i), 1, 19, 12);
+
+        let m0 = Matrix4::new(
+            get(0), get(1), get(2), 0.0,
+            get(3), get(4), get(5), 0.0,
+            get(6), get(7), get(8), 0.0,
+            get(9), get(10), get(11), 1.0,
+        );
+        let m1 = Matrix3::new(
+            get(12), get(13), get(14),
+            get(15), get(16), get(17),
+            get(18), get(19), get(20),
+        );
+
+        InvBindMatrixPair(m0, m1)
+    }
+}
