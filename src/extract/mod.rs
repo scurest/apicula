@@ -4,6 +4,8 @@ use nitro::bca::Bca;
 use nitro::bca::read_bca;
 use nitro::bmd::Bmd;
 use nitro::bmd::read_bmd;
+use nitro::btx::Btx;
+use nitro::btx::read_btx;
 use nitro::name::IdFmt;
 use regex::bytes::Regex;
 use std::fs;
@@ -25,13 +27,15 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     fs::create_dir(&out_dir)?;
 
     let mut file_namer = UniqueNamer::new();
+
     let mut num_bmds = 0;
+    let mut num_btxs = 0;
     let mut num_bcas = 0;
 
-    // Search for four bytes that match the stamp of a BMD or BCA file.
-    // Then try to parse a file from that point. If we succeed, write
+    // Search for four bytes that match the stamp of a BMD, BTX, or BCA
+    // file. Then try to parse a file from that point. If we succeed, write
     // the bytes for that file to a new file in the output directory.
-    let regex = Regex::new("(BMD0)|(BCA0)").unwrap();
+    let regex = Regex::new("(BMD0)|(BTX0)|(BCA0)").unwrap();
     let mut cur_slice = &bytes[..];
     while let Some(found) = regex.find(cur_slice) {
         let res = read_nitro_container(&cur_slice[found.start()..]);
@@ -49,6 +53,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
                     Ok(()) => {
                         match cont {
                             NitroContainer::Bmd(_) => num_bmds += 1,
+                            NitroContainer::Btx(_) => num_btxs += 1,
                             NitroContainer::Bca(_) => num_bcas += 1,
                         }
                     }
@@ -73,6 +78,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     let suf = |x| if x != 1 { "s" } else { "" };
     println!("Found {} BMD{}.", num_bmds, suf(num_bmds));
+    println!("Found {} BTX{}.", num_btxs, suf(num_btxs)); // er, maybes BTXes?
     println!("Found {} BCA{}.", num_bcas, suf(num_bcas));
 
     Ok(())
@@ -80,6 +86,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
 enum NitroContainer<'a> {
     Bmd(Bmd<'a>),
+    Btx(Btx<'a>),
     Bca(Bca<'a>),
 }
 
@@ -87,6 +94,7 @@ impl<'a> NitroContainer<'a> {
     fn file_size(&self) -> u32 {
         match *self {
             NitroContainer::Bmd(ref bmd) => bmd.file_size,
+            NitroContainer::Btx(ref btx) => btx.file_size,
             NitroContainer::Bca(ref bca) => bca.file_size,
         }
     }
@@ -97,6 +105,7 @@ fn read_nitro_container(buf: &[u8]) -> Result<NitroContainer> {
     let stamp = cur.clone().next_n_u8s(4)?;
     match stamp {
         b"BMD0" => Ok(NitroContainer::Bmd(read_bmd(cur)?)),
+        b"BTX0" => Ok(NitroContainer::Btx(read_btx(cur)?)),
         b"BCA0" => Ok(NitroContainer::Bca(read_bca(cur)?)),
         _ => Err("not a container".into())
     }
@@ -118,6 +127,12 @@ fn guess_name(cont: &NitroContainer) -> String {
                 .map(|model| format!("{}", IdFmt(&model.name)))
                 .unwrap_or_else(|| "BMD".to_string())
         }
+        NitroContainer::Btx(ref btx) => {
+            btx.texs.get(0)
+                .and_then(|tex| tex.texinfo.get(0))
+                .map(|texinfo| format!("{}", IdFmt(&texinfo.name)))
+                .unwrap_or_else(|| "BTX".to_string())
+        }
         NitroContainer::Bca(ref bca) => {
             bca.jnts.get(0)
                 .and_then(|jnt| jnt.animations.get(0))
@@ -130,6 +145,7 @@ fn guess_name(cont: &NitroContainer) -> String {
 fn extension(cont: &NitroContainer) -> &'static str {
     match *cont {
         NitroContainer::Bmd(_) => "nsbmd",
+        NitroContainer::Btx(_) => "nsbtx",
         NitroContainer::Bca(_) => "nsbca",
     }
 }

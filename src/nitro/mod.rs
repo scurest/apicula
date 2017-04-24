@@ -17,6 +17,7 @@
 
 pub mod bca;
 pub mod bmd;
+pub mod btx;
 pub mod gpu_cmds;
 pub mod jnt;
 pub mod mdl;

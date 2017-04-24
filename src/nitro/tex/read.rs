@@ -27,7 +27,7 @@ pub fn read_tex(cur: Cur) -> Result<Tex> {
         palette_info_off: u32,
         palette_data_off: u32,
     });
-    check!(stamp == &b"TEX0"[..])?;
+    check!(stamp == b"TEX0")?;
 
     let texture_data_size = (texture_data_size_shr_3 as usize) << 3;
     let compressed_texture_data_size = (compressed_texture_data_size_shr_3 as usize) << 3;

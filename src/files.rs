@@ -11,6 +11,8 @@ use nitro::bca::Bca;
 use nitro::bca::read_bca;
 use nitro::bmd::Bmd;
 use nitro::bmd::read_bmd;
+use nitro::btx::Btx;
+use nitro::btx::read_btx;
 use nitro::jnt::Animation;
 use nitro::jnt::Jnt;
 use nitro::jnt::read_jnt;
@@ -60,9 +62,10 @@ pub struct FileHolder<'a> {
 
 enum File<'a> {
     Bmd(Bmd<'a>),
+    Btx(Btx<'a>),
+    Bca(Bca<'a>),
     Mdl(Mdl<'a>),
     Tex(Tex<'a>),
-    Bca(Bca<'a>),
     Jnt(Jnt<'a>),
 }
 
@@ -71,9 +74,10 @@ fn read_file(buf: &[u8]) -> Result<File> {
     let stamp = cur.clone().next_n_u8s(4)?;
     match stamp {
         b"BMD0" => Ok(File::Bmd(read_bmd(cur)?)),
+        b"BTX0" => Ok(File::Btx(read_btx(cur)?)),
+        b"BCA0" => Ok(File::Bca(read_bca(cur)?)),
         b"MDL0" => Ok(File::Mdl(read_mdl(cur)?)),
         b"TEX0" => Ok(File::Tex(read_tex(cur)?)),
-        b"BCA0" => Ok(File::Bca(read_bca(cur)?)),
         b"JNT0" => Ok(File::Jnt(read_jnt(cur)?)),
         _ => Err("unknown file type".into())
     }
@@ -110,6 +114,11 @@ impl<'a> FileHolder<'a> {
                     self.add_file(File::Mdl(mdl));
                 }
                 for tex in bmd.texs {
+                    self.add_file(File::Tex(tex));
+                }
+            }
+            File::Btx(btx) => {
+                for tex in btx.texs {
                     self.add_file(File::Tex(tex));
                 }
             }

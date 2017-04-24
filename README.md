@@ -7,9 +7,9 @@ A program to convert Nintendo DS models and animations to COLLADA.
 
 ![Enemy walk-cycle from Ore ga Omae o Mamoru, imported into Blender](http://scurest.github.io/apicula/e07BWalk.gif)
 
-Many NDS games used Nintendo's Nitro SDK format for models (NSBMD) and animations (NSBCA).
-This program allow you to view these files and convert them to COLLADA `.dae` files for
-importing into DCC programs, like Blender.
+Many NDS games used Nintendo's Nitro SDK format for models (NSBMD), textures (NSBTX), and
+animations (NSBCA). This program allow you to view these files and convert them to COLLADA
+`.dae` files for importing into DCC programs, like Blender.
 
 ## Downloads
 
@@ -80,16 +80,20 @@ If you can test in others (Maya, 3DS Max), that would be appreciated :)
 
     For models and documentation for Nitro formats. All NDS model viewers seem to be derived
     from here. Now defunct :(
+
 * **Gericom and [MKDS Course Modifier](https://gbatemp.net/threads/mkds-course-modifier.299444/)**
 
     For animations, especially for the meaning of the basis rotations.
+
 * **Lowlines and [Console Tool](http://llref.emutalk.net/projects/ctool/)**
 
     For animations and documentation for Nitro formats. I also use Console Tool for extracting
     files from DS ROMs.
+
 * **[GBATEK](http://problemkaputt.de/gbatek.htm#ds3dvideo)**
 
     For DS hardware documentation.
+
 * **[deSmuME](http://desmume.org/)**
 
     For the DS debugger. `_3D_LOG_EXEC` and the GDB stub were invaluable.
