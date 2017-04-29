@@ -15,6 +15,7 @@ use nitro::name;
 use nitro::tex::texpal::TexPalPair;
 use petgraph::Direction;
 use petgraph::graph::NodeIndex;
+use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Write;
 use time;
@@ -75,13 +76,14 @@ fn write_library_images<W: Write>(
     write_lines!(w,
         r##"  <library_images>"##;
     )?;
-    for mat in &model.materials {
-        let res = TexPalPair::from_material(mat)
-            .map(|pair| image_namer.get_name(pair));
-        let name = match res {
-            Some(name) => name,
-            None => continue,
-        };
+
+    let tex_pal_pairs = model.materials.iter()
+        .filter_map(|mat| TexPalPair::from_material(mat));
+    let image_names = tex_pal_pairs
+        .map(|p| image_namer.get_name(p).to_owned())
+        .collect::<HashSet<_>>();
+
+    for name in image_names {
         write_lines!(w,
             r##"    <image id="{name}">"##,
             r##"      <init_from>{name}.png</init_from>"##,
