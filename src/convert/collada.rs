@@ -85,7 +85,7 @@ fn write_library_images<W: Write>(
 
     for name in image_names {
         write_lines!(w,
-            r##"    <image id="{name}">"##,
+            r##"    <image id="image-{name}">"##,
             r##"      <init_from>{name}.png</init_from>"##,
             r##"    </image>"##;
             name = name,
@@ -145,7 +145,7 @@ fn write_library_effects<W: Write>(
             write_lines!(w,
                 r##"        <newparam sid="Image-surface">"##,
                 r##"          <surface type="2D">"##,
-                r##"            <init_from>{image_name}</init_from>"##,
+                r##"            <init_from>image-{image_name}</init_from>"##,
                 r##"            <format>A8R8G8B8</format>"##,
                 r##"          </surface>"##,
                 r##"        </newparam>"##,
