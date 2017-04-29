@@ -418,7 +418,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             r##"        <source id="controller{i}-weights">"##,
             r##"          <float_array id="controller{i}-weights-array" count="{num_weights}">{weights}</float_array>"##,
             r##"          <technique_common>"##,
-            r##"            <accessor source="#controller{i}-weights-array" count="1">"##,
+            r##"            <accessor source="#controller{i}-weights-array" count="{num_weights}">"##,
             r##"              <param name="WEIGHT" type="float"/>"##,
             r##"            </accessor>"##,
             r##"          </technique_common>"##,
