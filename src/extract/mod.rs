@@ -35,8 +35,14 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     // Search for four bytes that match the stamp of a BMD, BTX, or BCA
     // file. Then try to parse a file from that point. If we succeed, write
     // the bytes for that file to a new file in the output directory.
+
     let regex = Regex::new("(BMD0)|(BTX0)|(BCA0)").unwrap();
+
+    // The suffix of bytes that we have yet to search.
+    // Invariant: cur_slice = &bytes[cur_pos..]
     let mut cur_slice = &bytes[..];
+    let mut cur_pos = 0;
+
     while let Some(found) = regex.find(cur_slice) {
         let res = read_nitro_container(&cur_slice[found.start()..]);
         match res {
@@ -65,13 +71,20 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
                     }
                 }
 
+                cur_pos += file_end;
                 cur_slice = &cur_slice[file_end..];
             }
-            Err(_) => {
+            Err(e) => {
                 // There was an error parsing the Nitro file:
                 // assume that means the four character matched
                 // spuriously, skip them, and go on.
+                cur_pos += found.start() + 4;
                 cur_slice = &cur_slice[found.start() + 4..];
+
+                debug!("tried to parse a file with stamp {:?} at offset {}, but failed: \
+                    the error was: {}",
+                    found.as_bytes(), cur_pos, e,
+                );
             },
         }
     }

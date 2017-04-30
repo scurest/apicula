@@ -125,7 +125,7 @@ fn read_trans<'a>(cur: &mut Cur<'a>, anim_cur: Cur<'a>, is_fixed: bool) -> Resul
         let params = cur.next::<u32>()?;
         let off = cur.next::<u32>()?;
 
-        let timing = timing_from_params(params);
+        let timing = timing_from_params(params)?;
 
         let data_width = params.bits(28,30);
         let data_len = data_len(&timing);
@@ -152,7 +152,7 @@ fn read_rotation<'a>(cur: &mut Cur<'a>, anim_cur: Cur<'a>, is_fixed: bool) -> Re
         let params = cur.next::<u32>()?;
         let off = cur.next::<u32>()?;
 
-        let timing = timing_from_params(params);
+        let timing = timing_from_params(params)?;
 
         let data_len = data_len(&timing);
         let data = (anim_cur + off as usize)?.next_n::<u16>(data_len)?;
@@ -173,7 +173,7 @@ fn read_scaling<'a>(cur: &mut Cur<'a>, anim_cur: Cur<'a>, is_fixed: bool) -> Res
         let params = cur.next::<u32>()?;
         let off = cur.next::<u32>()?;
 
-        let timing = timing_from_params(params);
+        let timing = timing_from_params(params)?;
 
         let data_width = params.bits(28,30);
         let data_len = data_len(&timing);
@@ -191,15 +191,19 @@ fn read_scaling<'a>(cur: &mut Cur<'a>, anim_cur: Cur<'a>, is_fixed: bool) -> Res
     Ok(res)
 }
 
-fn timing_from_params(params: u32) -> Timing {
+fn timing_from_params(params: u32) -> Result<Timing> {
     let start_frame = params.bits(0,16) as u16;
     let end_frame = params.bits(16,28) as u16;
     let speed = params.bits(30,32) as u8;
-    Timing {
+
+    check!(start_frame <= end_frame)?; // TODO: can we use < here?
+    check!(speed <= 16)?; // 16 is extremely generous; 3-4 is more likely
+
+    Ok(Timing {
         start_frame: start_frame,
         end_frame: end_frame,
         speed: speed,
-    }
+    })
 }
 
 /// Number of data for a varying component.
