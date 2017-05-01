@@ -20,6 +20,7 @@ mod errors;
 #[macro_use]
 mod util;
 mod convert;
+mod decompress;
 mod extract;
 mod files;
 mod geometry;
