@@ -7,6 +7,7 @@ use errors::Result;
 use files::FileHolder;
 use glium;
 use glium::Surface;
+use std::default::Default;
 use std::fmt::Write;
 use time;
 use viewer::draw::DrawingData;
@@ -15,11 +16,9 @@ use viewer::fps::FpsTracker;
 use viewer::gl_context::GlContext;
 use viewer::mouse::GrabState;
 use viewer::mouse::MouseState;
+use viewer::speed::SpeedLevel;
 use viewer::state::Dir;
 use viewer::state::ViewState;
-
-const SLOW_MOVE_SPEED: f32 = 1.0;
-const FAST_MOVE_SPEED: f32 = 10.0;
 
 pub struct Ui<'a, 'b: 'a, 'c> {
     fh: &'a FileHolder<'b>,
@@ -32,7 +31,7 @@ pub struct Ui<'a, 'b: 'a, 'c> {
     mouse: MouseState,
     fps_tracker: FpsTracker,
     move_dir: Vector3<f32>,
-    move_speed: f32,
+    move_speed: SpeedLevel,
 }
 
 type KeyEvent = (glium::glutin::ElementState, glium::glutin::VirtualKeyCode);
@@ -63,7 +62,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
         let mouse = MouseState::new();
         let fps_tracker = FpsTracker::new();
         let move_dir = vec3(0.0, 0.0, 0.0);
-        let move_speed = SLOW_MOVE_SPEED;
+        let move_speed = Default::default();
 
         Ok(Ui {
             fh: fh,
@@ -130,7 +129,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
             // Move the camera
             let mag = self.move_dir.magnitude();
             if mag != 0.0 {
-                let vel = self.move_speed * (self.move_dir / mag);
+                let vel = self.move_speed.speed() * (self.move_dir / mag);
                 self.view_state.eye.move_by(dt * vel);
             }
         }
@@ -156,8 +155,8 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
             (Es::Released, K::E) => self.move_dir.z = 0.0,
 
             // Change speed
-            (Es::Pressed, K::LShift) => self.move_speed = FAST_MOVE_SPEED,
-            (Es::Released, K::LShift) => self.move_speed = SLOW_MOVE_SPEED,
+            (Es::Pressed, K::LShift) => self.move_speed.speed_up(),
+            (Es::Pressed, K::LControl) => self.move_speed.speed_down(),
 
             // Change model
             (Es::Pressed, K::Comma) =>
@@ -236,7 +235,6 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
         let _ = window.set_cursor_state(glium::glutin::CursorState::Normal);
         self.mouse.grabbed = GrabState::NotGrabbed;
         self.move_dir = vec3(0.0, 0.0, 0.0);
-        self.move_speed = SLOW_MOVE_SPEED;
     }
 
     fn draw_frame(&mut self) {
@@ -315,7 +313,8 @@ fn print_controls() {
         "Controls\n",
         "  WASD         Forward/Left/Back/Right\n",
         "  EQ           Up/Down\n",
-        "  Left Shift   Move Faster\n",
+        "  L.Shift      Increase Speed\n",
+        "  R.Ctrl       Decrease Speed\n",
         "  Left Mouse   Free Look\n",
         "  OP           Prev/Next Animation\n",
         "  ,.           Prev/Next Model\n",

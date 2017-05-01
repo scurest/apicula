@@ -3,6 +3,7 @@ mod eye;
 mod fps;
 mod gl_context;
 mod mouse;
+mod speed;
 mod state;
 mod ui;
 
