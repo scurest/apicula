@@ -1,7 +1,7 @@
 //! Extract recognized container files from ROMs or other packed files.
 
 use clap::ArgMatches;
-use decompress::de_lz77;
+use decompress::try_decompress;
 use errors::Result;
 use errors::ResultExt;
 use nitro::bca::Bca;
@@ -43,14 +43,11 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     let regex = Regex::new("(BMD0)|(BTX0)|(BCA0)").unwrap();
 
-    // Position in `input` to begin searching
-    // TODO: use a Cur here
-    let mut cur_pos = 0;
+    let mut cur = Cur::new(&input[..]);
 
-    while let Some(found) = regex.find(&input[cur_pos..]) {
-        let match_pos = cur_pos + found.start();
-        let new_pos = extractor.try_proc_file_at(&input, match_pos);
-        cur_pos = new_pos;
+    while let Some(found) = regex.find(cur.slice_from_cur_to_end()) {
+        cur.jump_forward(found.start()).unwrap();
+        extractor.try_proc_file_at(&mut cur);
     }
 
     extractor.print_report();
@@ -92,61 +89,49 @@ impl Extractor {
         println!("Found {} BCA{}.", self.num_bcas, suf(self.num_bcas));
     }
 
-    /// If we have a Nitro container stamp at `pos` in `input`, look for a
-    /// Nitro file there (either raw or compressed) and if found, write it
-    /// to the save directory.
+    /// Assuming a Nitro stamp is found at `cur`, try to detect a container
+    /// file there (either raw or compressed) and if successful, write the
+    /// bytes to a file in the output directory.
     ///
-    /// Returns the position in `input` to resume searching from.
-    fn try_proc_file_at(&mut self, input: &[u8], pos: usize) -> usize {
-        let res = NitroContainer::read(&input[pos..]);
+    /// Afterwards, `cur` is positioned where you should resume searching (ie.
+    /// after the container file if found, or else after the stamp if not.)
+    fn try_proc_file_at(&mut self, cur: &mut Cur) {
+        let res = NitroContainer::read(cur.slice_from_cur_to_end());
         match res {
             Ok(cont) => {
-                let file_end = pos + cont.file_size() as usize;
-                let file_slice = &input[pos .. file_end];
-
-                self.save_file(file_slice, &cont);
-
-                file_end
+                let file_bytes = cur.next_n_u8s(cont.file_size() as usize).unwrap();
+                self.save_file(file_bytes, &cont);
             }
             Err(_) => {
-                self.try_proc_compressed_file_at(input, pos)
+                self.try_proc_compressed_file_at(cur)
             }
         }
     }
 
-    /// If we have a Nitro container stamp at `pos` in `input`, assume that the
-    /// stamp is the first data in a compressed stream and try to decompress it.
-    /// If successful, write the decompressed data to the save directory.
+    /// Try decompressing data near `cur` and then attempt to parse a
+    /// Nitro container from the decompressed data. If successful, write
+    /// the decompressed data to a file in the save directory.
     ///
-    /// Returns the position in `input` to resume searching from.
-    fn try_proc_compressed_file_at(&mut self, input: &[u8], pos: usize) -> usize {
-        let failed = || {
-            debug!("found stamp {:?} at offset {}, but failed to parse a Nitro file there",
-                &input[pos..pos+4], pos,
-            );
-            pos + 4
-        };
-
-        if pos < 5 {
-            return failed();
-        }
-        let res = de_lz77(&input[pos - 5..]);
+    /// Afterwards, `cur` is positioned where you should resume searching (ie.
+    /// after the compressed stream if found, or else after the stamp if not.)
+    fn try_proc_compressed_file_at(&mut self, cur: &mut Cur) {
+        let res = try_decompress(*cur);
         match res {
-            Ok(lz77_res) => {
-                let buf = &lz77_res.data[..];
+            Ok(dec_res) => {
+                let buf = &dec_res.data[..];
                 let res = NitroContainer::read(buf);
                 match res {
                     Ok(cont) => {
                         self.save_file(buf, &cont);
-                        pos + lz77_res.end_pos
+                        *cur = dec_res.end_cur;
                     }
                     Err(_) => {
-                        failed()
+                        cur.jump_forward(4).unwrap();
                     }
                 }
             }
             Err(_) => {
-                failed()
+                cur.jump_forward(4).unwrap();
             }
         }
     }

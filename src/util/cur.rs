@@ -43,6 +43,10 @@ impl<'a> Cur<'a> {
         Ok(res)
     }
 
+    pub fn slice_from_cur_to_end(&self) -> &'a [u8] {
+        &self.buf_[self.pos_ ..]
+    }
+
     pub fn jump_forward(&mut self, amt: usize) -> Result<()> {
         let pos = self.pos_;
         self.jump_to(pos + amt)?;
