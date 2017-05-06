@@ -10,14 +10,9 @@
 //! * TEX - textures and palettes for models
 //! * JNT - skinned vertex animations for models
 //!
-//! plus two containers
-//!
-//! * BMD - container for MDL and TEX
-//! * BCA - container for JNT
+//! A container file (eg. NSBMD) holds one or more of these.
 
-pub mod bca;
-pub mod bmd;
-pub mod btx;
+pub mod container;
 pub mod gpu_cmds;
 pub mod jnt;
 pub mod mdl;

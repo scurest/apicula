@@ -7,19 +7,10 @@
 //! the program.
 
 use errors::Result;
-use nitro::bca::Bca;
-use nitro::bca::read_bca;
-use nitro::bmd::Bmd;
-use nitro::bmd::read_bmd;
-use nitro::btx::Btx;
-use nitro::btx::read_btx;
+use nitro::container::DataFile;
+use nitro::container::Container;
 use nitro::jnt::Animation;
-use nitro::jnt::Jnt;
-use nitro::jnt::read_jnt;
-use nitro::mdl::Mdl;
 use nitro::mdl::Model;
-use nitro::mdl::read_mdl;
-use nitro::tex::read_tex;
 use nitro::tex::Tex;
 use std::fs;
 use std::io::Read;
@@ -61,25 +52,17 @@ pub struct FileHolder<'a> {
 }
 
 enum File<'a> {
-    Bmd(Bmd<'a>),
-    Btx(Btx<'a>),
-    Bca(Bca<'a>),
-    Mdl(Mdl<'a>),
-    Tex(Tex<'a>),
-    Jnt(Jnt<'a>),
+    Container(Container<'a>),
+    DataFile(DataFile<'a>),
 }
 
 fn read_file(buf: &[u8]) -> Result<File> {
     let cur = Cur::new(buf);
     let stamp = cur.clone().next_n_u8s(4)?;
     match stamp {
-        b"BMD0" => Ok(File::Bmd(read_bmd(cur)?)),
-        b"BTX0" => Ok(File::Btx(read_btx(cur)?)),
-        b"BCA0" => Ok(File::Bca(read_bca(cur)?)),
-        b"MDL0" => Ok(File::Mdl(read_mdl(cur)?)),
-        b"TEX0" => Ok(File::Tex(read_tex(cur)?)),
-        b"JNT0" => Ok(File::Jnt(read_jnt(cur)?)),
-        _ => Err("unknown file type".into())
+        b"BMD0" | b"BTX0" | b"BCA0" => Ok(File::Container(Container::read(cur)?)),
+        b"MDL0" | b"TEX0" | b"JNT0" => Ok(File::DataFile(DataFile::read(cur)?)),
+        _ => bail!("unknown file type"),
     }
 }
 
@@ -106,25 +89,18 @@ impl<'a> FileHolder<'a> {
 
     fn add_file(&mut self, file: File<'a>) {
         match file {
-            File::Mdl(mut mdl) => self.models.append(&mut mdl.models),
-            File::Jnt(mut jnt) => self.animations.append(&mut jnt.animations),
-            File::Tex(tex) => self.texs.push(tex),
-            File::Bmd(bmd) => {
-                for mdl in bmd.mdls {
-                    self.add_file(File::Mdl(mdl));
-                }
-                for tex in bmd.texs {
-                    self.add_file(File::Tex(tex));
+            File::DataFile(data_file) => {
+                match data_file {
+                    DataFile::Mdl(mut mdl) => self.models.append(&mut mdl.models),
+                    DataFile::Tex(tex) => self.texs.push(tex),
+                    DataFile::Jnt(mut jnt) => self.animations.append(&mut jnt.animations),
                 }
             }
-            File::Btx(btx) => {
-                for tex in btx.texs {
-                    self.add_file(File::Tex(tex));
-                }
-            }
-            File::Bca(bca) => {
-                for jnt in bca.jnts {
-                    self.add_file(File::Jnt(jnt));
+            File::Container(cont) => {
+                let valid_data_files = cont.data_files.into_iter()
+                    .filter_map(|res| res.ok());
+                for data_file in valid_data_files {
+                    self.add_file(File::DataFile(data_file));
                 }
             }
         }

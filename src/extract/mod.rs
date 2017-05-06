@@ -4,12 +4,8 @@ use clap::ArgMatches;
 use decompress::try_decompress;
 use errors::Result;
 use errors::ResultExt;
-use nitro::bca::Bca;
-use nitro::bca::read_bca;
-use nitro::bmd::Bmd;
-use nitro::bmd::read_bmd;
-use nitro::btx::Btx;
-use nitro::btx::read_btx;
+use nitro::container::Container;
+use nitro::container::DataFile;
 use nitro::name::IdFmt;
 use regex::bytes::Regex;
 use std::fs;
@@ -96,10 +92,10 @@ impl Extractor {
     /// Afterwards, `cur` is positioned where you should resume searching (ie.
     /// after the container file if found, or else after the stamp if not.)
     fn try_proc_file_at(&mut self, cur: &mut Cur) {
-        let res = NitroContainer::read(cur.slice_from_cur_to_end());
+        let res = Container::read(*cur);
         match res {
             Ok(cont) => {
-                let file_bytes = cur.next_n_u8s(cont.file_size() as usize).unwrap();
+                let file_bytes = cur.next_n_u8s(cont.file_size as usize).unwrap();
                 self.save_file(file_bytes, &cont);
             }
             Err(_) => {
@@ -119,7 +115,7 @@ impl Extractor {
         match res {
             Ok(dec_res) => {
                 let buf = &dec_res.data[..];
-                let res = NitroContainer::read(buf);
+                let res = Container::read(Cur::new(buf));
                 match res {
                     Ok(cont) => {
                         self.save_file(buf, &cont);
@@ -138,12 +134,13 @@ impl Extractor {
 
     /// Given the slice `bytes` that successfully parsed as the Nitro container
     /// `container`, save the slice to a file in the save directory.
-    fn save_file(&mut self, bytes: &[u8], container: &NitroContainer) {
-        let file_name = self.file_namer.get_name(container.guess_name());
-        let file_extension = match *container {
-            NitroContainer::Bmd(_) => "nsbmd",
-            NitroContainer::Btx(_) => "nsbtx",
-            NitroContainer::Bca(_) => "nsbca",
+    fn save_file(&mut self, bytes: &[u8], container: &Container) {
+        let file_name = self.file_namer.get_name(guess_container_name(container));
+        let file_extension = match container.stamp {
+            b"BMD0" => "nsbmd",
+            b"BTX0" => "nsbtx",
+            b"BCA0" => "nsbca",
+            _ => "nsbxx",
         };
         let save_path = self.save_directory
             .join(&format!("{}.{}", file_name, file_extension));
@@ -153,10 +150,11 @@ impl Extractor {
             .and_then(|mut f| f.write_all(bytes));
         match res {
             Ok(()) => {
-                match *container {
-                    NitroContainer::Bmd(_) => self.num_bmds += 1,
-                    NitroContainer::Btx(_) => self.num_btxs += 1,
-                    NitroContainer::Bca(_) => self.num_bcas += 1,
+                match container.stamp {
+                    b"BMD0" => self.num_bmds += 1,
+                    b"BTX0" => self.num_btxs += 1,
+                    b"BCA0" => self.num_bcas += 1,
+                    _ => (),
                 }
             }
             Err(e) => {
@@ -166,56 +164,33 @@ impl Extractor {
     }
 }
 
-enum NitroContainer<'a> {
-    Bmd(Bmd<'a>),
-    Btx(Btx<'a>),
-    Bca(Bca<'a>),
+/// Guess a name for the container `cont`, using the name of the first
+/// item it contains.
+fn guess_container_name(container: &Container) -> String {
+    // Used for when we fail to guess.
+    let generic_name = || {
+        match container.stamp {
+            b"BMD0" => "nitro_model_file",
+            b"BTX0" => "nitro_texture_file",
+            b"BCA0" => "nitro_animation_file",
+            _ => "unknown_nitro_file",
+        }.to_string()
+    };
+
+    container.data_files.iter()
+        .filter_map(|res| res.as_ref().ok())
+        .filter_map(guess_data_file_name)
+        .next()
+        .unwrap_or_else(generic_name)
 }
 
-impl<'a> NitroContainer<'a> {
-    fn read(buf: &'a[u8]) -> Result<NitroContainer<'a>> {
-        let cur = Cur::new(buf);
-        let stamp = cur.clone().next_n_u8s(4)?;
-        match stamp {
-            b"BMD0" => Ok(NitroContainer::Bmd(read_bmd(cur)?)),
-            b"BTX0" => Ok(NitroContainer::Btx(read_btx(cur)?)),
-            b"BCA0" => Ok(NitroContainer::Bca(read_bca(cur)?)),
-            _ => Err("not a container".into())
-        }
+fn guess_data_file_name(data_file: &DataFile) -> Option<String> {
+    match *data_file {
+        DataFile::Mdl(ref mdl) =>
+            mdl.models.get(0).map(|model| format!("{}", IdFmt(&model.name))),
+        DataFile::Tex(ref tex) =>
+            tex.texinfo.get(0).map(|texinfo| format!("{}", IdFmt(&texinfo.name))),
+        DataFile::Jnt(ref jnt) =>
+            jnt.animations.get(0).map(|anim| format!("{}", IdFmt(&anim.name))),
     }
-
-    fn file_size(&self) -> u32 {
-        match *self {
-            NitroContainer::Bmd(ref bmd) => bmd.file_size,
-            NitroContainer::Btx(ref btx) => btx.file_size,
-            NitroContainer::Bca(ref bca) => bca.file_size,
-        }
-    }
-
-
-    /// Guess a name for the container `cont`, using the name of the first
-    /// item it contains.
-    fn guess_name(&self) -> String {
-        match *self {
-            NitroContainer::Bmd(ref bmd) => {
-                bmd.mdls.get(0)
-                    .and_then(|mdl| mdl.models.get(0))
-                    .map(|model| format!("{}", IdFmt(&model.name)))
-                    .unwrap_or_else(|| "BMD".to_string())
-            }
-            NitroContainer::Btx(ref btx) => {
-                btx.texs.get(0)
-                    .and_then(|tex| tex.texinfo.get(0))
-                    .map(|texinfo| format!("{}", IdFmt(&texinfo.name)))
-                    .unwrap_or_else(|| "BTX".to_string())
-            }
-            NitroContainer::Bca(ref bca) => {
-                bca.jnts.get(0)
-                    .and_then(|jnt| jnt.animations.get(0))
-                    .map(|anim| format!("{}", IdFmt(&anim.name)))
-                    .unwrap_or_else(|| "BCA".to_string())
-            }
-        }
-    }
-
 }

@@ -23,7 +23,8 @@ pub fn read_jnt(cur: Cur) -> Result<Jnt> {
 
     let animations = info_block::read::<u32>(end)?
         .map(|(off, name)| read_animation((cur + off as usize)?, name))
-        .collect::<Result<_>>()?;
+        .filter_map(|res| res.ok())
+        .collect();
 
     Ok(Jnt {
         animations: animations,
