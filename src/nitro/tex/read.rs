@@ -47,22 +47,20 @@ pub fn read_tex(cur: Cur) -> Result<Tex> {
         .next_n_u8s(palette_data_size)?;
 
     Ok(Tex {
-        texinfo: texinfo,
-        palinfo: palinfo,
-        texture_data: texture_data,
-        compressed_texture_data: compressed_texture_data,
-        compressed_texture_extra_data: compressed_texture_extra_data,
-        palette_data: palette_data,
+        texinfo,
+        palinfo,
+        texture_data,
+        compressed_texture_data,
+        compressed_texture_extra_data,
+        palette_data,
     })
 }
 
 fn read_pal_info(cur: Cur) -> Result<Vec<PaletteInfo>> {
     Ok(info_block::read::<(u16, u16)>(cur)?
         .map(|((off_shr_3, _), name)| {
-            PaletteInfo {
-                name: name,
-                off: (off_shr_3 as usize) << 3,
-            }
+            let off = (off_shr_3 as usize) << 3;
+            PaletteInfo { name, off }
         })
         .collect()
     )
@@ -71,10 +69,8 @@ fn read_pal_info(cur: Cur) -> Result<Vec<PaletteInfo>> {
 fn read_tex_info(cur: Cur) -> Result<Vec<TextureInfo>> {
     Ok(info_block::read::<(u32, u32)>(cur)?
         .map(|((params, _), name)| {
-            TextureInfo {
-                name: name,
-                params: TextureParameters(params),
-            }
+            let params = TextureParameters(params);
+            TextureInfo { name, params }
         })
         .collect()
     )

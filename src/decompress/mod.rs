@@ -33,7 +33,7 @@ fn try_decompress_lz77(mut cur: Cur) -> Result<DecompressResult> {
     //
     // So back up by 5 and then decompress LZ77 data.
     if cur.pos() < 5 {
-        return Err("not enough space for LZ77 header".into())
+       bail!("not enough space for LZ77 header");
     }
     let pos = cur.pos();
     cur.jump_to(pos - 5).unwrap();

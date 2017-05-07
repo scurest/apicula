@@ -51,11 +51,7 @@ impl<'a> Container<'a> {
             .map(|off| DataFile::read((cur + off as usize)?))
             .collect();
 
-        Ok(Container {
-            stamp: stamp,
-            file_size: file_size,
-            data_files: data_files,
-        })
+        Ok(Container { stamp, file_size, data_files })
     }
 }
 

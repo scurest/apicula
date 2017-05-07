@@ -4,16 +4,22 @@ use util::cur::Cur;
 pub trait Sink {
     /// cur_matrix = matrix_stack[stack_pos]
     fn load_matrix(&mut self, stack_pos: u8) -> Result<()>;
+
     /// matrix_stack[stack_pos] = cur_matrix
     fn store_matrix(&mut self, stack_pos: u8) -> Result<()>;
+
     /// cur_matrix = cur_matrix * object_matrices[object_id]
     fn mul_by_object(&mut self, object_id: u8) -> Result<()>;
+
     /// cur_matrix = ∑_{t in terms} term.2 * matrix_stack[t.0] * inv_bind_matrices[t.1]
     fn blend(&mut self, terms: &[(u8, u8, f64)]) -> Result<()>;
+
     /// cur_matrix = cur_matrix * scale(model.up_scale)
     fn scale_up(&mut self) -> Result<()>;
+
     /// cur_matrix = cur_matrix * scale(model.down_scale)
     fn scale_down(&mut self) -> Result<()>;
+
     /// Draw meshes[mesh_id] using materials[material_id]
     fn draw(&mut self, mesh_id: u8, material_id: u8) -> Result<()>;
 }
@@ -170,7 +176,7 @@ fn cmd_size(opcode: u8, cur: Cur) -> Result<usize> {
         0x47 => 1,
         0x66 => 5,
         0x80 => 0,
-        _ => return Err(format!("unknown render command opcode: {:#x}", opcode).into()),
+        _ => bail!("unknown render command opcode: {:#x}", opcode),
     };
     Ok(len)
 }

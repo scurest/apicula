@@ -11,7 +11,7 @@ use util::fixed::fix16;
 
 pub fn pivot_mat(select: u16, neg: u16, a: f64, b: f64) -> Result<Matrix4<f64>> {
     if select > 9 {
-        return Err(format!("unknown pivot select: {}", select).into());
+        bail!("unknown pivot select: {}", select);
     }
 
     if select == 9 {

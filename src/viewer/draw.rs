@@ -55,8 +55,8 @@ impl DrawingData {
             build_textures(display, &model.materials[..], &fh.texs[..]);
 
         DrawingData {
-            obj_geom_data: obj_geom_data,
-            textures: textures,
+            obj_geom_data,
+            textures,
             view_state: view_state.clone(),
         }
     }
@@ -197,10 +197,10 @@ impl ObjectGeometryData {
         )?;
 
         Ok(ObjectGeometryData {
-            objects: objects,
-            geom: geom,
-            vertex_buffer: vertex_buffer,
-            index_buffer: index_buffer,
+            objects,
+            geom,
+            vertex_buffer,
+            index_buffer,
         })
     }
 }

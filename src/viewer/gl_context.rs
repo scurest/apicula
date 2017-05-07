@@ -12,12 +12,12 @@ pub struct GlContext {
 
 impl GlContext {
     pub fn new(display: glium::Display) -> Result<GlContext> {
-        let vertex_shader_src = include_str!("shaders/vert.glsl");
-        let fragment_shader_src = include_str!("shaders/frag.glsl");
+        let vertex_shader = include_str!("shaders/vert.glsl");
+        let fragment_shader = include_str!("shaders/frag.glsl");
         let program_args =
             glium::program::ProgramCreationInput::SourceCode {
-                vertex_shader: vertex_shader_src,
-                fragment_shader: fragment_shader_src,
+                vertex_shader,
+                fragment_shader,
                 geometry_shader: None,
                 tessellation_control_shader: None,
                 tessellation_evaluation_shader: None,
@@ -46,10 +46,10 @@ impl GlContext {
             glium::texture::Texture2d::new(&display, error_image).unwrap();
 
         Ok(GlContext {
-            display: display,
-            program: program,
-            default_texture: default_texture,
-            error_texture: error_texture,
+            display,
+            program,
+            default_texture,
+            error_texture,
         })
     }
 }

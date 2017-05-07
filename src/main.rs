@@ -39,14 +39,15 @@ pub static VERSION: &'static str = concat!(
 );
 
 fn main() {
-    let ret_code = main2();
-    std::process::exit(ret_code);
+    std::process::exit(main2());
 }
 
 fn main2() -> i32 {
     init_logger();
     match main3() {
-        Ok(()) => 0,
+        Ok(()) => {
+            0
+        }
         Err(e) => {
             error!("error: {:#?}", e);
             1

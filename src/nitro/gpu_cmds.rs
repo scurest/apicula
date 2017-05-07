@@ -198,7 +198,7 @@ fn cmd_size(opcode: u8) -> Result<usize> {
     ];
     let opcode = opcode as usize;
     if opcode >= SIZES.len() || SIZES[opcode] == -1 {
-        return Err(format!("unknown geometry opcode: {:#x}", opcode).into());
+       bail!("unknown geometry opcode: {:#x}", opcode);
     }
     Ok(SIZES[opcode] as usize)
 }

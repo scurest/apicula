@@ -31,12 +31,12 @@ pub type JointTree = StableGraph<Node, ()>;
 #[derive(Debug, Clone)]
 pub struct Node {
     pub transform: Transform,
-    /// Number of vertices that reference this node directly.
-    pub ref_count: u32,
     /// The world-to-local transform at this node. It could be computed
     /// by walking up the tree and multiplying inverses of the transforms,
     /// but we cache it here for convenience.
     pub inv_bind_matrix: Matrix4<f64>,
+    /// Number of vertices that reference this node directly.
+    pub ref_count: u32,
 }
 
 /// Indicates what kind of matrix (local-to-parent) each node represents.
@@ -75,7 +75,7 @@ impl SymbolicMatrix {
     fn from_joint(joint_id: NodeIndex) -> SymbolicMatrix {
         SymbolicMatrix {
             terms: vec![
-                SymbolicTerm { weight: 1.0, joint_id: joint_id }
+                SymbolicTerm { weight: 1.0, joint_id }
             ],
         }
     }
@@ -138,17 +138,12 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
         let matrix_stack = vec![None; 32];
 
         let data = JointData {
-            tree: tree,
-            root: root,
+            tree,
+            root,
             vertices: vec![],
         };
 
-        JointBuilder {
-            data: data,
-            model: model,
-            cur_matrix: cur_matrix,
-            matrix_stack: matrix_stack,
-        }
+        JointBuilder { data, model, cur_matrix, matrix_stack }
     }
 
     pub fn data(self) -> JointData {
@@ -235,12 +230,12 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
         let terms = m.terms.iter()
             .map(|&SymbolicTerm { weight, joint_id }| {
                 SymbolicTerm {
-                    weight: weight,
+                    weight,
                     joint_id: self.find_or_add_child(joint_id, xform)
                 }
             })
             .collect();
-        SymbolicMatrix { terms: terms }
+        SymbolicMatrix { terms }
     }
 
     /// Returns the matrix at `stack_pos`. Handles unknown stack slots
@@ -281,9 +276,9 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
                     });
                 let inv_bind_matrix = inv_object_mat * parent_inv_bind;
                 let new_child = self.data.tree.add_node(Node {
-                    transform: transform,
+                    transform,
+                    inv_bind_matrix,
                     ref_count: 0,
-                    inv_bind_matrix: inv_bind_matrix,
                 });
                 self.data.tree.add_edge(node_id, new_child, ());
                 new_child

@@ -68,10 +68,7 @@ impl ViewState {
             if id == 0 {
                 None
             } else {
-                Some(AnimState {
-                    anim_id: id - 1,
-                    cur_frame: 0,
-                })
+                Some(AnimState { anim_id: id - 1, cur_frame: 0 })
             };
     }
 

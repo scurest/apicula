@@ -36,7 +36,7 @@ impl<'a> Cur<'a> {
     pub fn next_n_u8s(&mut self, n: usize) -> Result<&'a [u8]> {
         let end_pos = self.pos_ + n;
         if end_pos > self.buf_.len() {
-            return Err("buffer was too short".into());
+            bail!("buffer was too short");
         }
         let res = &self.buf_[self.pos_ .. self.pos_ + n];
         self.pos_ += n;
@@ -55,7 +55,7 @@ impl<'a> Cur<'a> {
 
     pub fn jump_to(&mut self, pos: usize) -> Result<()> {
         if pos > self.buf_.len() {
-            return Err("jumped past end".into());
+            bail!("jumped past end");
         }
         self.pos_ = pos;
         Ok(())

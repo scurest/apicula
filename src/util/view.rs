@@ -80,7 +80,7 @@ impl<'a, T: Viewable> View<'a, T> {
     pub fn from_buf(buf: &[u8]) -> View<T> {
         let size = <T as Viewable>::size();
         assert!(size == 0 || buf.len() % size == 0);
-        View { buf: buf, _marker: PhantomData }
+        View { buf, _marker: PhantomData }
     }
 
     pub fn len(&self) -> usize {

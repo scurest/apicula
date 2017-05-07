@@ -41,7 +41,7 @@ impl BufferHolder {
                 Ok(Buffer { name: name, bytes: bytes })
             })
             .collect::<Result<_>>()?;
-        Ok(BufferHolder { buffers: buffers })
+        Ok(BufferHolder { buffers })
     }
 }
 

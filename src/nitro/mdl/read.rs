@@ -27,7 +27,7 @@ pub fn read_mdl(cur: Cur) -> Result<Mdl> {
         .map(|(off, name)| read_model((cur + off as usize)?, name))
         .collect::<Result<_>>()?;
 
-    Ok(Mdl { models: models })
+    Ok(Mdl { models })
 }
 
 fn read_model(cur: Cur, name: Name) -> Result<Model> {
@@ -66,14 +66,14 @@ fn read_model(cur: Cur, name: Name) -> Result<Model> {
     let inv_bind_matrices_cur = (cur + inv_bind_matrices_off as usize)?;
 
     Ok(Model {
-        name: name,
-        materials: materials,
-        meshes: meshes,
-        objects: objects,
-        inv_bind_matrices_cur: inv_bind_matrices_cur,
-        render_cmds_cur: render_cmds_cur,
-        up_scale: up_scale,
-        down_scale: down_scale,
+        name,
+        materials,
+        meshes,
+        objects,
+        inv_bind_matrices_cur,
+        render_cmds_cur,
+        up_scale,
+        down_scale,
     })
 }
 
@@ -98,10 +98,7 @@ fn read_mesh(cur: Cur, name: Name) -> Result<Mesh> {
     let commands = (cur + commands_off as usize)?
         .next_n_u8s(commands_len as usize)?;
 
-    Ok(Mesh {
-        name: name,
-        commands: commands,
-    })
+    Ok(Mesh { name, commands })
 }
 
 fn read_materials(cur: Cur) -> Result<Vec<Material>> {
@@ -179,13 +176,13 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
     };
 
     Ok(Material {
-        name: name,
+        name,
         texture_name: None,
         palette_name: None,
-        params: params,
-        width: width,
-        height: height,
-        texture_mat: texture_mat,
+        params,
+        width,
+        height,
+        texture_mat,
     })
 }
 
@@ -271,8 +268,5 @@ fn read_object(cur: Cur, name: Name) -> Result<Object> {
         xform = xform * scale;
     }
 
-    Ok(Object {
-        name: name,
-        xform: xform,
-    })
+    Ok(Object { name, xform })
 }

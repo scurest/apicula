@@ -1,6 +1,7 @@
 use nitro::tex::PaletteInfo;
 use nitro::tex::Tex;
 use nitro::tex::TextureInfo;
+use errors::Error;
 use errors::Result;
 use util::bits::BitField;
 use util::view::View;
@@ -11,28 +12,28 @@ pub fn gen_image(
     pal_info: Option<&PaletteInfo>,
 ) -> Result<Vec<u8>>
 {
-    match tex_info.params.format() {
+    let palette_format_but_no_palette = || -> Error {
+        "texture with palette format was not paired with a palette".into()
+    };
+
+    Ok(match tex_info.params.format() {
         2 | 3 | 4 | 1 | 6 => {
-            match pal_info {
-                Some(pal_info) => Ok(gen_palette_image(tex, tex_info, pal_info)),
-                None => Err("texture with palette format was not paired with a palette".into()),
-            }
+            let pal_info = pal_info.ok_or_else(palette_format_but_no_palette)?;
+            gen_palette_image(tex, tex_info, pal_info)
         }
         5 => {
-            match pal_info {
-                Some(pal_info) => Ok(gen_compressed_image(tex, tex_info, pal_info)),
-                None => Err("texture with palette format was not paired with a palette".into()),
-            }
+            let pal_info = pal_info.ok_or_else(palette_format_but_no_palette)?;
+            gen_compressed_image(tex, tex_info, pal_info)
         }
         7 => {
             if pal_info.is_some() {
                 info!("direct color texture was paired with a palette; palette is being ignored");
             }
-            Ok(gen_direct_color_image(tex, tex_info))
+            gen_direct_color_image(tex, tex_info)
         }
         // Only 0 should be possible for the last case; format is only three bits
-        _ => Err(format!("invalid texture format: {}", tex_info.params.format()).into()),
-    }
+        _ => bail!("invalid texture format: {}", tex_info.params.format()),
+    })
 }
 
 fn gen_direct_color_image(tex: &Tex, tex_info: &TextureInfo) -> Vec<u8> {

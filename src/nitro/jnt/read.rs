@@ -26,9 +26,7 @@ pub fn read_jnt(cur: Cur) -> Result<Jnt> {
         .filter_map(|res| res.ok())
         .collect();
 
-    Ok(Jnt {
-        animations: animations,
-    })
+    Ok(Jnt { animations })
 }
 
 fn read_animation(cur: Cur, name: Name) -> Result<Animation> {
@@ -51,11 +49,11 @@ fn read_animation(cur: Cur, name: Name) -> Result<Animation> {
         .collect::<Result<_>>()?;
 
     Ok(Animation {
-        name: name,
-        num_frames: num_frames,
-        pivot_data: pivot_data,
-        basis_data: basis_data,
-        objects: objects,
+        name,
+        num_frames,
+        pivot_data,
+        basis_data,
+        objects,
     })
 }
 
@@ -109,13 +107,13 @@ fn read_object<'a>(mut cur: Cur<'a>, anim_cur: Cur<'a>) -> Result<Object<'a>> {
     }
 
     Ok(Object {
-        trans_x: trans_x,
-        trans_y: trans_y,
-        trans_z: trans_z,
-        rotation: rotation,
-        scale_x: scale_x,
-        scale_y: scale_y,
-        scale_z: scale_z,
+        trans_x,
+        trans_y,
+        trans_z,
+        rotation,
+        scale_x,
+        scale_y,
+        scale_z,
     })
 }
 
@@ -135,10 +133,7 @@ fn read_trans<'a>(cur: &mut Cur<'a>, anim_cur: Cur<'a>, is_fixed: bool) -> Resul
             _ => TranslationData::Half((anim_cur + off as usize)?.next_n::<u16>(data_len)?),
         };
 
-        Translation::Varying {
-            timing: timing,
-            data: data,
-        }
+        Translation::Varying { timing, data }
     };
     trace!("translation: {:?}", res);
     Ok(res)
@@ -158,10 +153,7 @@ fn read_rotation<'a>(cur: &mut Cur<'a>, anim_cur: Cur<'a>, is_fixed: bool) -> Re
         let data_len = data_len(&timing);
         let data = (anim_cur + off as usize)?.next_n::<u16>(data_len)?;
 
-        Rotation::Varying {
-            timing: timing,
-            data: data,
-        }
+        Rotation::Varying { timing, data }
     };
     trace!("rotation: {:?}", res);
     Ok(res)
@@ -183,10 +175,7 @@ fn read_scaling<'a>(cur: &mut Cur<'a>, anim_cur: Cur<'a>, is_fixed: bool) -> Res
             _ => ScalingData::Half((anim_cur + off as usize)?.next_n::<(u16,u16)>(data_len)?),
         };
 
-        Scaling::Varying {
-            timing: timing,
-            data: data,
-        }
+        Scaling::Varying { timing, data }
     };
     trace!("scale: {:?}", res);
     Ok(res)
@@ -200,11 +189,7 @@ fn timing_from_params(params: u32) -> Result<Timing> {
     check!(start_frame <= end_frame)?; // TODO: can we use < here?
     check!(speed <= 16)?; // 16 is extremely generous; 3-4 is more likely
 
-    Ok(Timing {
-        start_frame: start_frame,
-        end_frame: end_frame,
-        speed: speed,
-    })
+    Ok(Timing { start_frame, end_frame, speed })
 }
 
 /// Number of data for a varying component.

@@ -151,9 +151,9 @@ impl<'a, 'b: 'a, 'c> Builder<'a, 'b, 'c> {
         joint_builder: Option<JointBuilder<'a, 'b>>
     ) -> Builder<'a, 'b, 'c> {
         Builder {
-            model: model,
-            objects: objects,
-            joint_builder: joint_builder,
+            model,
+            objects,
+            joint_builder,
             gpu: GpuState::new(),
             vertices: vec![],
             ind_builder: IndexBuilder::new(),
@@ -209,6 +209,7 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         self.gpu.restore(stack_pos);
         Ok(())
     }
+
     fn store_matrix(&mut self, stack_pos: u8) -> Result<()> {
         if let Some(ref mut b) = self.joint_builder {
             b.store_matrix(stack_pos);
@@ -217,6 +218,7 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         self.gpu.store(stack_pos);
         Ok(())
     }
+
     fn mul_by_object(&mut self, object_id: u8) -> Result<()> {
         if let Some(ref mut b) = self.joint_builder {
             b.mul_by_object(object_id);
@@ -225,6 +227,7 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         self.gpu.mul_matrix(&self.objects[object_id as usize]);
         Ok(())
     }
+
     fn blend(&mut self, terms: &[(u8, u8, f64)]) -> Result<()> {
         if let Some(ref mut b) = self.joint_builder {
             b.blend(terms);
@@ -242,14 +245,17 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
 
         Ok(())
     }
+
     fn scale_up(&mut self) -> Result<()> {
         self.gpu.mul_matrix(&Matrix4::from_scale(self.model.up_scale));
         Ok(())
     }
+
     fn scale_down(&mut self) -> Result<()> {
         self.gpu.mul_matrix(&Matrix4::from_scale(self.model.down_scale));
         Ok(())
     }
+
     fn draw(&mut self, mesh_id: u8, mat_id: u8) -> Result<()> {
         let mat = &self.model.materials[mat_id as usize];
         let dim = (mat.width as u32, mat.height as u32);
@@ -271,16 +277,20 @@ impl<'a, 'b: 'a, 'c> gpu_cmds::Sink for Builder<'a, 'b, 'c> {
         }
         self.gpu.restore(idx as u8);
     }
+
     fn scale(&mut self, (sx, sy, sz): (f64, f64, f64)) {
         self.gpu.mul_matrix(&Matrix4::from_nonuniform_scale(sx,sy,sz))
     }
+
     fn begin(&mut self, prim_type: u32) {
         self.ind_builder.begin(prim_type);
     }
+
     fn end(&mut self) {
         self.ind_builder.end();
         self.cur_draw_call.index_range.end = self.ind_builder.indices.len();
     }
+
     fn texcoord(&mut self, texcoord: Point2<f64>) {
         let tc = Point2::new(
             texcoord.x / self.cur_texture_dim.0 as f64,
@@ -290,9 +300,11 @@ impl<'a, 'b: 'a, 'c> gpu_cmds::Sink for Builder<'a, 'b, 'c> {
         let tc = self.gpu.texture_matrix * vec4(tc.x, tc.y, 0.0, 0.0);
         self.next_vertex.texcoord = [tc[0] as f32, tc[1] as f32];
     }
+
     fn color(&mut self, c: Point3<f32>) {
         self.next_vertex.color = [c[0] as f32, c[1] as f32, c[2] as f32];
     }
+
     fn vertex(&mut self, p: Point3<f64>) {
         self.ind_builder.vertex();
         if let Some(ref mut b) = self.joint_builder {

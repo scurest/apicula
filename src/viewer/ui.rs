@@ -52,7 +52,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
         let view_state = ViewState {
             model_id: 0,
             anim_state: None,
-            eye: eye,
+            eye,
         };
 
         let drawing_data =
@@ -65,15 +65,15 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
         let move_speed = Default::default();
 
         Ok(Ui {
-            fh: fh,
-            ctx: ctx,
-            view_state: view_state,
-            drawing_data: drawing_data,
-            win_title: win_title,
-            mouse: mouse,
-            fps_tracker: fps_tracker,
-            move_dir: move_dir,
-            move_speed: move_speed,
+            fh,
+            ctx,
+            view_state,
+            drawing_data,
+            win_title,
+            mouse,
+            fps_tracker,
+            move_dir,
+            move_speed,
         })
     }
 
