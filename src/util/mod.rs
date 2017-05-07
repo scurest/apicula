@@ -5,5 +5,5 @@ pub mod fields;
 pub mod first_if_only;
 pub mod ins_set;
 pub mod fixed;
-pub mod uniq;
+pub mod namers;
 pub mod view;

@@ -13,7 +13,7 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 use util::cur::Cur;
-use util::uniq::UniqueNamer;
+use util::namers::UniqueNamer;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let input = {
@@ -56,7 +56,7 @@ struct Extractor {
     save_directory: PathBuf,
     /// Assigns unique names to the found files, so their
     /// file names in the save directory won't collide.
-    file_namer: UniqueNamer<String>,
+    file_namer: UniqueNamer,
     num_bmds: u32,
     num_btxs: u32,
     num_bcas: u32,
@@ -135,7 +135,7 @@ impl Extractor {
     /// Given the slice `bytes` that successfully parsed as the Nitro container
     /// `container`, save the slice to a file in the save directory.
     fn save_file(&mut self, bytes: &[u8], container: &Container) {
-        let file_name = self.file_namer.get_name(guess_container_name(container));
+        let file_name = self.file_namer.get_fresh_name(guess_container_name(container));
         let file_extension = match container.stamp {
             b"BMD0" => "nsbmd",
             b"BTX0" => "nsbtx",
