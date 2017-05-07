@@ -179,7 +179,7 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
             let stack_matrix = self.get_from_stack(stack_id);
             if stack_matrix.terms.len() != 1 {
                 warn!(
-                    "a blended matrix was blended again; this will be ignored\
+                    "a blended matrix was blended again; this will be ignored \
                      but there will likely by errors in the model's skeleton"
                 );
             } else {
@@ -194,9 +194,9 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
                 );
                 if !close_enough {
                     warn!(
-                        "an inverse bind matrix stored in the model file differed\
-                        significantly from the inverse bind computed while building\
-                        the joint tree; this will be ignored but there will likely\
+                        "an inverse bind matrix stored in the model file differed \
+                        significantly from the inverse bind computed while building \
+                        the joint tree; this will be ignored but there will likely \
                         be errors in the model's skeleton"
                     );
                 }

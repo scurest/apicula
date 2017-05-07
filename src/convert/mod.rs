@@ -60,7 +60,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         let rgba = match res {
             Ok(rgba) => rgba,
             Err(e) => {
-                warn!("error generating image {}, error: {:#?}", image_name, e);
+                warn!("error generating image {}, error: {:?}", image_name, e);
                 continue;
             }
         };
