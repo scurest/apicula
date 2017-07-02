@@ -314,8 +314,8 @@ fn print_controls() {
         "  WASD         Forward/Left/Back/Right\n",
         "  EQ           Up/Down\n",
         "  L.Shift      Increase Speed\n",
-        "  R.Ctrl       Decrease Speed\n",
-        "  Left Mouse   Free Look\n",
+        "  L.Ctrl       Decrease Speed\n",
+        "  L.Mouse      Free Look\n",
         "  OP           Prev/Next Animation\n",
         "  ,.           Prev/Next Model\n",
     ));
