@@ -82,13 +82,16 @@ fn main3() -> Result<()> {
             (about: "Convert a model to COLLADA")
             (alias: "c")
             (@arg INPUT: +required +multiple "BMD0 file")
-            (@arg OUTPUT: -o --output +required +takes_value "output directory")
+            (@arg OUTPUT: -o --output +required +takes_value "Output directory")
+            (@arg more_textures: --("more-textures") +hidden
+                "Try to extract more textures; only textures that are used are \
+                extracted by default")
         )
         (@subcommand extract =>
             (about: "Extract Nitro files from a ROM or archive")
             (alias: "x")
             (@arg INPUT: +required "Input file")
-            (@arg OUTPUT: -o --output +required +takes_value "output directory")
+            (@arg OUTPUT: -o --output +required +takes_value "Output directory")
         )
     );
     let matches = app.get_matches();

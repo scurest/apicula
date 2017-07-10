@@ -45,4 +45,6 @@ impl TextureParameters {
     pub fn format(self) -> u32 { self.0.bits(26,29) }
     pub fn is_color0_transparent(self) -> bool { self.0.bits(29,30) != 0 }
     pub fn texcoord_transform_mode(self) -> u32 { self.0.bits(30,32) }
+
+    pub fn is_direct_color(self) -> bool { self.format() == 7 }
 }

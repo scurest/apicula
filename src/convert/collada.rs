@@ -2,6 +2,7 @@ use cgmath::Matrix4;
 use cgmath::One;
 use convert::format::FnFmt;
 use convert::format::Mat;
+use convert::context::Context;
 use errors::Result;
 use geometry::build_with_joints as build_geometry;
 use geometry::GeometryDataWithJoints as GeometryData;
@@ -20,29 +21,26 @@ use std::fmt;
 use std::fmt::Write;
 use time;
 use util::ins_set::InsOrderSet;
-use util::namers::UniqueNameSet;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
-type ImageNameSet = UniqueNameSet<TexPalPair>;
-
 pub fn write<W: Write>(
     w: &mut W,
+    ctx: &Context,
     model: &Model,
-    anims: &[Animation],
-    image_name_set: &mut ImageNameSet,
 ) -> Result<()> {
     let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
     let geom = build_geometry(model, &objects[..])?;
+    let anims = &ctx.fh.animations[..];
 
     write_lines!(w,
         r##"<?xml version="1.0" encoding="utf-8"?>"##,
         r##"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">"##;
     )?;
     write_asset(w)?;
-    write_library_images(w, model, image_name_set)?;
+    write_library_images(w, ctx, model)?;
     write_library_materials(w, model)?;
-    write_library_effects(w, model, image_name_set)?;
+    write_library_effects(w, ctx, model)?;
     write_library_geometries(w, model, &geom)?;
     write_library_controllers(w, &geom)?;
     write_library_animations(w, model, anims, &geom)?;
@@ -70,8 +68,8 @@ fn write_asset<W: Write>(w: &mut W) -> Result<()> {
 
 fn write_library_images<W: Write>(
     w: &mut W,
+    ctx: &Context,
     model: &Model,
-    image_name_set: &mut ImageNameSet,
 ) -> Result<()> {
     write_lines!(w,
         r##"  <library_images>"##;
@@ -80,7 +78,7 @@ fn write_library_images<W: Write>(
     let tex_pal_pairs = model.materials.iter()
         .filter_map(|mat| TexPalPair::from_material(mat));
     let image_names = tex_pal_pairs
-        .map(|p| image_name_set.get_name(p).to_owned())
+        .map(|p| ctx.image_name_from_texpal_pair(p))
         .collect::<HashSet<_>>();
 
     for name in image_names {
@@ -118,15 +116,15 @@ fn write_library_materials<W: Write>(w: &mut W, model: &Model) -> Result<()> {
 
 fn write_library_effects<W: Write>(
     w: &mut W,
+    ctx: &Context,
     model: &Model,
-    image_name_set: &mut ImageNameSet,
 ) -> Result<()> {
     write_lines!(w,
         r##"  <library_effects>"##;
     )?;
     for (i, mat) in model.materials.iter().enumerate() {
         let image_name = TexPalPair::from_material(mat)
-            .map(|pair| image_name_set.get_name(pair));
+            .map(|pair| ctx.image_name_from_texpal_pair(pair));
 
         write_lines!(w,
             r##"    <effect id="effect{i}" name="{name}">"##,
