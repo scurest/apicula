@@ -92,16 +92,14 @@ impl Extractor {
     /// Afterwards, `cur` is positioned where you should resume searching (ie.
     /// after the container file if found, or else after the stamp if not.)
     fn try_proc_file_at(&mut self, cur: &mut Cur) {
-        let res = Container::read(*cur);
-        match res {
-            Ok(cont) => {
-                let file_bytes = cur.next_n_u8s(cont.file_size as usize).unwrap();
+        if let Ok(cont) = Container::read(*cur) {
+            if let Ok(file_bytes) = cur.next_n_u8s(cont.file_size as usize) {
                 self.save_file(file_bytes, &cont);
-            }
-            Err(_) => {
-                self.try_proc_compressed_file_at(cur)
+                return;
             }
         }
+
+        self.try_proc_compressed_file_at(cur)
     }
 
     /// Try decompressing data near `cur` and then attempt to parse a
