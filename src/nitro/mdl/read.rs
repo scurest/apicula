@@ -149,30 +149,28 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
         polygon_attr: u32,
         unknown2: u32,
         params: u32,
-        unknown3: [u32; 2],
+        unknown3: u32,
+        unknown4: u32, // flag for texture matrix?
         width: u16,
         height: u16,
+        unknown5: (fix32(1,19,12)), // always 1?
+        unknown6: (fix32(1,19,12)), // always 1?
         end: Cur,
     });
 
     let params = TextureParameters(params);
 
-    let texture_mat = match params.texcoord_transform_mode() {
-        0 => Matrix4::from_scale(1.0),
-        1 => {
-            // This is probably wrong. It might also be 8 fix16s.
-            // But it handles the common case with a3=a4=2 for
-            // mirrored textures.
+    let texture_mat = match section_size {
+        // For now, use the section size to determine whether there
+        // is texture matrix data.
+        60 => {
             fields!(end, texcoord_matrix {
-                a1: (fix32(1,19,12)), // always 1?
-                a2: (fix32(1,19,12)), // always 1?
-                a3: (fix32(1,19,12)),
-                a4: (fix32(1,19,12)),
+                a: (fix32(1,19,12)),
+                b: (fix32(1,19,12)),
             });
-            Matrix4::from_nonuniform_scale(a3, a4, 1.0)
+            Matrix4::from_nonuniform_scale(a, b, 1.0)
         }
-        2 | 3 => unimplemented!(),
-        _ => unreachable!(),
+        _ => Matrix4::from_scale(1.0),
     };
 
     Ok(Material {
