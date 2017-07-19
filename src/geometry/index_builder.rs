@@ -22,85 +22,109 @@ impl IndexBuilder {
         }
     }
 
-    /// Begin new primitive group. Automatically closes any
-    /// previous primitive group.
-    pub fn begin(&mut self, prim_type: u32) {
-        self.cur_prim_type = prim_type;
+    fn clear_current_range(&mut self) {
         let end = self.cur_prim_range.end;
         self.cur_prim_range = end .. end;
     }
 
-    /// End current primitive group and flush index data to `indices`.
+    /// Begin new primitive group. Automatically closes any
+    /// previous primitive group.
+    pub fn begin(&mut self, prim_type: u32) {
+        self.end();
+
+        self.cur_prim_type = prim_type;
+        self.clear_current_range();
+    }
+
+    /// End current primitive group and write index data to `indices`.
     pub fn end(&mut self) {
-        let r = self.cur_prim_range.clone();
-        // TODO: check the size of cur_prim_range for validity
-        // (eg. for seperate triangles, must be a multiple of 3, etc.)
+        let start = self.cur_prim_range.start;
+        let end = self.cur_prim_range.end;
+
+        if start == end { return; }
+
+        // Indicates if all the indices were used (ie. nothing was left open).
+        let complete;
+
         match self.cur_prim_type {
             0 => {
-                // Seperate triangles
-                let mut i = r.start;
-                while i != r.end {
+                // Separate triangles
+                //    0      5
+                //   / \    / \
+                //  1---2  3---4
+                let mut i = start;
+                while i + 2 < end {
                     self.indices.extend_from_slice(&[
                         i, i+1, i+2,
                     ]);
                     i += 3;
                 }
+                complete = i == end;
             }
+
             1 => {
-                // Seperate quads
-                let mut i = r.start;
-                while i != r.end {
+                // Separate quads
+                //  0---3  6---5
+                //  |   |  |   |
+                //  1---2  7---4
+                let mut i = start;
+                while i + 3 < end {
                     self.indices.extend_from_slice(&[
                         i, i+1, i+2,
                         i+2, i+3, i,
                     ]);
                     i += 4;
                 }
+                complete = i == end;
             }
+
             2 => {
                 // Triangle strip
-                let mut i = r.start;
-                if i != r.end {
-                    self.indices.extend_from_slice(&[
-                        i, i+1, i+2,
-                    ]);
-                    i += 3;
-                }
-                while i != r.end {
-                    self.indices.extend_from_slice(&[
-                        i, i-1, i-2,
-                    ]);
+                //  0---2---4
+                //   \ / \ / \
+                //    1---3---5
+                let mut i = start;
+                let mut odd = false;
+                while i + 2 < end {
+                    let tri = match odd {
+                        false => [i, i+1, i+2],
+                        true => [i, i+2, i+1],
+                    };
+                    self.indices.extend_from_slice(&tri);
                     i += 1;
-                    if i == r.end { break; }
-                    self.indices.extend_from_slice(&[
-                        i, i-2, i-1,
-                    ]);
-                    i += 1;
+                    odd = !odd;
                 }
+                complete = end - start > 2;
             }
+
             3 => {
                 // Quad strip
-                let mut i = r.start;
-                if i != r.end {
+                //  0---2---4
+                //  |   |   |
+                //  1---3---5
+                let mut i = start;
+                while i + 3 < end {
                     self.indices.extend_from_slice(&[
                         i, i+1, i+2,
                         i+2, i+1, i+3,
                     ]);
-                    i += 4;
-                }
-                while i != r.end {
-                    self.indices.extend_from_slice(&[
-                        i-2, i-1, i,
-                        i, i-1, i+1,
-                    ]);
                     i += 2;
                 }
+                complete = end - start > 3 && i + 2 == end;
             }
+
             _ => unreachable!(),
         }
+
+        if !complete {
+            warn!("a primitive group was left open, ie. there weren't enough indices \
+                   to complete a primitive");
+        }
+
+        self.clear_current_range();
     }
 
-    /// Indicate that a new vertex was added to the primitive group.
+    /// Add a new vertex to the current primitive group.
     pub fn vertex(&mut self) {
         self.cur_prim_range.end += 1;
     }
