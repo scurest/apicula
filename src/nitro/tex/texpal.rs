@@ -1,5 +1,4 @@
 use nitro::mdl::Material;
-use nitro::name::IdFmt;
 use nitro::name::Name;
 use nitro::tex::PaletteInfo;
 use nitro::tex::Tex;
@@ -12,14 +11,6 @@ impl TexPalPair {
     pub fn from_material(mat: &Material) -> Option<TexPalPair> {
         mat.texture_name
             .map(|texture_name| TexPalPair(texture_name, mat.palette_name))
-    }
-}
-
-// This is used by UniqueNamer to generate image names,
-// see the `convert` module.
-impl ToString for TexPalPair {
-    fn to_string(&self) -> String {
-        format!("{}", IdFmt(&self.0))
     }
 }
 

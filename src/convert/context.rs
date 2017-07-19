@@ -1,5 +1,4 @@
 use files::FileHolder;
-use nitro::name::IdFmt;
 use nitro::name::Name;
 use nitro::tex::texpal::TexPalPair;
 use std::collections::hash_map::Entry;
@@ -93,7 +92,7 @@ impl<'a, 'b> Context<'a, 'b> {
             Entry::Vacant(ve) => {
                 let texinfo = &self.fh.texs[image_id.0].texinfo[image_id.1];
                 let name = self.image_namer.get_fresh_name(
-                    format!("{}", IdFmt(&texinfo.name))
+                    format!("{}", texinfo.name.print_safe())
                 );
                 ve.insert(name);
                 self.textures_with_images.insert((image_id.0, image_id.1));

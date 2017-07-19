@@ -8,7 +8,6 @@ use convert::context::Context;
 use errors::Result;
 use files::BufferHolder;
 use files::FileHolder;
-use nitro::name::IdFmt;
 use nitro::tex;
 use png;
 use std::fs;
@@ -38,7 +37,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         s.clear();
         collada::write(&mut s, &ctx, model)?;
 
-        let name = dae_namer.get_fresh_name(format!("{}", IdFmt(&model.name)));
+        let name = dae_namer.get_fresh_name(format!("{}", model.name.print_safe()));
         let dae_path = out_dir.join(&format!("{}.dae", name));
         let mut f = File::create(dae_path)?;
         match f.write_all(s.as_bytes()) {

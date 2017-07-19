@@ -17,6 +17,12 @@ impl Name {
         }
         Name(arr)
     }
+
+    /// Returns an object that formats the name as a non-empty string
+    /// of letters, digits, and underscores.
+    pub fn print_safe(&self) -> NameSafePrinter {
+        NameSafePrinter(self)
+    }
 }
 
 impl Viewable for Name {
@@ -49,17 +55,18 @@ impl fmt::Debug for Name {
     }
 }
 
-/// Wrapper than prints a name as a non-empty sequence of
-/// underscores, letters, and digits (safe for eg. filenames).
-pub struct IdFmt<'a>(pub &'a Name);
+/// Wrapper produces by `Name::print_safe`.
+pub struct NameSafePrinter<'a>(pub &'a Name);
 
-impl<'a> fmt::Display for IdFmt<'a> {
+impl<'a> fmt::Display for NameSafePrinter<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let trimmed = trim_trailing_nuls(&(self.0).0[..]);
+
         if trimmed.len() == 0 {
             f.write_char('_')?;
             return Ok(());
         }
+
         for &b in trimmed {
             let is_letter_or_digit =
                 (b >= b'a' && b <= b'z') ||
@@ -72,6 +79,7 @@ impl<'a> fmt::Display for IdFmt<'a> {
     }
 }
 
+/// Slice off any suffix of NUL bytes from the end of a slice.
 fn trim_trailing_nuls(mut buf: &[u8]) -> &[u8] {
     while let Some((&0, rest)) = buf.split_last() {
         buf = rest;

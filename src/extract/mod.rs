@@ -6,7 +6,6 @@ use errors::Result;
 use errors::ResultExt;
 use nitro::container::Container;
 use nitro::container::DataFile;
-use nitro::name::IdFmt;
 use regex::bytes::Regex;
 use std::fs;
 use std::io::Read;
@@ -185,10 +184,10 @@ fn guess_container_name(container: &Container) -> String {
 fn guess_data_file_name(data_file: &DataFile) -> Option<String> {
     match *data_file {
         DataFile::Mdl(ref mdl) =>
-            mdl.models.get(0).map(|model| format!("{}", IdFmt(&model.name))),
+            mdl.models.get(0).map(|model| format!("{}", model.name.print_safe())),
         DataFile::Tex(ref tex) =>
-            tex.texinfo.get(0).map(|texinfo| format!("{}", IdFmt(&texinfo.name))),
+            tex.texinfo.get(0).map(|texinfo| format!("{}", texinfo.name.print_safe())),
         DataFile::Jnt(ref jnt) =>
-            jnt.animations.get(0).map(|anim| format!("{}", IdFmt(&anim.name))),
+            jnt.animations.get(0).map(|anim| format!("{}", &anim.name.print_safe())),
     }
 }

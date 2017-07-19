@@ -12,7 +12,7 @@ use geometry::joint_builder::Transform;
 use nitro::jnt;
 use nitro::jnt::Animation;
 use nitro::mdl::Model;
-use nitro::name;
+//use nitro::name;
 use nitro::tex::texpal::TexPalPair;
 use petgraph::Direction;
 use petgraph::graph::NodeIndex;
@@ -105,7 +105,7 @@ fn write_library_materials<W: Write>(w: &mut W, model: &Model) -> Result<()> {
             r##"      <instance_effect url="#effect{i}"/>"##,
             r##"    </material>"##;
             i = i,
-            name = name::IdFmt(&mat.name),
+            name = mat.name.print_safe(),
         )?;
     }
     write_lines!(w,
@@ -129,7 +129,7 @@ fn write_library_effects<W: Write>(
         write_lines!(w,
             r##"    <effect id="effect{i}" name="{name}">"##,
             r##"      <profile_COMMON>"##;
-            i = i, name = name::IdFmt(&mat.name),
+            i = i, name = mat.name.print_safe(),
         )?;
 
         if let Some(name) = image_name {
@@ -208,7 +208,7 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
         write_lines!(w,
             r##"    <geometry id="geometry{i}" name="{name}">"##,
             r##"      <mesh>"##;
-            i = i, name = name::IdFmt(&mesh.name),
+            i = i, name = mesh.name.print_safe(),
         )?;
 
         write_lines!(w,
@@ -621,7 +621,7 @@ fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[An
 
         write_lines!(w,
             r##"    <animation_clip id="anim{anim_id}" name="{name}" end="{end_time}">"##;
-            anim_id = anim_id, name = name::IdFmt(&anim.name), end_time = end_time,
+            anim_id = anim_id, name = anim.name.print_safe(), end_time = end_time,
         )?;
         for joint_id in geom.joint_data.tree.node_indices() {
             write_lines!(w,
@@ -645,7 +645,7 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
     write_lines!(w,
         r#"  <library_visual_scenes>"#,
         r#"    <visual_scene id="scene0" name="{model_name}">"#;
-        model_name = name::IdFmt(&model.name),
+        model_name = model.name.print_safe(),
     )?;
 
     write_joint_hierarchy(w, model, geom)?;
@@ -659,7 +659,7 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
             r##"          <bind_material>"##,
             r##"            <technique_common>"##,
             r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}">"##;
-            i = i, mesh_name = name::IdFmt(&mesh.name),
+            i = i, mesh_name = mesh.name.print_safe(),
             root_id = geom.joint_data.root.index(), mat_id = call.mat_id,
         )?;
         if model.materials[call.mat_id as usize].texture_name.is_some() {
@@ -698,7 +698,7 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
     fn write_joint_name<W: Write>(w: &mut W, model: &Model, tree: &JointTree, node: NodeIndex) -> fmt::Result {
         match tree[node].transform {
             Transform::Root => write!(w, "__ROOT__"),
-            Transform::Object(id) => write!(w, "{}", name::IdFmt(&model.objects[id as usize].name)),
+            Transform::Object(id) => write!(w, "{}", model.objects[id as usize].name.print_safe()),
             Transform::UnknownStackSlot(id) => write!(w, "__STACK{}", id),
         }
     }
