@@ -142,6 +142,8 @@ impl RenderInterpreterState {
                         _ => unreachable!(),
                     }
                 }
+                0x0c => {} // TODO: ???
+                0x0d => {} // TODO: ???
                 _ => {
                     info!("unknown render command: {:#x} {:?}", opcode, params);
                 }
@@ -167,6 +169,8 @@ fn cmd_size(opcode: u8, cur: Cur) -> Result<usize> {
             2 + 3 * cur.clone().next_n_u8s(2)?[1] as usize
         }
         0x0b => 0,
+        0x0c => 2,
+        0x0d => 2,
         0x24 => 1,
         0x26 => 4,
         0x2b => 0,
