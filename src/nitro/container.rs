@@ -48,7 +48,13 @@ impl<'a> Container<'a> {
         check!(num_sections > 0)?;
 
         let data_files = section_offs
-            .map(|off| DataFile::read((cur + off as usize)?))
+            .map(|off| {
+                let res = DataFile::read((cur + off as usize)?);
+                if let Err(ref e) = res {
+                    info!("error reading section: {}", e);
+                }
+                res
+            })
             .collect();
 
         Ok(Container { stamp, file_size, data_files })
