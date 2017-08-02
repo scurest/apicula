@@ -75,8 +75,9 @@ impl<'a, 'b> Context<'a, 'b> {
                         None => continue,
                     };
                 let texpal = TexPalPair(texture_name, material.palette_name);
-                let image_id = self.image_id_from_texpal_pair(texpal);
-                self.add_image_from_id(image_id);
+                if let Some(image_id) = self.image_id_from_texpal_pair(texpal) {
+                    self.add_image_from_id(image_id);
+                }
             }
         }
     }
@@ -140,9 +141,15 @@ impl<'a, 'b> Context<'a, 'b> {
     /// Given a texture name and (optionally) a palette name, find an `ImageId`
     /// that identifies texture and palette infos with those names. The palette
     /// must come from the same Tex as the texture (FIXME maybe?).
+    ///
+    /// Returns `None` if the texture isn't found.
     pub fn image_id_from_texpal_pair(&self, TexPalPair(texture_name, palette_name): TexPalPair)
-    -> ImageId {
-        let texture_id = self.texture_name_table[&texture_name];
+    -> Option<ImageId> {
+        let texture_id =
+            match self.texture_name_table.get(&texture_name) {
+                Some(texture_id) => texture_id,
+                None => return None,
+            };
         let tex_id = texture_id.0;
 
         let tex = &self.fh.texs[tex_id];
@@ -150,13 +157,13 @@ impl<'a, 'b> Context<'a, 'b> {
             tex.palinfo.iter().position(|pal| pal.name == palname)
         });
 
-        (texture_id.0, texture_id.1, palette_pos)
+        Some((texture_id.0, texture_id.1, palette_pos))
     }
 
     /// Look-up the image name from texture and palette names.
-    pub fn image_name_from_texpal_pair(&self, texpal: TexPalPair) -> &str {
-        let image_id = self.image_id_from_texpal_pair(texpal);
-        &self.image_names[&image_id]
+    pub fn image_name_from_texpal_pair(&self, texpal: TexPalPair) -> Option<&String> {
+        let res = self.image_id_from_texpal_pair(texpal);
+        res.and_then(|id| self.image_names.get(&id))
     }
 }
 

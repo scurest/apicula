@@ -78,7 +78,7 @@ fn write_library_images<W: Write>(
     let tex_pal_pairs = model.materials.iter()
         .filter_map(|mat| TexPalPair::from_material(mat));
     let image_names = tex_pal_pairs
-        .map(|p| ctx.image_name_from_texpal_pair(p))
+        .filter_map(|p| ctx.image_name_from_texpal_pair(p))
         .collect::<HashSet<_>>();
 
     for name in image_names {
@@ -124,7 +124,7 @@ fn write_library_effects<W: Write>(
     )?;
     for (i, mat) in model.materials.iter().enumerate() {
         let image_name = TexPalPair::from_material(mat)
-            .map(|pair| ctx.image_name_from_texpal_pair(pair));
+            .and_then(|pair| ctx.image_name_from_texpal_pair(pair));
 
         write_lines!(w,
             r##"    <effect id="effect{i}" name="{name}">"##,
