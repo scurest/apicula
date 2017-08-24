@@ -105,9 +105,10 @@ impl SymbolicMatrix {
 
 
 #[derive(Debug, Clone)]
-pub struct JointBuilder<'a, 'b: 'a> {
+pub struct JointBuilder<'a, 'b: 'a, 'c> {
     data: JointData,
     model: &'a Model<'b>,
+    objects: &'c [Matrix4<f64>],
 
     /// GPU's current matrix.
     cur_matrix: SymbolicMatrix,
@@ -124,8 +125,11 @@ pub struct JointData {
     pub vertices: Vec<SymbolicMatrix>,
 }
 
-impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
-    pub fn new(model: &'a Model<'b>) -> JointBuilder<'a, 'b> {
+impl<'a, 'b: 'a, 'c> JointBuilder<'a, 'b, 'c> {
+    pub fn new(
+        model: &'a Model<'b>,
+        objects: &'c [Matrix4<f64>]
+    ) -> JointBuilder<'a, 'b, 'c> {
         let mut tree = StableGraph::new();
 
         let root = tree.add_node(Node {
@@ -143,7 +147,7 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
             vertices: vec![],
         };
 
-        JointBuilder { data, model, cur_matrix, matrix_stack }
+        JointBuilder { data, model, objects, cur_matrix, matrix_stack }
     }
 
     pub fn data(self) -> JointData {
@@ -268,12 +272,7 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
                 // Make a new one.
                 let parent_inv_bind = self.data.tree[node_id].inv_bind_matrix;
                 let object_mat = self.transform_to_matrix(transform);
-                let inv_object_mat = object_mat.invert()
-                    .unwrap_or_else(|| {
-                        warn!("while building inverse bind matrix, a non-\
-                            invertible matrix was encountered");
-                        Matrix4::one() // try to keep going...
-                    });
+                let inv_object_mat = object_mat.invert().unwrap();
                 let inv_bind_matrix = inv_object_mat * parent_inv_bind;
                 let new_child = self.data.tree.add_node(Node {
                     transform,
@@ -290,7 +289,7 @@ impl<'a, 'b: 'a> JointBuilder<'a, 'b> {
     fn transform_to_matrix(&self, transform: Transform) -> Matrix4<f64> {
         match transform {
             Transform::Root => Matrix4::one(),
-            Transform::Object(id) => self.model.objects[id as usize].xform,
+            Transform::Object(id) => self.objects[id as usize],
             Transform::UnknownStackSlot(_) => Matrix4::one(),
         }
     }

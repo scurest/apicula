@@ -703,7 +703,9 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
         }
     }
 
-    fn write_rec<W: Write>(w: &mut W, model: &Model, tree: &JointTree, node: NodeIndex, indent: u32) -> Result<()> {
+    fn write_rec<W: Write>(w: &mut W, model: &Model, geom: &GeometryData, node: NodeIndex, indent: u32) -> Result<()> {
+        let tree = &geom.joint_data.tree;
+
         write_indent(w, indent)?;
         write_lines!(w,
             r#"<node id="joint{joint_id}" sid="joint{joint_id}" name="{name}" type="JOINT">"#;
@@ -713,7 +715,7 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
 
         let mat = match tree[node].transform {
             Transform::Root => Matrix4::one(),
-            Transform::Object(id) => model.objects[id as usize].xform,
+            Transform::Object(id) => geom.objects[id as usize],
             Transform::UnknownStackSlot(_) => Matrix4::one(),
         };
         write_indent(w, indent + 1)?;
@@ -721,14 +723,14 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
 
         let children = tree.neighbors_directed(node, Direction::Outgoing);
         for child in children {
-            write_rec(w, model, tree, child, indent + 1)?;
+            write_rec(w, model, geom, child, indent + 1)?;
         }
 
         write_indent(w, indent)?;
         write!(w, "</node>\n")?;
         Ok(())
     }
-    write_rec(w, model, &geom.joint_data.tree, geom.joint_data.root, 0)
+    write_rec(w, model, &geom, geom.joint_data.root, 0)
 }
 
 fn write_scene<W: Write>(w: &mut W) -> Result<()> {

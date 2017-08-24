@@ -36,6 +36,9 @@ pub struct GeometryDataWithJoints {
     pub indices: Vec<u16>,
     pub draw_calls: Vec<DrawCall>,
     pub joint_data: JointData,
+    /// The object matrices for the bind pose. The same as the object
+    /// matrices in the model file, but tweaked to be invertible.
+    pub objects: Vec<Matrix4<f64>>,
 }
 
 #[derive(Debug, Clone)]
@@ -110,7 +113,7 @@ pub struct DrawCall {
 pub struct Builder<'a, 'b: 'a, 'c> {
     model: &'a Model<'b>,
     objects: &'c [Matrix4<f64>],
-    joint_builder: Option<JointBuilder<'a, 'b>>,
+    joint_builder: Option<JointBuilder<'a, 'b, 'c>>,
     gpu: GpuState,
     cur_texture_dim: (u32, u32),
     vertices: Vec<Vertex>,
@@ -124,14 +127,45 @@ pub fn build_with_joints(
     model: &Model,
     objects: &[Matrix4<f64>]
 ) -> Result<GeometryDataWithJoints> {
-    let mut builder = Builder::new(model, objects, Some(JointBuilder::new(model)));
-    render_cmds::run_commands(model.render_cmds_cur, &mut builder)?;
-    let data = builder.data();
+    /// Make singular matrices invertible by perturbing them very slightly,
+    /// if necessary.
+    fn make_invertible(m: &Matrix4<f64>) -> Matrix4<f64> {
+        use cgmath::SquareMatrix;
+        if m.is_invertible() {
+            m.clone()
+        } else {
+            // Bump very slightly along the diagonal.
+            let m2 = m + Matrix4::from_scale(0.00001);
+            if m2.is_invertible() {
+                m2
+            } else {
+                // #&$@$!! Give up.
+                warn!("non-invertible object encountered while building \
+                       joint tree; using identity instead");
+                info!("namely, {:#?}", m);
+                Matrix4::one()
+            }
+        }
+    }
+
+    // The object matrices need to be invertible to form the inverse
+    // bind matrices for the joint tree.
+    let objects = objects
+            .iter()
+            .map(|mat| make_invertible(mat))
+            .collect::<Vec<Matrix4<f64>>>();
+    let data = {
+        let joint_builder = JointBuilder::new(model, &objects);
+        let mut builder = Builder::new(model, &objects[..], Some(joint_builder));
+        render_cmds::run_commands(model.render_cmds_cur, &mut builder)?;
+        builder.data()
+    };
     Ok(GeometryDataWithJoints {
         vertices: data.0.vertices,
         indices: data.0.indices,
         draw_calls: data.0.draw_calls,
         joint_data: data.1.unwrap(),
+        objects,
     })
 }
 
@@ -148,7 +182,7 @@ impl<'a, 'b: 'a, 'c> Builder<'a, 'b, 'c> {
     pub fn new(
         model: &'a Model<'b>,
         objects: &'c [Matrix4<f64>],
-        joint_builder: Option<JointBuilder<'a, 'b>>
+        joint_builder: Option<JointBuilder<'a, 'b, 'c>>
     ) -> Builder<'a, 'b, 'c> {
         Builder {
             model,
