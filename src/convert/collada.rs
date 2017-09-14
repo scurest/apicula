@@ -58,8 +58,14 @@ fn write_asset<W: Write>(w: &mut W) -> Result<()> {
     let iso8601_datetime = time::strftime("%FT%TZ", &now)?;
     write_lines!(w,
         r##"  <asset>"##,
+		r##"    <contributor>"##,
+		r##"	<author>Apicula</author>"##,
+		r##"	<authoring_tool>Apicula</authoring_tool>"##,
+		r##"	</contributor>"##,
         r##"    <created>{time}</created>"##,
         r##"    <modified>{time}</modified>"##,
+		r##"	<unit name="meter" meter="1"/>"##,
+		r##"	<up_axis>Z_UP</up_axis>"##,
         r##"  </asset>"##;
         time = iso8601_datetime,
     )?;
