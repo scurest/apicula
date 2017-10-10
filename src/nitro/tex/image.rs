@@ -10,8 +10,7 @@ pub fn gen_image(
     tex: &Tex,
     tex_info: &TextureInfo,
     pal_info: Option<&PaletteInfo>,
-) -> Result<Vec<u8>>
-{
+) -> Result<Vec<u8>> {
     let palette_format_but_no_palette = || -> Error {
         "texture with palette format was not paired with a palette".into()
     };
@@ -169,43 +168,27 @@ pub fn gen_compressed_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &Palett
 
             let mode = extra.bits(14,16);
 
-            let color = match mode {
-                0 => {
-                    match texel {
-                        0 => color(0),
-                        1 => color(1),
-                        2 => color(2),
-                        3 => [0, 0, 0, 0],
-                        _ => unreachable!(),
-                    }
-                }
-                1 => {
-                    match texel {
-                        0 => color(0),
-                        1 => color(1),
-                        2 => avg(color(0), color(1)),
-                        3 => [0, 0, 0, 0],
-                        _ => unreachable!(),
-                    }
-                }
-                2 => {
-                    match texel {
-                        0 => color(0),
-                        1 => color(1),
-                        2 => color(2),
-                        3 => color(3),
-                        _ => unreachable!(),
-                    }
-                }
-                3 => {
-                    match texel {
-                        0 => color(0),
-                        1 => color(1),
-                        2 => avg358(color(1), color(0)),
-                        3 => avg358(color(0), color(1)),
-                        _ => unreachable!(),
-                    }
-                }
+            let color = match (mode, texel) {
+                (0, 0) => color(0),
+                (0, 1) => color(1),
+                (0, 2) => color(2),
+                (0, 3) => [0, 0, 0, 0],
+
+                (1, 0) => color(0),
+                (1, 1) => color(1),
+                (1, 2) => avg(color(0), color(1)),
+                (1, 3) => [0, 0, 0, 0],
+
+                (2, 0) => color(0),
+                (2, 1) => color(1),
+                (2, 2) => color(2),
+                (2, 3) => color(3),
+
+                (3, 0) => color(0),
+                (3, 1) => color(1),
+                (3, 2) => avg358(color(1), color(0)),
+                (3, 3) => avg358(color(0), color(1)),
+
                 _ => unreachable!(),
             };
             write_pixel(&mut pixels, &mut i, color);
@@ -216,10 +199,10 @@ pub fn gen_compressed_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &Palett
 }
 
 fn write_pixel(pixels: &mut [u8], i: &mut usize, pixel: [u8; 4]) {
-    pixels[*i+0] = pixel[0];
-    pixels[*i+1] = pixel[1];
-    pixels[*i+2] = pixel[2];
-    pixels[*i+3] = pixel[3];
+    pixels[*i + 0] = pixel[0];
+    pixels[*i + 1] = pixel[1];
+    pixels[*i + 2] = pixel[2];
+    pixels[*i + 3] = pixel[3];
     *i += 4;
 }
 

@@ -7,7 +7,7 @@ use nitro::tex::TextureParameters;
 use util::cur::Cur;
 
 pub fn read_tex(cur: Cur) -> Result<Tex> {
-    fields!(cur, tex0 {
+    fields!(cur, TEX0 {
         stamp: [u8; 4],
         section_size: u32,
         padding: u32,
@@ -27,15 +27,16 @@ pub fn read_tex(cur: Cur) -> Result<Tex> {
         palette_info_off: u32,
         palette_data_off: u32,
     });
+
     check!(stamp == b"TEX0")?;
+
+    let texinfo = read_tex_info((cur + texture_info_off as usize)?)?;
+    let palinfo = read_pal_info((cur + palette_info_off as usize)?)?;
 
     let texture_data_size = (texture_data_size_shr_3 as usize) << 3;
     let compressed_texture_data_size = (compressed_texture_data_size_shr_3 as usize) << 3;
     let compressed_texture_extra_size = compressed_texture_data_size / 2;
     let palette_data_size = (palette_data_size_shr_3 as usize) << 3;
-
-    let texinfo = read_tex_info((cur + texture_info_off as usize)?)?;
-    let palinfo = read_pal_info((cur + palette_info_off as usize)?)?;
 
     let texture_data = (cur + texture_data_off as usize)?
         .next_n_u8s(texture_data_size)?;
@@ -57,21 +58,23 @@ pub fn read_tex(cur: Cur) -> Result<Tex> {
 }
 
 fn read_pal_info(cur: Cur) -> Result<Vec<PaletteInfo>> {
-    Ok(info_block::read::<(u16, u16)>(cur)?
-        .map(|((off_shr_3, _), name)| {
-            let off = (off_shr_3 as usize) << 3;
-            PaletteInfo { name, off }
-        })
-        .collect()
-    )
+    let data = info_block::read::<(u16, u16)>(cur)?;
+
+    let pal_infos = data.map(|(( off_shr_3, _ ), name)| {
+        let off = (off_shr_3 as usize) << 3;
+        PaletteInfo { name, off }
+    });
+
+    Ok(pal_infos.collect())
 }
 
 fn read_tex_info(cur: Cur) -> Result<Vec<TextureInfo>> {
-    Ok(info_block::read::<(u32, u32)>(cur)?
-        .map(|((params, _), name)| {
-            let params = TextureParameters(params);
-            TextureInfo { name, params }
-        })
-        .collect()
-    )
+    let data = info_block::read::<(u32, u32)>(cur)?;
+
+    let tex_infos = data.map(|(( params, _ ), name)| {
+        let params = TextureParameters(params);
+        TextureInfo { name, params }
+    });
+
+    Ok(tex_infos.collect())
 }
