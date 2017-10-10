@@ -48,8 +48,8 @@ impl<T: Eq + Hash + Clone> InsOrderSet<T> {
         self.map.clear();
     }
 
-    /// Insert an element into the set. This operation does
-    /// nothing if the set already contained the element.
+    /// Insert an element into the set. This operation does nothing
+    /// if the set already contained the element.
     pub fn insert(&mut self, t: T) {
         let entry = self.map.entry(t.clone());
         match entry {
@@ -104,7 +104,7 @@ fn test2() {
     let table = s.iter().cloned().collect::<Vec<_>>();
     assert_eq!(&table, &[1,0,2,3,4]);
 
-    // Same as `vals`, but stores the index of each element in `table`.
+    // Same as `vals`, but stores each element by its index into `table`.
     let vals_by_index = vals.iter()
         .map(|val| s.get_index_from_value(val).unwrap().clone())
         .collect::<Vec<_>>();

@@ -1,3 +1,9 @@
+//! Common pattern in Nitro files.
+//!
+//! An info block is a common structure that contains a sequence of
+//! data-name pairs, where the data is usually an offset to the location
+//! of some struct with the given name.
+
 use errors::Result;
 use nitro::name::Name;
 use std::fmt::Debug;
@@ -8,7 +14,7 @@ use util::view::Viewable;
 
 pub type Iterator<'a, T> = Zip<View<'a, T>, View<'a, Name>>;
 
-/// Returns an iterator over the offset/name pairs in an info block.
+/// Returns an iterator over (`T`, name) pairs in an info block.
 pub fn read<T>(cur: Cur) -> Result<Iterator<T>> where
     T: Viewable + Debug
 {

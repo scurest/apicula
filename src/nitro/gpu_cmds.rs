@@ -1,3 +1,11 @@
+//! NDS GPU command interpreter.
+//!
+//! This module understands the binary format for GPU commands and turns them
+//! into function calls to be consumed elsewhere (it doesn't actually _do_
+//! anything with the commands).
+//!
+//! See the [GBATEK documentation](http://problemkaputt.de/gbatek.htm#ds3dvideo).
+
 use cgmath::Point2;
 use cgmath::Point3;
 use cgmath::vec3;

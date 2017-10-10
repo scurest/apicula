@@ -1,3 +1,5 @@
+//! Handling for types that can be viewed as byte arrays.
+
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -5,9 +7,11 @@ use std::fmt::Write;
 use std::iter::Iterator;
 use std::marker::PhantomData;
 
-/// Types that can be viewed as a fixed-length byte sequence.
+/// Types that can be constructed from a constant-length byte array.
 pub trait Viewable: Sized {
+    /// Size of the byte array.
     fn size() -> usize;
+    /// View the byte-array (of length `size()`) as a `Self`.
     fn view(buf: &[u8]) -> Self;
 }
 
@@ -69,7 +73,8 @@ impl<T,S,P,Q,R> Viewable for (T,S,P,Q,R) where
     }
 }
 
-/// An byte buffer interpreted as an array of Viewable elements.
+
+/// A byte buffer interpreted as an array of Viewable elements.
 #[derive(Copy, Clone)]
 pub struct View<'a, T> {
     buf: &'a [u8],
@@ -77,12 +82,19 @@ pub struct View<'a, T> {
 }
 
 impl<'a, T: Viewable> View<'a, T> {
+    /// Constructs a `View` from its underlying buffer.
+    ///
+    /// # Panics
+    /// The view must contain an even number of `T`s; that is, the length
+    /// of `buf` in bytes must be a multiple of the `Viewable::size()` of
+    /// `T`.
     pub fn from_buf(buf: &[u8]) -> View<T> {
         let size = <T as Viewable>::size();
         assert!(size == 0 || buf.len() % size == 0);
         View { buf, _marker: PhantomData }
     }
 
+    /// Number of `T`s in the view.
     pub fn len(&self) -> usize {
         let size = <T as Viewable>::size();
         self.buf.len() / size
