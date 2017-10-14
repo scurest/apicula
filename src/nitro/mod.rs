@@ -13,7 +13,6 @@
 //! A container file (eg. NSBMD) holds one or more of these.
 
 pub mod container;
-pub mod gpu_cmds;
 pub mod jnt;
 pub mod mdl;
 pub mod name;

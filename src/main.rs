@@ -24,6 +24,7 @@ mod decompress;
 mod extract;
 mod files;
 mod geometry;
+mod nds;
 mod nitro;
 mod png;
 mod viewer;
