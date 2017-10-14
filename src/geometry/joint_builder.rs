@@ -17,6 +17,7 @@ use cgmath::One;
 use cgmath::SquareMatrix;
 use nitro::mdl::InvBindMatrixPair;
 use nitro::mdl::Model;
+use nitro::gpu_cmds::GpuCmd;
 use petgraph::Direction;
 use petgraph::graph::NodeIndex;
 use petgraph::stable_graph::StableGraph;
@@ -152,6 +153,14 @@ impl<'a, 'b: 'a, 'c> JointBuilder<'a, 'b, 'c> {
 
     pub fn data(self) -> JointData {
         cleanup(self.data)
+    }
+
+    pub fn run_gpu_cmd(&mut self, cmd: GpuCmd) {
+        match cmd {
+            GpuCmd::Restore { idx } => self.load_matrix(idx as u8),
+            GpuCmd::Vertex { .. } => self.vertex(),
+            _ => ()
+        }
     }
 
     pub fn load_matrix(&mut self, stack_pos: u8) {

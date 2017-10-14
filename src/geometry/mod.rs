@@ -16,7 +16,6 @@ mod index_builder;
 use cgmath::Matrix4;
 use cgmath::Zero;
 use cgmath::Point2;
-use cgmath::Point3;
 use cgmath::Transform;
 use cgmath::vec4;
 use errors::Result;
@@ -24,6 +23,7 @@ use geometry::index_builder::IndexBuilder;
 use geometry::joint_builder::JointBuilder;
 use geometry::joint_builder::JointData;
 use nitro::gpu_cmds;
+use nitro::gpu_cmds::GpuCmd;
 use nitro::mdl::InvBindMatrixPair;
 use nitro::mdl::Model;
 use nitro::mdl::render_cmds;
@@ -297,56 +297,55 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         self.gpu.texture_matrix = mat.texture_mat;
 
         self.begin_draw_call(mesh_id, mat_id);
-        gpu_cmds::run_commands(self.model.meshes[mesh_id as usize].commands, self)?;
+        run_gpu_cmds(self, self.model.meshes[mesh_id as usize].commands)?;
         self.end_draw_call();
 
         Ok(())
     }
 }
 
-impl<'a, 'b: 'a, 'c> gpu_cmds::Sink for Builder<'a, 'b, 'c> {
-    fn restore(&mut self, idx: u32) {
-        if let Some(ref mut b) = self.joint_builder {
-            b.load_matrix(idx as u8);
-        }
-        self.gpu.restore(idx as u8);
-    }
+fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) -> Result<()> {
+    let interpreter = gpu_cmds::CmdParser::new(commands);
 
-    fn scale(&mut self, (sx, sy, sz): (f64, f64, f64)) {
-        self.gpu.mul_matrix(&Matrix4::from_nonuniform_scale(sx,sy,sz))
-    }
+    for cmd_res in interpreter {
+        let cmd = cmd_res?;
 
-    fn begin(&mut self, prim_type: u32) {
-        self.ind_builder.begin(prim_type);
-    }
+        match cmd {
+            GpuCmd::Nop => (),
+            GpuCmd::Restore { idx } => b.gpu.restore(idx as u8),
+            GpuCmd::Scale { scale: (sx, sy, sz) } => {
+                b.gpu.mul_matrix(&Matrix4::from_nonuniform_scale(sx, sy, sz))
+            }
+            GpuCmd::Begin { prim_type } => b.ind_builder.begin(prim_type),
+            GpuCmd::End => {
+                b.ind_builder.end();
+                b.cur_draw_call.index_range.end = b.ind_builder.indices.len();
+            }
+            GpuCmd::TexCoord { texcoord } => {
+                // Transform into OpenGL-type [0,1]x[0,1] texture space.
+                let texcoord = Point2::new(
+                    texcoord.x / b.cur_texture_dim.0 as f64,
+                    1.0 - texcoord.y / b.cur_texture_dim.1 as f64, // y-down to y-up
+                );
+                let texcoord = b.gpu.texture_matrix * vec4(texcoord.x, texcoord.y, 0.0, 0.0);
+                b.next_vertex.texcoord = [texcoord.x as f32, texcoord.y as f32];
+            }
+            GpuCmd::Color { color } => b.next_vertex.color = [color.x, color.y, color.z],
+            GpuCmd::Normal { .. } => (), // unimplemented
+            GpuCmd::Vertex { position } => {
+                b.ind_builder.vertex();
 
-    fn end(&mut self) {
-        self.ind_builder.end();
-        self.cur_draw_call.index_range.end = self.ind_builder.indices.len();
-    }
-
-    fn texcoord(&mut self, texcoord: Point2<f64>) {
-        let tc = Point2::new(
-            texcoord.x / self.cur_texture_dim.0 as f64,
-            // TODO: t coordinate seems to be wrong for mirrored textures
-            1.0 - texcoord.y / self.cur_texture_dim.1 as f64,
-        );
-        let tc = self.gpu.texture_matrix * vec4(tc.x, tc.y, 0.0, 0.0);
-        self.next_vertex.texcoord = [tc[0] as f32, tc[1] as f32];
-    }
-
-    fn color(&mut self, c: Point3<f32>) {
-        self.next_vertex.color = [c[0] as f32, c[1] as f32, c[2] as f32];
-    }
-
-    fn vertex(&mut self, p: Point3<f64>) {
-        self.ind_builder.vertex();
-        if let Some(ref mut b) = self.joint_builder {
-            b.vertex();
+                let p = b.gpu.cur_matrix.transform_point(position);
+                b.next_vertex.position = [p.x as f32, p.y as f32, p.z as f32];
+                b.vertices.push(b.next_vertex);
+            }
         }
 
-        let p = self.gpu.cur_matrix.transform_point(p);
-        self.next_vertex.position = [p[0] as f32, p[1] as f32, p[2] as f32];
-        self.vertices.push(self.next_vertex);
+        // Also send the command to the joint builder if we have one.
+        if let Some(ref mut joint_builder) = b.joint_builder {
+            joint_builder.run_gpu_cmd(cmd);
+        }
     }
+
+    Ok(())
 }
