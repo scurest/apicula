@@ -15,13 +15,12 @@
 //!     // a byte slice, &[u8].
 //!     z: [u8; x],
 //!     // This doesn't read anything, but stores a pointer to the current
-//!     // location to z.
+//!     // location to c.
 //!     c: Cur,
 //!     // Read a 16-bit fixed-point number in (1,3,12) format. The extra
 //!     // outer brackets are needed for syntactic reasons.
 //!     f: (fix16(1,3,12)),
 //! });
-//!
 //! // If control reaches here, `cur` now points just past the end of the last field.
 //! ```
 

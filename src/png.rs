@@ -9,7 +9,9 @@ pub fn write_rgba<S: AsRef<OsStr>>(s: &S, rgba: &[u8], width: u32, height: u32) 
     let fout = File::create(&Path::new(s))?;
     let mut enc = pnglib::Encoder::new(fout, width, height);
     enc.set(pnglib::ColorType::RGBA).set(pnglib::BitDepth::Eight);
+
     let mut writer = enc.write_header()?;
     writer.write_image_data(rgba)?;
+
     Ok(())
 }

@@ -16,7 +16,7 @@ macro_rules! check {
             use ::errors::Error;
             use ::errors::ErrorKind;
             Err(Error::from_kind(
-                ErrorKind::Msg(format!("sanity check failed: {}", stringify!($b)))
+                ErrorKind::Msg(format!("expected: {}", stringify!($b)))
             ))
         } else {
             Ok(())

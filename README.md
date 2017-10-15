@@ -3,13 +3,12 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/bavh9qh25mbta41x?svg=true)](https://ci.appveyor.com/project/scurest/apicula)
 [![Lines of code](https://tokei.rs/b1/github/scurest/apicula)](https://github.com/Aaronepower/tokei)
 
-A program to convert Nintendo DS models and animations to COLLADA.
+Convert Nintendo DS NSBMD models and animations to COLLADA.
 
 ![Enemy walk-cycle from Ore ga Omae o Mamoru, imported into Blender](http://scurest.github.io/apicula/e07BWalk.gif)
 
 Many NDS games used Nintendo's Nitro SDK format for models (NSBMD), textures (NSBTX), and
-animations (NSBCA). This program allow you to view these files and convert them to COLLADA
-`.dae` files for importing into DCC programs, like Blender.
+animations (NSBCA). apicula let's you convert these models to `.dae` files.
 
 ## Downloads
 
@@ -18,7 +17,8 @@ Pre-built binaries are provided for Windows:
 * [apicula-latest-i686-pc-windows-msvc](https://s3.amazonaws.com/apicula/apicula-latest-i686-pc-windows-msvc.zip) (Windows, 32-bit)
 * [apicula-latest-x86_64-pc-windows-msvc](https://s3.amazonaws.com/apicula/apicula-latest-x86_64-pc-windows-msvc.zip) (Windows, 64-bit)
 
-These are built automatically off the latest `master`. You may need one of the Visual Studio Redistributable packages installed.
+These are built automatically off the latest `master`. You may need one of the Visual Studio
+Redistributable packages installed.
 
 ## Building
 
@@ -61,7 +61,7 @@ to convert a model and animation to a COLLADA file.
 
 ## Compatibility
 
-apicula was tested with Nitro files from the following games
+apicula was primarily tested with Nitro files from the following games
 
 * Kingdom Hearts: 358/2 Days
 * Ore ga Omae o Mamoru
@@ -76,27 +76,19 @@ If you can test in others (Maya, 3DS Max), that would be appreciated :)
 
 ## Special Thanks
 
-* **kiwi.ds**
+* **kiwi.ds**, for models and documentation for Nitro formats. All NDS model viewers seem to be
+  derived from here. Now defunct :(
 
-    For models and documentation for Nitro formats. All NDS model viewers seem to be derived
-    from here. Now defunct :(
+* **Gericom and [MKDS Course Modifier](https://gbatemp.net/threads/mkds-course-modifier.299444/)**,
+  for animation information, especially for the meaning of the basis rotations.
 
-* **Gericom and [MKDS Course Modifier](https://gbatemp.net/threads/mkds-course-modifier.299444/)**
+* **Lowlines and [Console Tool](http://llref.emutalk.net/projects/ctool/)**, for animations and
+  documentation for Nitro formats. I also use Console Tool for extracting files from DS ROMs.
 
-    For animations, especially for the meaning of the basis rotations.
+* **[GBATEK](http://problemkaputt.de/gbatek.htm#ds3dvideo)**, for DS hardware documentation.
 
-* **Lowlines and [Console Tool](http://llref.emutalk.net/projects/ctool/)**
-
-    For animations and documentation for Nitro formats. I also use Console Tool for extracting
-    files from DS ROMs.
-
-* **[GBATEK](http://problemkaputt.de/gbatek.htm#ds3dvideo)**
-
-    For DS hardware documentation.
-
-* **[deSmuME](http://desmume.org/)**
-
-    For the DS debugger. `_3D_LOG_EXEC` and the GDB stub were invaluable.
+* **[deSmuME](http://desmume.org/)**, for the DS debugger. `_3D_LOG_EXEC` and the GDB stub were
+  invaluable.
 
 ## License
 

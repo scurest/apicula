@@ -1,3 +1,5 @@
+//! apicula, NDS model viewer/converter
+
 #![recursion_limit = "1024"] // for error_chain
 
 #[macro_use]
@@ -36,7 +38,10 @@ use std::env;
 
 pub static VERSION: &'static str = concat!(
     env!("CARGO_PKG_VERSION"),
-    " (", include_str!(concat!(env!("OUT_DIR"), "/git_rev")), ")",
+    " (",
+    // The git commit hash, see build.rs
+    include_str!(concat!(env!("OUT_DIR"), "/git_rev")),
+    ")",
 );
 
 fn main() {
