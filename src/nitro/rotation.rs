@@ -30,20 +30,22 @@ pub fn pivot_mat(select: u16, neg: u16, a: f64, b: f64) -> Result<Matrix4<f64>> 
 
     // `select` chooses the result in the following way
     //
-    //     o..    .o.    ..o
-    //   0=.ac  3=a.c  6=ac.
-    //     .bd    b.d    bd.
+    //      o..       .o.       ..o
+    //   0  .ac    3  a.c    6  ac.
+    //      .bd       b.d       bd.
     //
-    //     .ac    a.c    ac.
-    //   1=o..  4=.o.  7=..o
-    //     .bd    b.d    bd.
+    //      .ac       a.c       ac.
+    //   1  o..    4  .o.    7  ..o
+    //      .bd       b.d       bd.
     //
-    //     .ac    a.c    ac.
-    //   2=.bd  5=b.d  8=bd.
-    //     o..    .o.    ..o
+    //      .ac       a.c       ac.
+    //   2  .bd    5  b.d    8  bd.
+    //      o..       .o.       ..o
     //
-    // Note that they are all permutations of the rows
-    // and columns of the first matrix.
+    // Note that they are all permutations of the rows and
+    // columns of the first matrix. So we let `mat` be the
+    // first matrix and use `select` to pick permutations
+    // to apply to it.
     let mat = Matrix4::new(
          o,  0.0, 0.0, 0.0,
         0.0,  a,   b,  0.0,
