@@ -31,9 +31,7 @@ mod nitro;
 mod png;
 mod viewer;
 
-use env_logger::LogBuilder;
 use errors::Result;
-use log::LogLevelFilter;
 use std::env;
 
 pub static VERSION: &'static str = concat!(
@@ -62,16 +60,19 @@ fn main2() -> i32 {
 }
 
 fn init_logger() {
-    let mut builder = LogBuilder::new();
+    use log;
+    use env_logger;
+
+    let mut builder = env_logger::Builder::new();
 
     // Show warnings by default
-    builder.filter(None, LogLevelFilter::Warn);
+    builder.filter(None, log::LevelFilter::Warn);
 
     if env::var("RUST_LOG").is_ok() {
        builder.parse(&env::var("RUST_LOG").unwrap());
     }
 
-    builder.init().unwrap();
+    builder.init();
 }
 
 fn main3() -> Result<()> {

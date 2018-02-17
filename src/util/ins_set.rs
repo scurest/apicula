@@ -26,7 +26,7 @@ pub struct InsOrderSet<T: Eq + Hash + Clone> {
     map: HashMap<T, usize>,
 }
 
-pub type Iter<'a, T: 'a> = slice::Iter<'a, T>;
+pub type Iter<'a, T> = slice::Iter<'a, T>;
 
 impl<T: Eq + Hash + Clone> InsOrderSet<T> {
     /// Create an empty set.
