@@ -1,5 +1,4 @@
-use std::fmt;
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use util::view::Viewable;
 
 /// Sixteen-byte NUL-padded ASCII(?) string, used as human-readable names
@@ -7,15 +6,12 @@ use util::view::Viewable;
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Name(pub [u8; 16]);
 
+
 impl Name {
     pub fn from_bytes(buf: &[u8]) -> Name {
-        assert_eq!(buf.len(), 16);
-
-        let mut arr = [0; 16];
-        for i in 0..16 {
-            arr[i] = buf[i];
-        }
-        Name(arr)
+        let mut name = Name([0; 16]);
+        name.0.copy_from_slice(buf);
+        name
     }
 
     /// Returns an object that formats the name as a non-empty string
@@ -79,7 +75,7 @@ impl<'a> fmt::Display for NameSafePrinter<'a> {
     }
 }
 
-/// Slice off any suffix of NUL bytes from the end of a slice.
+/// Slice off any NUL bytes from the end of `buf`.
 fn trim_trailing_nuls(mut buf: &[u8]) -> &[u8] {
     while let Some((&0, rest)) = buf.split_last() {
         buf = rest;

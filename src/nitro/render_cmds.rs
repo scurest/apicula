@@ -152,6 +152,16 @@ impl RenderInterpreterState {
     }
 }
 
+/// Returns a cursor to one-past-the-end of the last render opcode.
+pub fn find_end(mut cur: Cur) -> Result<Cur> {
+    loop {
+        let opcode = cur.next::<u8>()?;
+        if opcode == 0x01 { return Ok(cur); }
+        let num_params = cmd_size(opcode, cur)?;
+        let _params = cur.jump_forward(num_params);
+    }
+}
+
 fn cmd_size(opcode: u8, cur: Cur) -> Result<usize> {
     let len = match opcode {
         0x00 => 0,

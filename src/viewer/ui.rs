@@ -4,7 +4,6 @@ use cgmath::vec2;
 use cgmath::vec3;
 use cgmath::Vector3;
 use errors::Result;
-use files::FileHolder;
 use glium;
 use glium::Surface;
 use std::default::Default;
@@ -19,10 +18,11 @@ use viewer::mouse::MouseState;
 use viewer::speed::SpeedLevel;
 use viewer::state::Dir;
 use viewer::state::ViewState;
+use db::Database;
 
-pub struct Ui<'a, 'b: 'a, 'c> {
-    fh: &'a FileHolder<'b>,
-    ctx: &'c GlContext,
+pub struct Ui<'a> {
+    db: Database,
+    ctx: &'a GlContext,
 
     view_state: ViewState,
     drawing_data: DrawingData,
@@ -37,9 +37,9 @@ pub struct Ui<'a, 'b: 'a, 'c> {
 type KeyEvent = (glium::glutin::ElementState, glium::glutin::VirtualKeyCode);
 type MouseEvent = (glium::glutin::ElementState, glium::glutin::MouseButton);
 
-impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
-    pub fn new(fh: &'a FileHolder<'b>, ctx: &'c GlContext) -> Result<Ui<'a, 'b, 'c>> {
-        assert!(fh.models.len() != 0);
+impl<'a> Ui<'a> {
+    pub fn new(db: Database, ctx: &'a GlContext) -> Result<Ui<'a>> {
+        assert!(!db.models.is_empty());
 
         // Initial position at the origin, viewing the first
         // model in its bind pose.
@@ -56,7 +56,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
         };
 
         let drawing_data =
-            DrawingData::from_view_state(&ctx.display, fh, &view_state);
+            DrawingData::from_view_state(&ctx.display, &db, &view_state);
 
         let win_title = String::new();
         let mouse = MouseState::new();
@@ -65,7 +65,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
         let move_speed = Default::default();
 
         Ok(Ui {
-            fh,
+            db,
             ctx,
             view_state,
             drawing_data,
@@ -119,7 +119,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
                 let mut time_since_last_frame = cur_time - last_anim_time;
                 if time_since_last_frame > frame_length {
                     while time_since_last_frame > frame_length {
-                        self.view_state.next_frame(self.fh);
+                        self.view_state.next_frame(&self.db);
                         time_since_last_frame -= frame_length;
                     }
                     last_anim_time = cur_time;
@@ -160,15 +160,15 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
 
             // Change model
             (Es::Pressed, K::Comma) =>
-                self.view_state.advance_model(self.fh, Dir::Prev),
+                self.view_state.advance_model(&self.db, Dir::Prev),
             (Es::Pressed, K::Period) =>
-                self.view_state.advance_model(self.fh, Dir::Next),
+                self.view_state.advance_model(&self.db, Dir::Next),
 
             // Change animation
             (Es::Pressed, K::O) =>
-                self.view_state.advance_anim(self.fh, Dir::Prev),
+                self.view_state.advance_anim(&self.db, Dir::Prev),
             (Es::Pressed, K::P) =>
-                self.view_state.advance_anim(self.fh, Dir::Next),
+                self.view_state.advance_anim(&self.db, Dir::Next),
 
             _ => ()
         }
@@ -238,7 +238,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
     }
 
     fn draw_frame(&mut self) {
-        self.drawing_data.change_view_state(&self.ctx.display, self.fh, &self.view_state);
+        self.drawing_data.change_view_state(&self.ctx.display, &self.db, &self.view_state);
 
         let mut target = self.ctx.display.draw();
 
@@ -260,7 +260,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
             };
 
             self.drawing_data.draw(
-                self.fh,
+                &self.db,
                 self.ctx,
                 &mut target,
                 &draw_params,
@@ -276,18 +276,18 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
         if self.drawing_data.has_error() {
             write!(&mut self.win_title, "{{ERROR}} ").unwrap();
         };
-        let model = &self.fh.models[self.view_state.model_id];
+        let model = &self.db.models[self.view_state.model_id];
         write!(&mut self.win_title, "{model_name}[{model_num}/{num_models}] === ",
             model_name = model.name,
             model_num = self.view_state.model_id + 1,
-            num_models = self.fh.models.len(),
+            num_models = self.db.models.len(),
         ).unwrap();
         if let Some(ref anim_state) = self.view_state.anim_state {
-            let anim = &self.fh.animations[anim_state.anim_id];
+            let anim = &self.db.animations[anim_state.anim_id];
             write!(&mut self.win_title, "{anim_name}[{anim_num}/{num_anims}] ({cur_frame}/{num_frames}) === ",
                 anim_name = anim.name,
                 anim_num = anim_state.anim_id + 1,
-                num_anims = self.fh.animations.len(),
+                num_anims = self.db.animations.len(),
                 cur_frame = anim_state.cur_frame + 1,
                 num_frames = anim.num_frames,
             ).unwrap()
@@ -311,6 +311,7 @@ impl<'a, 'b, 'c> Ui<'a, 'b, 'c> {
 fn print_controls() {
     print!(concat!(
         "Controls\n",
+        "--------\n",
         "  WASD         Forward/Left/Back/Right\n",
         "  EQ           Up/Down\n",
         "  L.Shift      Increase Speed\n",

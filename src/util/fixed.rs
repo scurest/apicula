@@ -11,7 +11,7 @@ use util::bits::BitField;
 /// fractional part, the integer part, and whether the number is signed.
 ///
 /// Precisely, the low `sign_bits + int_bits + frac_bits` bits of `x` are interpreted
-/// as an integer (unsigned if `sing_bits` is 0, twos-complement if it is 1),
+/// as an integer (unsigned if `sign_bits` is 0, twos-complement if it is 1),
 /// and the result is this integer times 2^(-`frac_bits`).
 pub fn fix32(x: u32, sign_bits: u32, int_bits: u32, frac_bits: u32) -> f64 {
     assert!(sign_bits <= 1);

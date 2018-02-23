@@ -11,13 +11,9 @@
 //! TODO: rewrite documentation after the blend matrix -> inv bind matrix
 //! transition.
 
-use cgmath::ApproxEq;
-use cgmath::Matrix4;
-use cgmath::One;
-use cgmath::SquareMatrix;
+use cgmath::{ApproxEq, Matrix4, One, SquareMatrix};
 use nds::gpu_cmds::GpuCmd;
-use nitro::mdl::InvBindMatrixPair;
-use nitro::mdl::Model;
+use nitro::Model;
 use petgraph::Direction;
 use petgraph::graph::NodeIndex;
 use petgraph::stable_graph::StableGraph;
@@ -105,11 +101,11 @@ impl SymbolicMatrix {
 }
 
 
-#[derive(Debug, Clone)]
-pub struct JointBuilder<'a, 'b: 'a, 'c> {
+#[derive(Clone)]
+pub struct JointBuilder<'a, 'b> {
     data: JointData,
-    model: &'a Model<'b>,
-    objects: &'c [Matrix4<f64>],
+    model: &'a Model,
+    objects: &'b [Matrix4<f64>],
 
     /// GPU's current matrix.
     cur_matrix: SymbolicMatrix,
@@ -118,7 +114,7 @@ pub struct JointBuilder<'a, 'b: 'a, 'c> {
     matrix_stack: Vec<Option<SymbolicMatrix>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JointData {
     pub tree: JointTree,
     pub root: NodeIndex,
@@ -126,11 +122,11 @@ pub struct JointData {
     pub vertices: Vec<SymbolicMatrix>,
 }
 
-impl<'a, 'b: 'a, 'c> JointBuilder<'a, 'b, 'c> {
+impl<'a, 'b> JointBuilder<'a, 'b> {
     pub fn new(
-        model: &'a Model<'b>,
-        objects: &'c [Matrix4<f64>]
-    ) -> JointBuilder<'a, 'b, 'c> {
+        model: &'a Model,
+        objects: &'b [Matrix4<f64>]
+    ) -> JointBuilder<'a, 'b> {
         let mut tree = StableGraph::new();
 
         let root = tree.add_node(Node {
@@ -192,9 +188,7 @@ impl<'a, 'b: 'a, 'c> JointBuilder<'a, 'b, 'c> {
                 );
             } else {
                 let our_inv_bind = self.data.tree[stack_matrix.terms[0].joint_id].inv_bind_matrix;
-                let stored_inv_bind = self.model.inv_bind_matrices_cur
-                    .nth::<InvBindMatrixPair>(inv_bind_id as usize).unwrap() // TODO...
-                    .0;
+                let stored_inv_bind = self.model.inv_binds[inv_bind_id as usize];
                 let close_enough = our_inv_bind.relative_eq(
                     &stored_inv_bind,
                     0.005, // fairly generous epsilon

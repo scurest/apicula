@@ -1,24 +1,14 @@
-use cgmath::Matrix4;
-use cgmath::One;
-use convert::format::FnFmt;
-use convert::format::Mat;
-use convert::context::Context;
+use cgmath::{Matrix4, One};
+use convert::format::{FnFmt, Mat};
+use convert::image_namer::{ImageNamer, ImageSpec};
+use db::Database;
 use errors::Result;
 use geometry::build_with_joints as build_geometry;
 use geometry::GeometryDataWithJoints as GeometryData;
-use geometry::joint_builder::JointTree;
-use geometry::joint_builder::SymbolicTerm;
-use geometry::joint_builder::Transform;
-use nitro::jnt;
-use nitro::jnt::Animation;
-use nitro::mdl::Model;
-//use nitro::name;
-use nitro::tex::texpal::TexPalPair;
-use petgraph::Direction;
-use petgraph::graph::NodeIndex;
-use std::collections::HashSet;
-use std::fmt;
-use std::fmt::Write;
+use geometry::joint_builder::{JointTree, SymbolicTerm, Transform};
+use nitro::{Model, Animation};
+use petgraph::{Direction, graph::NodeIndex};
+use std::fmt::{self, Write};
 use time;
 use util::ins_set::InsOrderSet;
 
@@ -26,21 +16,22 @@ static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
 pub fn write<W: Write>(
     w: &mut W,
-    ctx: &Context,
+    db: &Database,
+    image_namer: &ImageNamer,
     model: &Model,
 ) -> Result<()> {
     let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
     let geom = build_geometry(model, &objects[..])?;
-    let anims = &ctx.fh.animations[..];
+    let anims = &db.animations[..];
 
     write_lines!(w,
         r##"<?xml version="1.0" encoding="utf-8"?>"##,
         r##"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">"##;
     )?;
     write_asset(w)?;
-    write_library_images(w, ctx, model)?;
+    write_library_images(w, image_namer, model)?;
     write_library_materials(w, model)?;
-    write_library_effects(w, ctx, model)?;
+    write_library_effects(w, image_namer, model)?;
     write_library_geometries(w, model, &geom)?;
     write_library_controllers(w, &geom)?;
     write_library_animations(w, model, anims, &geom)?;
@@ -68,18 +59,19 @@ fn write_asset<W: Write>(w: &mut W) -> Result<()> {
 
 fn write_library_images<W: Write>(
     w: &mut W,
-    ctx: &Context,
+    image_namer: &ImageNamer,
     model: &Model,
 ) -> Result<()> {
+    use std::collections::HashSet;
+
+    let image_names = model.materials.iter()
+        .filter_map(|material| ImageSpec::from_material(material))
+        .filter_map(|spec| image_namer.names.get(&spec))
+        .collect::<HashSet<_>>();
+
     write_lines!(w,
         r##"  <library_images>"##;
     )?;
-
-    let tex_pal_pairs = model.materials.iter()
-        .filter_map(|mat| TexPalPair::from_material(mat));
-    let image_names = tex_pal_pairs
-        .filter_map(|p| ctx.image_name_from_texpal_pair(p))
-        .collect::<HashSet<_>>();
 
     for name in image_names {
         write_lines!(w,
@@ -116,15 +108,15 @@ fn write_library_materials<W: Write>(w: &mut W, model: &Model) -> Result<()> {
 
 fn write_library_effects<W: Write>(
     w: &mut W,
-    ctx: &Context,
+    image_namer: &ImageNamer,
     model: &Model,
 ) -> Result<()> {
     write_lines!(w,
         r##"  <library_effects>"##;
     )?;
     for (i, mat) in model.materials.iter().enumerate() {
-        let image_name = TexPalPair::from_material(mat)
-            .and_then(|pair| ctx.image_name_from_texpal_pair(pair));
+        let image_name = ImageSpec::from_material(mat)
+            .and_then(|spec| image_namer.names.get(&spec));
 
         write_lines!(w,
             r##"    <effect id="effect{i}" name="{name}">"##,
@@ -158,8 +150,8 @@ fn write_library_effects<W: Write>(
                 r##"          </sampler2D>"##,
                 r##"        </newparam>"##;
                 image_name = name,
-                wrap_s = wrap(mat.params.repeat_s(), mat.params.mirror_s()),
-                wrap_t = wrap(mat.params.repeat_t(), mat.params.mirror_t()),
+                wrap_s = wrap(mat.params.repeat_s, mat.params.mirror_s),
+                wrap_t = wrap(mat.params.repeat_t, mat.params.mirror_t),
             )?;
         }
 
@@ -481,14 +473,14 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
 
 fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
     let num_objects = model.objects.len();
-    let any_animations = anims.iter().any(|a| a.objects.len() == num_objects);
+    let any_animations = anims.iter().any(|a| a.objects_curves.len() == num_objects);
 
     if !any_animations {
         return Ok(()); // no matching animations
     }
 
     let matching_anims = anims.iter().enumerate()
-        .filter(|&(_, a)| a.objects.len() == num_objects);
+        .filter(|&(_, a)| a.objects_curves.len() == num_objects);
 
     write_lines!(w,
         r##"  <library_animations>"##;
@@ -503,7 +495,7 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
                 Transform::Object(id) => id,
                 _ => continue,
             };
-            let object = &anim.objects[object_id as usize];
+            let trs_curves = &anim.objects_curves[object_id as usize];
 
             write_lines!(w,
                 r##"    <animation id="anim{anim_id}-joint{joint_id}">"##;
@@ -529,29 +521,21 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
             )?;
 
             write_lines!(w,
-                r##"      <source id="anim{anim_id}-joint{joint_id}-matrix">"##;
-                anim_id = anim_id, joint_id = joint_id.index(),
-            )?;
-            write!(w,
-                r##"        <float_array id="anim{anim_id}-joint{joint_id}-matrix-array" count="{num_floats}">"##,
-                anim_id = anim_id, joint_id = joint_id.index(), num_floats = 16 * num_frames,
-            )?;
-            for frame in 0..num_frames {
-                // The reason we can't do this with a FnFmt like the others is that getting the matrix
-                // can result in an Error, and that Error can't "go through" a fmt::Result, so this has
-                // to be directly contained in this function.
-                let mat = jnt::object::to_matrix(object, anim, frame)?;
-                write!(w, "{} ", Mat(&mat))?;
-            }
-            write!(w, "</float_array>\n")?;
-            write_lines!(w,
+                r##"      <source id="anim{anim_id}-joint{joint_id}-matrix">"##,
+                r##"        <float_array id="anim{anim_id}-joint{joint_id}-matrix-array" count="{num_floats}">{mats}</float_array>"##,
                 r##"        <technique_common>"##,
                 r##"          <accessor source="#anim{anim_id}-joint{joint_id}-matrix-array" count="{num_frames}" stride="16">"##,
                 r##"            <param name="TRANSFORM" type="float4x4"/>"##,
                 r##"          </accessor>"##,
                 r##"        </technique_common>"##,
                 r##"      </source>"##;
-                anim_id = anim_id, joint_id = joint_id.index(), num_frames = num_frames,
+                anim_id = anim_id, joint_id = joint_id.index(), num_floats = 16 * num_frames, num_frames = num_frames,
+                mats = FnFmt(|f| {
+                    for frame in 0..num_frames {
+                        write!(f, "{} ", Mat(&trs_curves.sample_at(frame)))?;
+                    }
+                    Ok(())
+                }),
             )?;
 
             write_lines!(w,
@@ -602,14 +586,14 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
 
 fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
     let num_objects = model.objects.len();
-    let any_animations = anims.iter().any(|a| a.objects.len() == num_objects);
+    let any_animations = anims.iter().any(|a| a.objects_curves.len() == num_objects);
 
     if !any_animations {
         return Ok(()); // no matching animations
     }
 
     let matching_anims = anims.iter().enumerate()
-        .filter(|&(_, a)| a.objects.len() == num_objects);
+        .filter(|&(_, a)| a.objects_curves.len() == num_objects);
 
     write_lines!(w,
         r##"  <library_animation_clips>"##;

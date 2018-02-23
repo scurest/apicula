@@ -1,31 +1,38 @@
 #[macro_use]
 mod format;
 mod collada;
-mod context;
+mod image_namer;
 
 use clap::ArgMatches;
-use convert::context::Context;
 use errors::Result;
-use files::BufferHolder;
-use files::FileHolder;
-use nitro::tex;
-use png;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use util::namers::UniqueNamer;
+use db::Database;
+use convert::image_namer::ImageNamer;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
-    let input_files = matches
-        .values_of_os("INPUT").unwrap();
-    let buf_holder = BufferHolder::read_files(input_files)?;
-    let file_holder = FileHolder::from_buffers(&buf_holder);
+    let input_paths: Vec<PathBuf> =
+        matches
+        .values_of_os("INPUT").unwrap()
+        .map(|os_str| PathBuf::from(os_str))
+        .collect();
+
+    let db = Database::build(input_paths)?;
+
+    let num_models = db.models.len();
+    let num_animations = db.animations.len();
+
+    let plural = |x| if x != 1 { "s" } else { "" };
+    println!("Found {} model{}.", num_models, plural(num_models));
+    println!("Found {} animation{}.", num_animations, plural(num_animations));
 
     let out_dir = PathBuf::from(matches.value_of("OUTPUT").unwrap());
     fs::create_dir(&out_dir)?;
 
-    let mut ctx = Context::from_files(&file_holder);
+    let mut image_namer = ImageNamer::build(&db);
 
     // Gives unique names to each .dae file, so that eg. two models with
     // the same name don't get written to the same file.
@@ -33,9 +40,9 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     // Save each model as a COLLADA file
     let mut s = String::new();
-    for model in &file_holder.models {
+    for model in &db.models {
         s.clear();
-        collada::write(&mut s, &ctx, model)?;
+        collada::write(&mut s, &db, &image_namer, model)?;
 
         let name = dae_namer.get_fresh_name(format!("{}", model.name.print_safe()));
         let dae_path = out_dir.join(&format!("{}.dae", name));
@@ -47,26 +54,28 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     }
 
     if matches.is_present("more_textures") {
-        ctx.add_more_textures();
+        image_namer.add_more_images(&db);
     }
 
     // Save PNGs for all the images referenced in the COLLADA files
-    for (image_id, image_name) in &ctx.image_names {
-        let tex = &file_holder.texs[image_id.0];
-        let texinfo = &tex.texinfo[image_id.1];
-        let palinfo = image_id.2.map(|pal_id| &tex.palinfo[pal_id]);
+    for (spec, image_name) in &image_namer.names {
+        let texture = &db.textures[db.textures_by_name[&spec.texture_name]];
+        let palette = spec.palette_name.map(|name| {
+            &db.palettes[db.palettes_by_name[&name]]
+        });
 
-        let res = tex::image::gen_image(tex, texinfo, palinfo);
-        let rgba = match res {
+        use nitro::decode_image::decode;
+        let rgba = match decode(texture, palette) {
             Ok(rgba) => rgba,
             Err(e) => {
-                warn!("error generating image {}, error: {:?}", image_name, e);
+                warn!("error generating image {}, error: {}", image_name, e);
                 continue;
             }
         };
 
+        use png::write_rgba;
         let path = out_dir.join(&format!("{}.png", image_name));
-        png::write_rgba(&path, &rgba[..], texinfo.params.width(), texinfo.params.height())?;
+        write_rgba(&path, &rgba[..], texture.params.width, texture.params.height)?;
     }
 
     Ok(())

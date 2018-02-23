@@ -23,14 +23,24 @@ impl Viewable for u8 {
 impl Viewable for u16 {
     fn size() -> usize { 2 }
     fn view(buf: &[u8]) -> u16 {
-        buf[0] as u16 | (buf[1] as u16) << 8
+        assert!(buf.len() >= 2);
+        unsafe {
+            use std::ptr::read_unaligned;
+            let ptr = buf.as_ptr() as *const u8 as *const u16;
+            read_unaligned(ptr).to_le()
+        }
     }
 }
 
 impl Viewable for u32 {
     fn size() -> usize { 4 }
     fn view(buf: &[u8]) -> u32 {
-        buf[0] as u32 | (buf[1] as u32) << 8 | (buf[2] as u32) << 16 | (buf[3] as u32) << 24
+        assert!(buf.len() >= 4);
+        unsafe {
+            use std::ptr::read_unaligned;
+            let ptr = buf.as_ptr() as *const u8 as *const u32;
+            read_unaligned(ptr).to_le()
+        }
     }
 }
 

@@ -13,24 +13,19 @@
 pub mod joint_builder;
 mod index_builder;
 
-use cgmath::Matrix4;
-use cgmath::Point2;
-use cgmath::Transform;
-use cgmath::vec4;
-use cgmath::Zero;
+use cgmath::{Matrix4, Point2, Transform, vec4, Zero};
 use errors::Result;
 use geometry::index_builder::IndexBuilder;
 use geometry::joint_builder::JointBuilder;
 use geometry::joint_builder::JointData;
 use nds::gpu_cmds;
 use nds::gpu_cmds::GpuCmd;
-use nitro::mdl::InvBindMatrixPair;
-use nitro::mdl::Model;
-use nitro::mdl::render_cmds;
+use nitro::Model;
+use nitro::render_cmds;
 use std::default::Default;
 use std::ops::Range;
+use util::cur::Cur;
 
-#[derive(Debug, Clone)]
 pub struct GeometryDataWithJoints {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
@@ -41,14 +36,12 @@ pub struct GeometryDataWithJoints {
     pub objects: Vec<Matrix4<f64>>,
 }
 
-#[derive(Debug, Clone)]
 pub struct GeometryDataWithoutJoints {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
     pub draw_calls: Vec<DrawCall>,
 }
 
-#[derive(Debug, Clone)]
 pub struct GpuState {
     pub cur_matrix: Matrix4<f64>,
     pub matrix_stack: Vec<Matrix4<f64>>,
@@ -75,7 +68,7 @@ impl GpuState {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct Vertex {
     pub position: [f32; 3],
     pub texcoord: [f32; 2],
@@ -95,7 +88,7 @@ impl Default for Vertex {
 /// Info about the result of a draw call, ie. the result of drawing a mesh (a set
 /// of GPU commands) while in a particular GPU state (matrix stack, bound material,
 /// etc.).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DrawCall {
     /// Executing a draw call for a mesh (a set of GPU commands) results in pushing
     /// a set of vertices and indices onto those buffers. This is the range of
@@ -109,11 +102,10 @@ pub struct DrawCall {
     pub mesh_id: u8,
 }
 
-#[derive(Debug, Clone)]
-pub struct Builder<'a, 'b: 'a, 'c> {
-    model: &'a Model<'b>,
-    objects: &'c [Matrix4<f64>],
-    joint_builder: Option<JointBuilder<'a, 'b, 'c>>,
+pub struct Builder<'a, 'b> {
+    model: &'a Model,
+    objects: &'b [Matrix4<f64>],
+    joint_builder: Option<JointBuilder<'a, 'b>>,
     gpu: GpuState,
     cur_texture_dim: (u32, u32),
     vertices: Vec<Vertex>,
@@ -157,7 +149,7 @@ pub fn build_with_joints(
     let data = {
         let joint_builder = JointBuilder::new(model, &objects);
         let mut builder = Builder::new(model, &objects[..], Some(joint_builder));
-        render_cmds::run_commands(model.render_cmds_cur, &mut builder)?;
+        render_cmds::run_commands(Cur::new(&model.render_cmds), &mut builder)?;
         builder.data()
     };
     Ok(GeometryDataWithJoints {
@@ -174,16 +166,16 @@ pub fn build_without_joints(
     objects: &[Matrix4<f64>]
 ) -> Result<GeometryDataWithoutJoints> {
     let mut builder = Builder::new(model, objects, None);
-    render_cmds::run_commands(model.render_cmds_cur, &mut builder)?;
+    render_cmds::run_commands(Cur::new(&model.render_cmds), &mut builder)?;
     Ok(builder.data().0)
 }
 
-impl<'a, 'b: 'a, 'c> Builder<'a, 'b, 'c> {
+impl<'a, 'b> Builder<'a, 'b> {
     pub fn new(
-        model: &'a Model<'b>,
-        objects: &'c [Matrix4<f64>],
-        joint_builder: Option<JointBuilder<'a, 'b, 'c>>
-    ) -> Builder<'a, 'b, 'c> {
+        model: &'a Model,
+        objects: &'b [Matrix4<f64>],
+        joint_builder: Option<JointBuilder<'a, 'b>>
+    ) -> Builder<'a, 'b> {
         Builder {
             model,
             objects,
@@ -234,7 +226,7 @@ impl<'a, 'b: 'a, 'c> Builder<'a, 'b, 'c> {
     }
 }
 
-impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
+impl<'a, 'b> render_cmds::Sink for Builder<'a, 'b> {
     fn load_matrix(&mut self, stack_pos: u8) -> Result<()> {
         if let Some(ref mut b) = self.joint_builder {
             b.load_matrix(stack_pos);
@@ -271,8 +263,7 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         for term in terms {
             let weight = term.2;
             let stack_matrix = self.gpu.matrix_stack[term.0 as usize];
-            let inv_bind_matrix = self.model.inv_bind_matrices_cur
-                .nth::<InvBindMatrixPair>(term.1 as usize)?.0;
+            let inv_bind_matrix = self.model.inv_binds[term.1 as usize];
             mat += weight * stack_matrix * inv_bind_matrix;
         }
         self.gpu.cur_matrix = mat;
@@ -297,7 +288,7 @@ impl<'a, 'b: 'a, 'c> render_cmds::Sink for Builder<'a, 'b, 'c> {
         self.gpu.texture_matrix = mat.texture_mat;
 
         self.begin_draw_call(mesh_id, mat_id);
-        run_gpu_cmds(self, self.model.meshes[mesh_id as usize].commands)?;
+        run_gpu_cmds(self, &self.model.meshes[mesh_id as usize].commands)?;
         self.end_draw_call();
 
         Ok(())

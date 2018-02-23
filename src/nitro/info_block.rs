@@ -8,9 +8,7 @@ use errors::Result;
 use nitro::name::Name;
 use std::fmt::Debug;
 use std::iter::Zip;
-use util::cur::Cur;
-use util::view::View;
-use util::view::Viewable;
+use util::{cur::Cur, view::{View, Viewable}};
 
 pub type Iterator<'a, T> = Zip<View<'a, T>, View<'a, Name>>;
 

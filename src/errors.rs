@@ -3,7 +3,7 @@ error_chain! {
         Fmt(::std::fmt::Error);
         Io(::std::io::Error);
         TimeFmt(::time::ParseError);
-        Png(::pnglib::EncodingError);
+        Png(::png_crate::EncodingError);
         GliumVertexCreate(::glium::vertex::BufferCreationError);
         GliumIndexCreate(::glium::index::BufferCreationError);
         GliumTextureCreate(::glium::texture::TextureCreationError);

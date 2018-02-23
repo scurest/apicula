@@ -1,96 +1,44 @@
 //! Decodes formats for 3x3 matrices (usually rotations).
 
-use cgmath::Matrix;
-use cgmath::Matrix3;
-use cgmath::Matrix4;
-use cgmath::vec3;
-use cgmath::Vector4;
-use errors::Result;
+use cgmath::{Matrix3, vec3};
 use util::bits::BitField;
 use util::fixed::fix16;
 
-pub fn pivot_mat(select: u16, neg: u16, a: f64, b: f64) -> Result<Matrix4<f64>> {
-    if select > 9 {
-        bail!("unknown pivot select: {}", select);
-    }
-
-    if select == 9 {
+pub fn pivot_mat(select: u16, neg: u16, a: f64, b: f64) -> Matrix3<f64> {
+    if select >= 9 {
         // Does this actually happen?
-        return Ok(Matrix4::new(
-            -a,  0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
-        ));
+        debug!("pivot with select={} actually happened! :O", select);
+        return Matrix3::new(
+            -a,  0.0, 0.0,
+            0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0,
+        );
     }
 
     let o = if neg.bits(0,1) == 0 { 1.0 } else { -1.0 };
     let c = if neg.bits(1,2) == 0 { b } else { -b };
     let d = if neg.bits(2,3) == 0 { a } else { -a };
 
-    // `select` chooses the result in the following way
-    //
-    //      o..       .o.       ..o
-    //   0  .ac    3  a.c    6  ac.
-    //      .bd       b.d       bd.
-    //
-    //      .ac       a.c       ac.
-    //   1  o..    4  .o.    7  ..o
-    //      .bd       b.d       bd.
-    //
-    //      .ac       a.c       ac.
-    //   2  .bd    5  b.d    8  bd.
-    //      o..       .o.       ..o
-    //
-    // Note that they are all permutations of the rows and
-    // columns of the first matrix. So we let `mat` be the
-    // first matrix and use `select` to pick permutations
-    // to apply to it.
-    let mat = Matrix4::new(
-         o,  0.0, 0.0, 0.0,
-        0.0,  a,   b,  0.0,
-        0.0,  c,   d,  0.0,
-        0.0, 0.0, 0.0, 1.0,
-    );
-    let pi_cols = match select / 3 {
-        0 => pi(1,2,3,4),
-        1 => pi(2,1,3,4),
-        2 => pi(2,3,1,4),
+    // Consider eg. a = cos θ, b = sin θ.
+    // Nb. the pattern here.
+    match select {
+        0 => Matrix3::new( o , 0.0, 0.0,  0.0,  a ,  b ,  0.0,  c ,  d ),
+        1 => Matrix3::new(0.0,  o , 0.0,   a , 0.0,  b ,   c , 0.0,  d ),
+        2 => Matrix3::new(0.0, 0.0,  o ,   a ,  b , 0.0,   c ,  d , 0.0),
+
+        3 => Matrix3::new(0.0,  a ,  b ,   o , 0.0, 0.0,  0.0,  c ,  d ),
+        4 => Matrix3::new( a , 0.0,  b ,  0.0,  o , 0.0,   c , 0.0,  d ),
+        5 => Matrix3::new( a ,  b , 0.0,  0.0, 0.0,  o ,   c ,  d , 0.0),
+
+        6 => Matrix3::new(0.0,  a ,  b ,  0.0,  c ,  d ,   o , 0.0, 0.0),
+        7 => Matrix3::new( a , 0.0,  b ,   c , 0.0,  d ,  0.0,  o , 0.0),
+        8 => Matrix3::new( a ,  b , 0.0,   c ,  d , 0.0,  0.0, 0.0,  o ),
+
         _ => unreachable!(),
-    };
-    let pi_rows = match select % 3 {
-        0 => pi(1,2,3,4),
-        1 => pi(2,1,3,4),
-        2 => pi(2,3,1,4),
-        _ => unreachable!(),
-    };
-    Ok(pi_rows.transpose() * mat * pi_cols)
+    }
 }
 
-/// The permutation matrix corresponding to the permutation of {1,2,3,4} sending
-/// 1 to a, 2 to b, etc.
-///
-/// The matrix is the image of the permutation regarded as a map {1,2,3,4} -> {1,2,3,4}
-/// under the free vector space functor. That is, it is the identity matrix with the
-/// columns permuted according to the given permutation.
-///
-/// The upshot is m * pi(...) permutes the columns of m and pi(...)^T * m permutes
-/// the rows.
-fn pi(a: usize, b: usize, c: usize, d: usize) -> Matrix4<f64> {
-    assert_eq!(
-        [1,2,3,4],
-        { let mut arr = [a,b,c,d]; arr.sort(); arr }
-    );
-    let basis = [
-        Vector4::unit_x(),
-        Vector4::unit_y(),
-        Vector4::unit_z(),
-        Vector4::unit_w(),
-    ];
-    Matrix4::from_cols(basis[a-1], basis[b-1], basis[c-1], basis[d-1])
-}
-
-pub fn basis_mat((in0,in1,in2,in3,in4): (u16,u16,u16,u16,u16)) -> Matrix4<f64> {
+pub fn basis_mat((in0,in1,in2,in3,in4): (u16,u16,u16,u16,u16)) -> Matrix3<f64> {
     // Credit for figuring this out goes to MKDS Course Modifier.
     //
     // Braindump for this function follows:
@@ -117,7 +65,7 @@ pub fn basis_mat((in0,in1,in2,in3,in4): (u16,u16,u16,u16,u16)) -> Matrix4<f64> {
     // have a good explanation for this part :(
     //
     // I'd like to check this code against the disassembly from a DS ROM, but I can't
-    // find a good way to locate it with the debugger.
+    // find a way to locate it with the debugger.
 
     let input = [in4, in0, in1, in2, in3];
     let mut out = [0u16; 6];
@@ -132,5 +80,5 @@ pub fn basis_mat((in0,in1,in2,in3,in4): (u16,u16,u16,u16,u16)) -> Matrix4<f64> {
     let b = vec3(f(out[4]), f(out[0]), f(out[5]));
     let c = a.cross(b);
 
-    Matrix3::from_cols(a, b, c).into()
+    Matrix3::from_cols(a, b, c)
 }

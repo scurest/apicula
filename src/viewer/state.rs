@@ -1,4 +1,4 @@
-use files::FileHolder;
+use db::Database;
 use std::ops::Range;
 use viewer::eye::Eye;
 
@@ -37,16 +37,16 @@ fn advance(x: usize, Range { start, end }: Range<usize>, dir: Dir) -> usize {
 }
 
 impl ViewState {
-    pub fn advance_model(&mut self, fh: &FileHolder, dir: Dir) {
-        let num_models = fh.models.len();
+    pub fn advance_model(&mut self, db: &Database, dir: Dir) {
+        let num_models = db.models.len();
 
         self.model_id = advance(self.model_id, 0..num_models, dir);
         self.anim_state = None;
     }
 
-    pub fn advance_anim(&mut self, fh: &FileHolder, dir: Dir) {
-        let num_animations = fh.animations.len();
-        let num_objects = fh.models[self.model_id].objects.len();
+    pub fn advance_anim(&mut self, db: &Database, dir: Dir) {
+        let num_animations = db.animations.len();
+        let num_objects = db.models[self.model_id].objects.len();
 
         // Represent anim_id as anim_id+1, freeing up 0 to represent "no animation".
         let mut id = self.anim_state.as_ref()
@@ -56,7 +56,7 @@ impl ViewState {
         // An animations can be applied to a model only if they have the same
         // number of objects.
         let is_good = |id: usize| {
-            id == 0 || fh.animations[id - 1].objects.len() == num_objects
+            id == 0 || db.animations[id - 1].objects_curves.len() == num_objects
         };
 
         loop {
@@ -72,9 +72,9 @@ impl ViewState {
             };
     }
 
-    pub fn next_frame(&mut self, fh: &FileHolder) {
+    pub fn next_frame(&mut self, db: &Database) {
         self.anim_state.as_mut().map(|anim_state| {
-            let anim = &fh.animations[anim_state.anim_id];
+            let anim = &db.animations[anim_state.anim_id];
 
             anim_state.cur_frame += 1;
             if anim_state.cur_frame >= anim.num_frames {

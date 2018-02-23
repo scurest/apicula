@@ -1,7 +1,5 @@
 //! apicula, NDS model viewer/converter
 
-#![recursion_limit = "1024"] // for error_chain
-
 #[macro_use]
 extern crate log;
 #[macro_use]
@@ -14,7 +12,7 @@ extern crate cgmath;
 extern crate env_logger;
 extern crate time;
 extern crate petgraph;
-extern crate png as pnglib;
+extern crate png as png_crate;
 extern crate regex;
 
 #[macro_use]
@@ -24,22 +22,18 @@ mod util;
 mod convert;
 mod decompress;
 mod extract;
-mod files;
 mod geometry;
 mod nds;
 mod nitro;
 mod png;
 mod viewer;
+mod db;
 
 use errors::Result;
 use std::env;
 
 pub static VERSION: &'static str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " (",
-    // The git commit hash, see build.rs
-    include_str!(concat!(env!("OUT_DIR"), "/git_rev")),
-    ")",
+    env!("CARGO_PKG_VERSION"), " (", include_str!(concat!(env!("OUT_DIR"), "/git-commit")), ")",
 );
 
 fn main() {
@@ -49,9 +43,7 @@ fn main() {
 fn main2() -> i32 {
     init_logger();
     match main3() {
-        Ok(()) => {
-            0
-        }
+        Ok(()) => 0,
         Err(e) => {
             error!("error: {:#?}", e);
             1

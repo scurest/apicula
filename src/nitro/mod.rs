@@ -12,10 +12,22 @@
 //!
 //! A container file (eg. NSBMD) holds one or more of these.
 
-pub mod container;
-pub mod jnt;
-pub mod mdl;
-pub mod name;
+pub mod model;
 pub mod tex;
+pub mod animation;
+pub mod container;
+pub mod name;
+pub mod render_cmds;
+pub mod decode_image;
 mod info_block;
 mod rotation;
+
+pub use self::{
+    name::Name,
+    container::Container,
+    model::Model,
+    tex::Texture,
+    tex::Palette,
+    tex::TextureParameters,
+    animation::Animation,
+};

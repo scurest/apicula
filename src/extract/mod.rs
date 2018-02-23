@@ -4,8 +4,8 @@ use clap::ArgMatches;
 use decompress::try_decompress;
 use errors::Result;
 use errors::ResultExt;
-use nitro::container::Container;
-use nitro::container::DataFile;
+use nitro::Container;
+use nitro::container::read_container;
 use regex::bytes::Regex;
 use std::fs;
 use std::io::Read;
@@ -36,12 +36,12 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     // file. Then try to parse a file from that point. If we succeed, write
     // the bytes for that file to a new file in the output directory.
 
-    let regex = Regex::new("(BMD0)|(BTX0)|(BCA0)").unwrap();
+    let regex = Regex::new("BMD0|BTX0|BCA0").unwrap();
 
     let mut cur = Cur::new(&input[..]);
 
     while let Some(found) = regex.find(cur.slice_from_cur_to_end()) {
-        cur.jump_forward(found.start()).unwrap();
+        cur.jump_forward(found.start());
         extractor.try_proc_file_at(&mut cur);
     }
 
@@ -91,7 +91,7 @@ impl Extractor {
     /// Afterwards, `cur` is positioned where you should resume searching (ie.
     /// after the container file if found, or else after the stamp if not.)
     fn try_proc_file_at(&mut self, cur: &mut Cur) {
-        if let Ok(cont) = Container::read(*cur) {
+        if let Ok(cont) = read_container(*cur) {
             if let Ok(file_bytes) = cur.next_n_u8s(cont.file_size as usize) {
                 self.save_file(file_bytes, &cont);
                 return;
@@ -112,19 +112,19 @@ impl Extractor {
         match res {
             Ok(dec_res) => {
                 let buf = &dec_res.data[..];
-                let res = Container::read(Cur::new(buf));
+                let res = read_container(Cur::new(buf));
                 match res {
                     Ok(cont) => {
                         self.save_file(buf, &cont);
                         *cur = dec_res.end_cur;
                     }
                     Err(_) => {
-                        cur.jump_forward(4).unwrap();
+                        cur.jump_forward(4);
                     }
                 }
             }
             Err(_) => {
-                cur.jump_forward(4).unwrap();
+                cur.jump_forward(4);
             }
         }
     }
@@ -163,31 +163,21 @@ impl Extractor {
 
 /// Guess a name for the container `cont`, using the name of the first
 /// item it contains.
-fn guess_container_name(container: &Container) -> String {
-    // Used for when we fail to guess.
-    let generic_name = || {
-        match container.stamp {
-            b"BMD0" => "nitro_model_file",
-            b"BTX0" => "nitro_texture_file",
-            b"BCA0" => "nitro_animation_file",
-            _ => "unknown_nitro_file",
+fn guess_container_name(cont: &Container) -> String {
+    if !cont.models.is_empty() {
+        format!("{}", cont.models[0].name.print_safe())
+    } else if !cont.textures.is_empty() {
+        format!("{}", cont.textures[0].name.print_safe())
+    } else if !cont.palettes.is_empty() {
+        format!("{}", cont.palettes[0].name.print_safe())
+    } else if !cont.animations.is_empty() {
+        format!("{}", cont.animations[0].name.print_safe())
+    } else {
+        match cont.stamp {
+            b"BMD0" => "model_file",
+            b"BTX0" => "texture_file",
+            b"BCA0" => "animation_file",
+            _ => "unknown_file",
         }.to_string()
-    };
-
-    container.data_files.iter()
-        .filter_map(|res| res.as_ref().ok())
-        .filter_map(guess_data_file_name)
-        .next()
-        .unwrap_or_else(generic_name)
-}
-
-fn guess_data_file_name(data_file: &DataFile) -> Option<String> {
-    match *data_file {
-        DataFile::Mdl(ref mdl) =>
-            mdl.models.get(0).map(|model| format!("{}", model.name.print_safe())),
-        DataFile::Tex(ref tex) =>
-            tex.texinfo.get(0).map(|texinfo| format!("{}", texinfo.name.print_safe())),
-        DataFile::Jnt(ref jnt) =>
-            jnt.animations.get(0).map(|anim| format!("{}", &anim.name.print_safe())),
     }
 }

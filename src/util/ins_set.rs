@@ -6,19 +6,21 @@ use std::hash::Hash;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-/// A set of `T`s, together with a bijective mapping from its elements
-/// to the order each was inserted into the set.
+/// A set of `T`s, together with a bijective mapping from its elements to the
+/// order each was inserted into the set.
 ///
 /// This can be used for the situation where
 ///
 /// 1. you have a value
 /// 2. you need an index into a global list of values
 ///
-/// In that case, you can first insert all the value into an `InsOrderSet`
-/// and build the global list by iterating over this set. Then to get the
-/// index given a value, you just use `get_index_from_value`.
+/// In that case, you can first insert all the value into an `InsOrderSet` and
+/// build the global list by iterating over this set. Then to get the index
+/// given a value, you just use `get_index_from_value`.
 ///
-/// An example is a string table.
+/// I use this for COLLADA where you specify vertex weights by first giving a
+/// list of all the weights you're gonna use and then giving indices into the
+/// list at each vertex (why Khronos).
 pub struct InsOrderSet<T: Eq + Hash + Clone> {
     /// All the items in the set in insertion order.
     vec: Vec<T>,

@@ -1,82 +1,115 @@
 use errors::Result;
-use nitro::jnt::Jnt;
-use nitro::jnt::read_jnt;
-use nitro::mdl::Mdl;
-use nitro::mdl::read_mdl;
-use nitro::tex::read_tex;
-use nitro::tex::Tex;
+use nitro::{Model, Texture, Palette, Animation};
+use nitro::info_block;
 use util::cur::Cur;
+const STAMPS: [&[u8]; 3] = [b"BMD0", b"BTX0", b"BCA0"];
 
-/// Represents a Nitro container.
-///
-/// One data type is used for all the different containers (NSBMD,
-/// NSBTX, NSBCA). Practically a NSBMD (say) should only contain
-/// MDLs and TEXs, not JNTs. But there's no reason to treat any of
-/// them any differently, so we permit each one to contain any
-/// kind of data.
-#[derive(Debug)]
-pub struct Container<'a> {
+pub struct Container {
     pub stamp: &'static [u8],
     pub file_size: u32,
-    pub data_files: Vec<Result<DataFile<'a>>>,
+    pub models: Vec<Model>,
+    pub textures: Vec<Texture>,
+    pub palettes: Vec<Palette>,
+    pub animations: Vec<Animation>,
 }
 
-/// One of the stamps for a known Nitro file.
-static STAMPS: [&[u8]; 3] = [b"BMD0", b"BTX0", b"BCA0"];
+pub fn read_container(cur: Cur) -> Result<Container> {
+    fields!(cur, BMD0 {
+        stamp: [u8; 4],
+        bom: u16,
+        version: u16,
+        file_size: u32,
+        header_size: u16,
+        num_sections: u16,
+        section_offs: [u32; num_sections],
+    });
 
-impl<'a> Container<'a> {
-    pub fn read(cur: Cur<'a>) -> Result<Container<'a>> {
-        fields!(cur, BMD0 {
-            stamp: [u8; 4],
-            bom: u16,
-            version: u16,
-            file_size: u32,
-            header_size: u16,
-            num_sections: u16,
-            section_offs: [u32; num_sections],
-        });
+    check!(bom == 0xfeff)?;
+    check!(header_size == 16)?;
 
-        let stamp =
-            match STAMPS.iter().find(|&s| s == &stamp) {
-                Some(x) => x,
-                None => bail!("unrecognized Nitro container: expected \
-                    the first four bytes to be one of: BMD0, BTX0, BCA0"),
-            };
+    let stamp =
+        match STAMPS.iter().find(|&s| s == &stamp) {
+            Some(x) => x,
+            None => bail!("unrecognized Nitro container: expected \
+                the first four bytes to be one of: BMD0, BTX0, BCA0"),
+        };
 
-        check!(bom == 0xfeff)?;
-        check!(header_size == 16)?;
-        check!(num_sections > 0)?;
+    let mut cont = Container {
+        stamp, file_size, models: vec![], textures: vec![],
+        palettes: vec![], animations: vec![],
+    };
 
-        let data_files = section_offs
-            .map(|off| {
-                let res = DataFile::read((cur + off as usize)?);
-                if let Err(ref e) = res {
-                    info!("error reading section: {}", e);
-                }
-                res
-            })
-            .collect();
+    for section_off in section_offs {
+        let section_cur = cur + section_off;
+        if let Err(e) = read_section(&mut cont, section_cur) {
+            info!("skipping Nitro section: {}", e);
+        }
+    }
 
-        Ok(Container { stamp, file_size, data_files })
+    Ok(cont)
+}
+
+fn read_section(cont: &mut Container, cur: Cur) -> Result<()> {
+    let stamp = cur.clone().next_n_u8s(4)?;
+    match stamp {
+        b"MDL0" => add_mdl(cont, cur),
+        b"TEX0" => add_tex(cont, cur),
+        b"JNT0" => add_jnt(cont, cur),
+        _ => bail!("unrecognized Nitro format: expected the first four \
+            bytes to be one of: MDL0, TEX0, JNT0"),
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum DataFile<'a> {
-    Mdl(Mdl<'a>),
-    Tex(Tex<'a>),
-    Jnt(Jnt<'a>),
+// An MDL is a container for models.
+fn add_mdl(cont: &mut Container, cur: Cur) -> Result<()> {
+    use nitro::model::read_model;
+
+    fields!(cur, MDL0 {
+        stamp: [u8; 4],
+        section_size: u32,
+        end: Cur,
+    });
+    check!(stamp == b"MDL0")?;
+
+    for (off, name) in info_block::read::<u32>(end)? {
+        match read_model(cur + off, name) {
+            Ok(model) => cont.models.push(model),
+            Err(e) => {
+                error!("error on model {}: {}", name, e);
+            }
+        }
+    }
+    Ok(())
 }
 
-impl<'a> DataFile<'a> {
-    pub fn read(cur: Cur<'a>) -> Result<DataFile<'a>> {
-        let stamp = cur.clone().next_n_u8s(4)?;
-        Ok(match stamp {
-            b"MDL0" => DataFile::Mdl(read_mdl(cur)?),
-            b"TEX0" => DataFile::Tex(read_tex(cur)?),
-            b"JNT0" => DataFile::Jnt(read_jnt(cur)?),
-            _ => bail!("unrecognized Nitro format: expected the first four \
-                bytes to be one of: MDL0, TEX0, JNT0"),
-        })
+// A JNT is a container for animations.
+fn add_jnt(cont: &mut Container, cur: Cur) -> Result<()> {
+    use nitro::animation::read_animation;
+
+    fields!(cur, JNT0 {
+        stamp: [u8; 4],
+        section_size: u32,
+        end: Cur,
+    });
+    check!(stamp == b"JNT0")?;
+
+    for (off, name) in info_block::read::<u32>(end)? {
+        match read_animation(cur + off, name) {
+            Ok(animation) => cont.animations.push(animation),
+            Err(e) => {
+                error!("error on animation {}: {}", name, e);
+            }
+        }
     }
+    Ok(())
+}
+
+// This work is already done for us in read_tex; see that module for why.
+fn add_tex(cont: &mut Container, cur: Cur) -> Result<()> {
+    use nitro::tex::read_tex;
+
+    let (textures, palettes) = read_tex(cur)?;
+    cont.textures.extend(textures.into_iter());
+    cont.palettes.extend(palettes.into_iter());
+    Ok(())
 }

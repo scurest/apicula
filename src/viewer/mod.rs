@@ -9,25 +9,27 @@ mod ui;
 
 use clap::ArgMatches;
 use errors::Result;
-use files::BufferHolder;
-use files::FileHolder;
 use viewer::ui::Ui;
 use glium;
 use viewer::gl_context::GlContext;
+use db::Database;
+use std::path::PathBuf;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
-    let input_files =
-        matches.values_of_os("INPUT").unwrap();
+    let input_paths: Vec<PathBuf> =
+        matches
+        .values_of_os("INPUT").unwrap()
+        .map(|os_str| PathBuf::from(os_str))
+        .collect();
 
-    let buf_holder = BufferHolder::read_files(input_files)?;
-    let file_holder = FileHolder::from_buffers(&buf_holder);
+    let db = Database::build(input_paths)?;
 
-    let num_models = file_holder.models.len();
-    let num_animations = file_holder.animations.len();
+    let num_models = db.models.len();
+    let num_animations = db.animations.len();
 
-    let suf = |x| if x != 1 { "s" } else { "" };
-    println!("Found {} model{}.", num_models, suf(num_models));
-    println!("Found {} animation{}.", num_animations, suf(num_animations));
+    let plural = |x| if x != 1 { "s" } else { "" };
+    println!("Found {} model{}.", num_models, plural(num_models));
+    println!("Found {} animation{}.", num_animations, plural(num_animations));
 
     if num_models == 0 {
         println!("Nothing to do.");
@@ -42,7 +44,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         .unwrap();
     let ctx = GlContext::new(display)?;
 
-    let mut ui = Ui::new(&file_holder, &ctx)?;
+    let mut ui = Ui::new(db, &ctx)?;
     ui.run();
 
     Ok(())

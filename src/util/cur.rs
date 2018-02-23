@@ -19,6 +19,10 @@ impl<'a> Cur<'a> {
         self.pos_
     }
 
+    pub fn bytes_remaining(&self) -> usize {
+        self.buf_.len().saturating_sub(self.pos_)
+    }
+
     pub fn next<T: Viewable>(&mut self) -> Result<T> {
         Ok(self.next_n::<T>(1)?.get(0))
     }
@@ -47,29 +51,34 @@ impl<'a> Cur<'a> {
         &self.buf_[self.pos_ ..]
     }
 
-    pub fn jump_forward(&mut self, amt: usize) -> Result<()> {
+    pub fn jump_forward(&mut self, amt: usize) {
         let pos = self.pos_;
-        self.jump_to(pos + amt)?;
-        Ok(())
+        self.jump_to(pos + amt);
     }
 
-    pub fn jump_to(&mut self, pos: usize) -> Result<()> {
-        if pos > self.buf_.len() {
-            bail!("jumped past end");
-        }
+    pub fn jump_to(&mut self, pos: usize) {
         self.pos_ = pos;
-        Ok(())
     }
 }
 
 impl<'a> Add<usize> for Cur<'a> {
-    type Output = Result<Cur<'a>>;
+    type Output = Cur<'a>;
 
-    fn add(self, amt: usize) -> Result<Cur<'a>> {
+    fn add(self, amt: usize) -> Cur<'a> {
         let mut cur = self;
-        cur.jump_forward(amt)?;
-        Ok(cur)
+        cur.jump_forward(amt);
+        cur
     }
+}
+
+impl<'a> Add<u32> for Cur<'a> {
+    type Output = Cur<'a>;
+    fn add(self, amt: u32) -> Cur<'a> { self + amt as usize }
+}
+
+impl<'a> Add<u16> for Cur<'a> {
+    type Output = Cur<'a>;
+    fn add(self, amt: u16) -> Cur<'a> { self + amt as usize }
 }
 
 impl<'a> fmt::Debug for Cur<'a> {

@@ -1,55 +1,44 @@
-use nitro::tex::PaletteInfo;
-use nitro::tex::Tex;
-use nitro::tex::TextureInfo;
-use errors::Error;
+use nitro::{Texture, Palette};
 use errors::Result;
 use util::bits::BitField;
 use util::view::View;
 
-pub fn gen_image(
-    tex: &Tex,
-    tex_info: &TextureInfo,
-    pal_info: Option<&PaletteInfo>,
-) -> Result<Vec<u8>> {
-    let palette_format_but_no_palette = || -> Error {
-        "texture with palette format was not paired with a palette".into()
-    };
+pub fn decode(texture: &Texture, palette: Option<&Palette>) -> Result<Vec<u8>>
+{
+    let format = texture.params.format;
 
-    Ok(match tex_info.params.format() {
-        2 | 3 | 4 | 1 | 6 => {
-            let pal_info = pal_info.ok_or_else(palette_format_but_no_palette)?;
-            gen_palette_image(tex, tex_info, pal_info)
-        }
-        5 => {
-            let pal_info = pal_info.ok_or_else(palette_format_but_no_palette)?;
-            gen_compressed_image(tex, tex_info, pal_info)
-        }
-        7 => {
-            if pal_info.is_some() {
-                info!("direct color texture was paired with a palette; palette is being ignored");
-            }
-            gen_direct_color_image(tex, tex_info)
-        }
-        // Only 0 should be possible for the last case; format is only three bits
-        _ => bail!("invalid texture format: {}", tex_info.params.format()),
+    if format == 7 {
+        return Ok(decode_format7(texture));
+    }
+
+    if palette.is_none() {
+        bail!("texture is missing palette");
+    }
+    let palette = palette.unwrap();
+
+    Ok(match format {
+        1 | 2 | 3 | 4 | 6 => decode_paletted(texture, palette),
+        5 => decode_compressed(texture, palette),
+        _ => { bail!("bad texture format (format={})", format); }
     })
 }
 
-fn gen_direct_color_image(tex: &Tex, tex_info: &TextureInfo) -> Vec<u8> {
-    // Direct Color Texture; holds actual 16-bit color values (no palette)
+fn decode_format7(texture: &Texture) -> Vec<u8> {
+    // Direct Color Texture
+    // Holds actual 16-bit color values (no palette)
 
-    let texture_off = tex_info.params.offset();
-    let width = tex_info.params.width() as usize;
-    let height = tex_info.params.height() as usize;
+    let offset = texture.params.offset as usize;
+    let width = texture.params.width as usize;
+    let height = texture.params.height as usize;
 
-    let texture_size = width * height * 2; // 16 bits per texel
-    let texture = &tex.texture_data[texture_off .. texture_off + texture_size];
-    let texture: View<u16> = View::from_buf(texture);
+    let size = width * height * 2; // 16 bits per texel
+    let data = &texture.tex_data.texture_data[offset .. offset + size];
+    let data: View<u16> = View::from_buf(data);
 
     let mut pixels = vec![0u8; 4 * width * height]; // 4 bytes (RGBA) for every texel
     let mut i = 0;
 
-    for texel in texture {
+    for texel in data {
         let alpha_bit = texel.bits(15,16);
         write_pixel(&mut pixels, &mut i, rgb555a5(
             texel,
@@ -61,23 +50,23 @@ fn gen_direct_color_image(tex: &Tex, tex_info: &TextureInfo) -> Vec<u8> {
 }
 
 
-fn gen_palette_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &PaletteInfo) -> Vec<u8>
+fn decode_paletted(texture: &Texture, palette: &Palette) -> Vec<u8>
 {
-    let texture_off = tex_info.params.offset();
-    let width = tex_info.params.width() as usize;
-    let height = tex_info.params.height() as usize;
-    let format = tex_info.params.format();
-    let color0_is_transparent = tex_info.params.is_color0_transparent();
-    let palette_off = pal_info.off;
+    let texture_off = texture.params.offset as usize;
+    let width = texture.params.width as usize;
+    let height = texture.params.height as usize;
+    let format = texture.params.format;
+    let color0_is_transparent = texture.params.is_color0_transparent;
+    let palette_off = palette.off as usize;
 
-    let bpps = [0u8, 8, 2, 4, 8, 0, 8];
+    let bpps = [0, 8, 2, 4, 8, 0, 8u8];
     let bpp = bpps[format as usize] as usize;
 
-    let palette_bytes = &tex.palette_data[palette_off ..];
-    let palette: View<u16> = View::from_buf(palette_bytes);
+    let palette_data = &palette.tex_data.palette_data[palette_off ..];
+    let pdata: View<u16> = View::from_buf(palette_data);
 
-    let texture_size = width * height * bpp / 8;
-    let texture = &tex.texture_data[texture_off .. texture_off + texture_size];
+    let size = width * height * bpp / 8;
+    let tdata = &texture.tex_data.texture_data[texture_off .. texture_off + size];
 
     let mut pixels = vec![0u8; 4 * width * height]; // 4 bytes (RGBA) for every texel
     let mut i = 0;
@@ -85,11 +74,11 @@ fn gen_palette_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &PaletteInfo) 
     match format {
         2 => {
             // 4-Color Palette Texture
-            for &x in texture {
+            for &x in tdata {
                 for &v in &[x.bits(0,2), x.bits(2,4), x.bits(4,6), x.bits(6,8)] {
                     let transparent = v == 0 && color0_is_transparent;
                     write_pixel(&mut pixels, &mut i, rgb555a5(
-                        palette.get(v as usize),
+                        pdata.get(v as usize),
                         if transparent { 0 } else { 31 },
                     ));
                 }
@@ -97,11 +86,11 @@ fn gen_palette_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &PaletteInfo) 
         }
         3 => {
             // 16-Color Palette Texture
-            for &x in texture {
+            for &x in tdata {
                 for &v in &[x.bits(0,4), x.bits(4,8)] {
                     let transparent = v == 0 && color0_is_transparent;
                     write_pixel(&mut pixels, &mut i, rgb555a5(
-                        palette.get(v as usize),
+                        pdata.get(v as usize),
                         if transparent { 0 } else { 31 },
                     ));
                 }
@@ -109,28 +98,28 @@ fn gen_palette_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &PaletteInfo) 
         }
         4 => {
             // 256-Color Palette Texture
-            for &v in texture {
+            for &v in tdata {
                 let transparent = v == 0 && color0_is_transparent;
                 write_pixel(&mut pixels, &mut i, rgb555a5(
-                    palette.get(v as usize),
+                    pdata.get(v as usize),
                     if transparent { 0 } else { 31 },
                 ));
             }
         }
         1 => {
             // A3I5 Translucent Texture (3-bit Alpha, 5-bit Color Index)
-            for &x in texture {
+            for &x in tdata {
                 write_pixel(&mut pixels, &mut i, rgb555a5(
-                    palette.get(x.bits(0,5) as usize),
+                    pdata.get(x.bits(0,5) as usize),
                     a3_to_a5(x.bits(5,8)),
                 ));
             }
         }
         6 => {
             // A5I3 Translucent Texture (5-bit Alpha, 3-bit Color Index)
-            for &x in texture {
+            for &x in tdata {
                 write_pixel(&mut pixels, &mut i, rgb555a5(
-                    palette.get(x.bits(0,3) as usize),
+                    pdata.get(x.bits(0,3) as usize),
                     x.bits(3,8),
                 ));
             }
@@ -141,15 +130,18 @@ fn gen_palette_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &PaletteInfo) 
     pixels
 }
 
-pub fn gen_compressed_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &PaletteInfo) -> Vec<u8> {
-    let texture_off = tex_info.params.offset();
-    let width = tex_info.params.width() as usize;
-    let height = tex_info.params.height() as usize;
-    let palette_off = pal_info.off;
+pub fn decode_compressed(texture: &Texture, palette: &Palette) -> Vec<u8> {
+    let texture_off = texture.params.offset as usize;
+    let width = texture.params.width as usize;
+    let height = texture.params.height as usize;
+    let palette_off = palette.off as usize;
     let num_blocks_x = width / 4;
-    let palette: View<u16> = View::from_buf(&tex.palette_data[palette_off..]);
-    let block_data: View<u32> = View::from_buf(&tex.compressed_texture_data[texture_off..]);
-    let extra_data: View<u16> = View::from_buf(&tex.compressed_texture_extra_data[texture_off / 2..]);
+    let palette: View<u16> =
+        View::from_buf(&palette.tex_data.palette_data[palette_off..]);
+    let block_data: View<u32> =
+        View::from_buf(&texture.tex_data.compressed_data1[texture_off..]);
+    let extra_data: View<u16> =
+        View::from_buf(&texture.tex_data.compressed_data2[texture_off / 2..]);
 
     let mut pixels = vec![0u8; 4*width*height];
     let mut i = 0;
@@ -199,10 +191,8 @@ pub fn gen_compressed_image(tex: &Tex, tex_info: &TextureInfo, pal_info: &Palett
 }
 
 fn write_pixel(pixels: &mut [u8], i: &mut usize, pixel: [u8; 4]) {
-    pixels[*i + 0] = pixel[0];
-    pixels[*i + 1] = pixel[1];
-    pixels[*i + 2] = pixel[2];
-    pixels[*i + 3] = pixel[3];
+    let dst = &mut pixels[*i .. *i+4];
+    dst.copy_from_slice(&pixel);
     *i += 4;
 }
 

@@ -1,20 +1,16 @@
 use cgmath::Matrix4;
 use errors::Result;
-use files::FileHolder;
 use geometry::build_without_joints as build_geometry;
 use geometry::GeometryDataWithoutJoints as GeometryData;
 use geometry::Vertex;
 use glium;
 use glium::Frame;
 use glium::Surface;
-use nitro::jnt::object::to_matrix as bca_object_to_matrix;
-use nitro::mdl::Material;
-use nitro::tex::image::gen_image;
-use nitro::tex::Tex;
-use nitro::tex::texpal::find_tex;
-use nitro::tex::texpal::TexPalPair;
+use glium::texture::Texture2d;
+use nitro::model::Material;
 use viewer::gl_context::GlContext;
 use viewer::state::ViewState;
+use db::Database;
 
 implement_vertex!(Vertex, position, texcoord, color);
 
@@ -43,16 +39,16 @@ struct ObjectGeometryData {
 impl DrawingData {
     pub fn from_view_state(
         display: &glium::Display,
-        fh: &FileHolder,
+        db: &Database,
         view_state: &ViewState,
     ) -> DrawingData {
-        let model = &fh.models[view_state.model_id];
+        let model = &db.models[view_state.model_id];
 
         let obj_geom_data =
-            ObjectGeometryData::from_view_state(display, fh, view_state);
+            ObjectGeometryData::from_view_state(display, db, view_state);
 
         let textures =
-            build_textures(display, &model.materials[..], &fh.texs[..]);
+            build_textures(display, db, &model.materials[..]);
 
         DrawingData {
             obj_geom_data,
@@ -70,7 +66,7 @@ impl DrawingData {
     pub fn change_view_state(
         &mut self,
         display: &glium::Display,
-        fh: &FileHolder,
+        db: &Database,
         view_state: &ViewState,
     ) {
         if view_state.model_id == self.view_state.model_id {
@@ -87,25 +83,25 @@ impl DrawingData {
                 // like `replace_with`. Since the biggest gain is from not
                 // rebuilding textures, this is TODO for now.
                 self.obj_geom_data =
-                    ObjectGeometryData::from_view_state(display, fh, view_state);
+                    ObjectGeometryData::from_view_state(display, db, view_state);
                 self.view_state = view_state.clone();
             }
         } else {
             // Model changed, regen everything from scratch
-            *self = DrawingData::from_view_state(display, fh, view_state);
+            *self = DrawingData::from_view_state(display, db, view_state);
         }
     }
 
 
     pub fn draw(
         &self,
-        fh: &FileHolder,
+        db: &Database,
         ctx: &GlContext,
         target: &mut Frame,
         draw_params: &glium::DrawParameters
     ) {
         if let Ok(ref obj_geom_data) = self.obj_geom_data {
-            let model = &fh.models[self.view_state.model_id];
+            let model = &db.models[self.view_state.model_id];
 
             let mvp = self.view_state.eye.model_view_persp();
 
@@ -133,9 +129,9 @@ impl DrawingData {
                             (true, true) => uni::SamplerWrapFunction::Mirror,
                         }
                     };
-                    let params = model.materials[call.mat_id as usize].params;
-                    s.1.wrap_function.0 = wrap_fn(params.repeat_s(), params.mirror_s());
-                    s.1.wrap_function.1 = wrap_fn(params.repeat_t(), params.mirror_t());
+                    let params = &model.materials[call.mat_id as usize].params;
+                    s.1.wrap_function.0 = wrap_fn(params.repeat_s, params.mirror_s);
+                    s.1.wrap_function.1 = wrap_fn(params.repeat_t, params.mirror_t);
 
                     s
                 };
@@ -168,17 +164,18 @@ impl DrawingData {
 impl ObjectGeometryData {
     fn from_view_state(
         display: &glium::Display,
-        fh: &FileHolder,
+        db: &Database,
         view_state: &ViewState,
-    ) -> Result<ObjectGeometryData> {
-        let model = &fh.models[view_state.model_id];
+    ) -> Result<ObjectGeometryData>
+    {
+        let model = &db.models[view_state.model_id];
 
         let objects: Vec<Matrix4<f64>> =
             if let Some(ref anim_state) = view_state.anim_state {
-                let anim = &fh.animations[anim_state.anim_id];
-                anim.objects.iter()
-                    .map(|o| bca_object_to_matrix(o, anim, anim_state.cur_frame))
-                    .collect::<Result<_>>()?
+                let anim = &db.animations[anim_state.anim_id];
+                anim.objects_curves.iter()
+                    .map(|trs_curves| trs_curves.sample_at(anim_state.cur_frame))
+                    .collect()
             } else {
                 model.objects.iter()
                     .map(|o| o.xform)
@@ -205,21 +202,33 @@ impl ObjectGeometryData {
     }
 }
 
-fn build_textures(display: &glium::Display, materials: &[Material], texs: &[Tex])
--> Vec<Result<Option<glium::texture::Texture2d>>> {
-    let build_texture = |material| {
-        let pair = match TexPalPair::from_material(material) {
-            Some(pair) => pair,
-            None => return Ok(None), // no texture
+
+fn build_textures(display: &glium::Display, db: &Database, materials: &[Material])
+-> Vec<Result<Option<Texture2d>>> {
+    use nitro::decode_image::decode;
+    use glium::texture::RawImage2d;
+
+    let build_texture = |material: &Material| -> Result<Option<Texture2d>> {
+        if material.texture_name.is_none() {
+            return Ok(None);
+        }
+        let texture_name = material.texture_name.unwrap();
+
+        let texture_id = match db.textures_by_name.get(&texture_name) {
+            Some(&x) => x,
+            None => { bail!("no texture named {}", texture_name); }
         };
+        let texture = &db.textures[texture_id];
 
-        let (tex, texinfo, palinfo) = find_tex(&texs[..], pair)
-            .ok_or_else(|| format!("couldn't find texture named {}", pair.0))?;
+        let palette = material.palette_name
+            .and_then(|name| db.palettes_by_name.get(&name))
+            .map(|&id| &db.palettes[id]);
 
-        let rgba = gen_image(tex, texinfo, palinfo)?;
-        let dim = (texinfo.params.width(), texinfo.params.height());
-        let image = glium::texture::RawImage2d::from_raw_rgba_reversed(rgba, dim);
-        Ok(Some(glium::texture::Texture2d::new(display, image)?))
+        let rgba = decode(texture, palette)?;
+
+        let dim = (texture.params.width, texture.params.height);
+        let image = RawImage2d::from_raw_rgba_reversed(rgba, dim);
+        Ok(Some(Texture2d::new(display, image)?))
     };
 
     materials.iter().enumerate()
