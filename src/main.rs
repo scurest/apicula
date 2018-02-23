@@ -28,6 +28,7 @@ mod nitro;
 mod png;
 mod viewer;
 mod db;
+mod info;
 
 use errors::Result;
 use std::env;
@@ -73,24 +74,29 @@ fn main3() -> Result<()> {
         (version: VERSION)
         (about: "NSBMD model viewer/converter")
         (@subcommand view =>
-            (about: "View a model")
+            (about: "View models")
             (alias: "v")
-            (@arg INPUT: +required +multiple "BMD0 file")
+            (@arg INPUT: +required +multiple "Nitro files")
         )
         (@subcommand convert =>
-            (about: "Convert a model to COLLADA")
+            (about: "Convert models to COLLADA")
             (alias: "c")
-            (@arg INPUT: +required +multiple "BMD0 file")
+            (@arg INPUT: +required +multiple "Nitro file")
             (@arg OUTPUT: -o --output +required +takes_value "Output directory")
             (@arg more_textures: --("more-textures") +hidden
-                "Try to extract more textures; only textures that are used are \
-                extracted by default")
+                "Try to extract more textures; only textures that are used by a \
+                model are extracted by default")
         )
         (@subcommand extract =>
             (about: "Extract Nitro files from a ROM or archive")
             (alias: "x")
             (@arg INPUT: +required "Input file")
             (@arg OUTPUT: -o --output +required +takes_value "Output directory")
+        )
+        (@subcommand info =>
+            (about: "Display information about Nitro files")
+            (alias: "i")
+            (@arg INPUT: +required +multiple "Nitro files")
         )
     );
     let matches = app.get_matches();
@@ -99,6 +105,7 @@ fn main3() -> Result<()> {
         ("view", Some(m)) => viewer::main(m)?,
         ("convert", Some(m)) => convert::main(m)?,
         ("extract", Some(m)) => extract::main(m)?,
+        ("info", Some(m)) => info::main(m)?,
         _ => {}
     };
     Ok(())

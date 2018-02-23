@@ -1,3 +1,4 @@
+use clap::ArgMatches;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use nitro::{Name, Model, Texture, Palette, Animation};
@@ -78,6 +79,15 @@ impl Database {
         if name_clash {
             warn!("since there were name clashes, some textures might be wrong");
         }
+    }
+
+    pub fn from_arg_matches(matches: &ArgMatches) -> Result<Database> {
+        let file_paths: Vec<PathBuf> =
+            matches
+            .values_of_os("INPUT").unwrap()
+            .map(|os_str| PathBuf::from(os_str))
+            .collect();
+        Database::build(file_paths)
     }
 }
 

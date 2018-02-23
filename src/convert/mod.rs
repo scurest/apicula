@@ -14,13 +14,7 @@ use db::Database;
 use convert::image_namer::ImageNamer;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
-    let input_paths: Vec<PathBuf> =
-        matches
-        .values_of_os("INPUT").unwrap()
-        .map(|os_str| PathBuf::from(os_str))
-        .collect();
-
-    let db = Database::build(input_paths)?;
+    let db = Database::from_arg_matches(matches)?;
 
     let num_models = db.models.len();
     let num_animations = db.animations.len();

@@ -52,6 +52,10 @@ To extract files from a ROM or other packed file, placing Nitro files in the giv
 
     apicula extract <INPUT FILE> -o <OUTPUT DIR>
 
+To get technical information about the given Nitro files
+
+    apicula info <INPUT FILES>
+
 To receive help
 
     apicula -h
