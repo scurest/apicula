@@ -2,6 +2,7 @@ use cgmath::{Matrix3, Matrix4};
 use util::bits::BitField;
 use util::{cur::Cur, fixed::{fix16, fix32}};
 use nitro::{Name, rotation::{pivot_mat, basis_mat}};
+use std::ops::{Mul, Add};
 use errors::Result;
 
 pub struct Animation {
@@ -30,8 +31,8 @@ pub enum Curve<T> {
     //
     Constant(T),
 
-    // A curve defined by sampling at a fixed rate. Its domain is the interval
-    // [start_frame, end_frame].
+    // A curve defined by sampling at a fixed rate on the interval [start_frame,
+    // end_frame].
     //
     //      |    ,-,     _
     //      |  ,'| |\  ,'|`,
@@ -245,8 +246,37 @@ impl CurveInfo {
     }
 
     fn num_samples(&self) -> usize {
-        // FIXME: check this (I literally just made it up)
+        // XXX check this (I literally just made it up)
         ((self.end_frame - self.start_frame) >> self.rate) as usize
+    }
+}
+
+
+impl<T> Curve<T>
+where T: Copy + Mul<f64, Output=T> + Add<T, Output=T> {
+    fn sample_at(&self, default: T, frame: u16) -> T {
+        match *self {
+            Curve::None => default,
+            Curve::Constant(v) => { v },
+            Curve::Samples { start_frame, end_frame, ref values } => {
+                if values.is_empty() { return default; }
+
+                // XXX what's the behavior outside the defined bounds?
+                // We're currently using "hold value".
+                // TODO Worry about end_frame == 0?
+                if frame <= start_frame { return values[0]; }
+                if frame >= end_frame - 1 { return values[values.len() - 1]; }
+
+                // Linearly interpolate between the two nearest values
+                // XXX I made this up too :b
+                let lam = (frame - start_frame) as f64 / (end_frame - 1 - start_frame) as f64;
+                let idx = lam * (values.len() - 1) as f64;
+                let lo_idx = idx.floor();
+                let hi_idx = idx.ceil();
+                let gamma = idx - lo_idx;
+                values[lo_idx as usize] * (1.0 - gamma) + values[hi_idx as usize] * gamma
+            }
+        }
     }
 }
 
@@ -255,28 +285,13 @@ impl TRSCurves {
     pub fn sample_at(&self, frame: u16) -> Matrix4<f64> {
         use cgmath::{One, vec3};
 
-        fn sample_curve<T: Copy>(curve: &Curve<T>, default: T, frame: u16) -> T {
-            match *curve {
-                Curve::None => default,
-                Curve::Constant(v) => { v },
-                Curve::Samples { start_frame, end_frame, ref values } => {
-                    // TODO what's the behavior outside the defined bounds?
-                    if frame <= start_frame { return default; }
-                    if frame >= end_frame { return default; }
-                    let lam = (frame - start_frame) as f32 / (end_frame - start_frame) as f32;
-                    let idx = (lam * (values.len() - 1) as f32).round() as usize;
-                    values[idx]
-                }
-            }
-        }
-
-        let tx = sample_curve(&self.trans[0], 0.0, frame);
-        let ty = sample_curve(&self.trans[1], 0.0, frame);
-        let tz = sample_curve(&self.trans[2], 0.0, frame);
-        let rot = sample_curve(&self.rotation, Matrix3::one(), frame);
-        let sx = sample_curve(&self.scale[0], 1.0, frame);
-        let sy = sample_curve(&self.scale[1], 1.0, frame);
-        let sz = sample_curve(&self.scale[2], 1.0, frame);
+        let tx = self.trans[0].sample_at(0.0, frame);
+        let ty = self.trans[1].sample_at(0.0, frame);
+        let tz = self.trans[2].sample_at(0.0, frame);
+        let rot = self.rotation.sample_at(Matrix3::one(), frame);
+        let sx = self.scale[0].sample_at(1.0, frame);
+        let sy = self.scale[1].sample_at(1.0, frame);
+        let sz = self.scale[2].sample_at(1.0, frame);
 
         let translation = Matrix4::from_translation(vec3(tx, ty, tz));
         let rotation = Matrix4::from(rot);
