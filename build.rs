@@ -1,3 +1,5 @@
+extern crate time;
+
 use std::process::Command;
 use std::env;
 use std::fs::File;
@@ -6,6 +8,7 @@ use std::io::Write;
 
 fn main() {
     write_git_rev();
+    write_compile_date();
 }
 
 /// Write the current git hash to ${OUT_DIR}/git-commit
@@ -42,4 +45,15 @@ fn write_git_rev() {
         }
         f.write_all(hash).unwrap();
     }
+}
+
+fn write_compile_date() {
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dst_path = Path::new(&out_dir).join("compile-date");
+    let mut f = File::create(&dst_path).unwrap();
+
+    let now = time::now_utc();
+    let date = time::strftime("%Y-%m-%d", &now).unwrap();
+
+    f.write_all(date.as_bytes()).unwrap();
 }

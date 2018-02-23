@@ -33,8 +33,14 @@ mod info;
 use errors::Result;
 use std::env;
 
+// See build.rs.
 pub static VERSION: &'static str = concat!(
-    env!("CARGO_PKG_VERSION"), " (", include_str!(concat!(env!("OUT_DIR"), "/git-commit")), ")",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    include_str!(concat!(env!("OUT_DIR"), "/git-commit")),
+    " ",
+    include_str!(concat!(env!("OUT_DIR"), "/compile-date")),
+    ")",
 );
 
 fn main() {
