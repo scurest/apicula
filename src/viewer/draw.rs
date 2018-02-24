@@ -1,18 +1,14 @@
 use cgmath::Matrix4;
 use errors::Result;
-use geometry::build_without_joints as build_geometry;
-use geometry::GeometryDataWithoutJoints as GeometryData;
-use geometry::Vertex;
-use glium;
-use glium::Frame;
-use glium::Surface;
-use glium::texture::Texture2d;
+use primitives::{Primitives, Vertex};
+use glium::{self, VertexBuffer, IndexBuffer, Display, Frame,
+    DrawParameters, Surface, texture::Texture2d,
+};
 use nitro::model::Material;
 use viewer::gl_context::GlContext;
 use viewer::state::ViewState;
 use db::Database;
 
-implement_vertex!(Vertex, position, texcoord, color);
 
 /// GL data needed to render the scene.
 pub struct DrawingData {
@@ -21,7 +17,7 @@ pub struct DrawingData {
     /// bound for materials[i]; either `Ok(None)` (use default
     /// texture), `Ok(Some(tex))` (use tex), or `Err(e)` (use
     /// error texture).
-    textures: Vec<Result<Option<glium::texture::Texture2d>>>,
+    textures: Vec<Result<Option<Texture2d>>>,
     /// Cache of the `ViewState` that was used to generate the
     /// other members. Caching it lets us update less data when
     /// we need to change this (eg. we don't need to rebuild the
@@ -31,14 +27,14 @@ pub struct DrawingData {
 
 struct ObjectGeometryData {
     objects: Vec<Matrix4<f64>>,
-    geom: GeometryData,
-    vertex_buffer: glium::VertexBuffer<Vertex>,
-    index_buffer: glium::IndexBuffer<u16>,
+    primitives: Primitives,
+    vertex_buffer: VertexBuffer<Vertex>,
+    index_buffer: IndexBuffer<u16>,
 }
 
 impl DrawingData {
     pub fn from_view_state(
-        display: &glium::Display,
+        display: &Display,
         db: &Database,
         view_state: &ViewState,
     ) -> DrawingData {
@@ -65,7 +61,7 @@ impl DrawingData {
     /// less work than rebuilding from scratch.
     pub fn change_view_state(
         &mut self,
-        display: &glium::Display,
+        display: &Display,
         db: &Database,
         view_state: &ViewState,
     ) {
@@ -98,14 +94,14 @@ impl DrawingData {
         db: &Database,
         ctx: &GlContext,
         target: &mut Frame,
-        draw_params: &glium::DrawParameters
+        draw_params: &DrawParameters
     ) {
         if let Ok(ref obj_geom_data) = self.obj_geom_data {
             let model = &db.models[self.view_state.model_id];
 
             let mvp = self.view_state.eye.model_view_persp();
 
-            for call in &obj_geom_data.geom.draw_calls {
+            for call in &obj_geom_data.primitives.draw_calls {
                 let texture =
                     match self.textures[call.mat_id as usize] {
                         Ok(Some(ref tex)) => tex,
@@ -114,19 +110,19 @@ impl DrawingData {
                     };
 
                 let sampler = {
-                    use glium::uniforms as uni;
+                    use glium::uniforms::*;
 
-                    let mut s = uni::Sampler::new(texture);
+                    let mut s = Sampler::new(texture);
 
-                    s.1.minify_filter = uni::MinifySamplerFilter::Nearest;
-                    s.1.magnify_filter = uni::MagnifySamplerFilter::Nearest;
+                    s.1.minify_filter = MinifySamplerFilter::Nearest;
+                    s.1.magnify_filter = MagnifySamplerFilter::Nearest;
 
                     // Set the correct wrap function (mirror, repeat, clamp)
                     let wrap_fn = |repeat, mirror| {
                         match (repeat, mirror) {
-                            (false, _) => uni::SamplerWrapFunction::Clamp,
-                            (true, false) => uni::SamplerWrapFunction::Repeat,
-                            (true, true) => uni::SamplerWrapFunction::Mirror,
+                            (false, _) => SamplerWrapFunction::Clamp,
+                            (true, false) => SamplerWrapFunction::Repeat,
+                            (true, true) => SamplerWrapFunction::Mirror,
                         }
                     };
                     let params = &model.materials[call.mat_id as usize].params;
@@ -182,20 +178,18 @@ impl ObjectGeometryData {
                     .collect()
             };
 
-        let geom = build_geometry(model, &objects[..])?;
+        let primitives = Primitives::build(model, &objects[..])?;
 
         let vertex_buffer =
-            glium::VertexBuffer::new(display, &geom.vertices)?;
+            glium::VertexBuffer::new(display, &primitives.vertices)?;
 
-        let index_buffer = glium::IndexBuffer::new(
-            display,
-            glium::index::PrimitiveType::TrianglesList,
-            &geom.indices
-        )?;
+        use glium::index::PrimitiveType;
+        let index_buffer =
+            IndexBuffer::new(display, PrimitiveType::TrianglesList, &primitives.indices)?;
 
         Ok(ObjectGeometryData {
             objects,
-            geom,
+            primitives,
             vertex_buffer,
             index_buffer,
         })

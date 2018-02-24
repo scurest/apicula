@@ -29,6 +29,7 @@ mod png;
 mod viewer;
 mod db;
 mod info;
+mod primitives;
 
 use errors::Result;
 use std::env;

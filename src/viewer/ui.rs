@@ -1,8 +1,4 @@
-use cgmath::InnerSpace;
-use cgmath::Point3;
-use cgmath::vec2;
-use cgmath::vec3;
-use cgmath::Vector3;
+use cgmath::{InnerSpace, Point3, vec2, vec3, Vector3};
 use errors::Result;
 use glium;
 use glium::Surface;
