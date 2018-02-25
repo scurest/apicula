@@ -22,7 +22,6 @@ mod util;
 mod convert;
 mod decompress;
 mod extract;
-mod geometry;
 mod nds;
 mod nitro;
 mod png;
@@ -30,6 +29,7 @@ mod viewer;
 mod db;
 mod info;
 mod primitives;
+mod skeleton;
 
 use errors::Result;
 use std::env;

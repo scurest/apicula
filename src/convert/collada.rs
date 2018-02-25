@@ -3,10 +3,9 @@ use convert::format::{FnFmt, Mat};
 use convert::image_namer::{ImageNamer, ImageSpec};
 use db::Database;
 use errors::Result;
-use geometry::build_with_joints as build_geometry;
-use geometry::GeometryDataWithJoints as GeometryData;
-use geometry::joint_builder::{JointTree, SymbolicTerm, Transform};
-use nitro::{Model, Animation};
+use skeleton::{Skeleton, SymbolicTerm, Transform};
+use primitives::Primitives;
+use nitro::Model;
 use petgraph::{Direction, graph::NodeIndex};
 use std::fmt::{self, Write};
 use time;
@@ -14,29 +13,45 @@ use util::ins_set::InsOrderSet;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
+struct Ctx<'a> {
+    model: &'a Model,
+    db: &'a Database,
+    image_namer: &'a ImageNamer,
+    objects: &'a [Matrix4<f64>],
+    prims: &'a Primitives,
+    skel: &'a Skeleton,
+}
+
 pub fn write<W: Write>(
     w: &mut W,
     db: &Database,
     image_namer: &ImageNamer,
     model: &Model,
 ) -> Result<()> {
-    let objects = model.objects.iter().map(|o| o.xform).collect::<Vec<_>>();
-    let geom = build_geometry(model, &objects[..])?;
-    let anims = &db.animations[..];
+    // We need invertible matrices since we're obliged to give values for
+    // inverse bind matrices.
+    use convert::make_invertible::make_invertible;
+    let objects = &model.objects.iter()
+        .map(|o| make_invertible(&o.xform))
+        .collect::<Vec<_>>();
+    let prims = &Primitives::build(model, &objects)?;
+    let skel = &Skeleton::build(model, &objects)?;
+
+    let ctx = Ctx { model, db, image_namer, objects, prims, skel };
 
     write_lines!(w,
         r##"<?xml version="1.0" encoding="utf-8"?>"##,
         r##"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">"##;
     )?;
     write_asset(w)?;
-    write_library_images(w, image_namer, model)?;
-    write_library_materials(w, model)?;
-    write_library_effects(w, image_namer, model)?;
-    write_library_geometries(w, model, &geom)?;
-    write_library_controllers(w, &geom)?;
-    write_library_animations(w, model, anims, &geom)?;
-    write_library_animation_clips(w, model, anims, &geom)?;
-    write_library_visual_scenes(w, model, &geom)?;
+    write_library_images(w, &ctx)?;
+    write_library_materials(w, &ctx)?;
+    write_library_effects(w, &ctx)?;
+    write_library_geometries(w, &ctx)?;
+    write_library_controllers(w, &ctx)?;
+    write_library_animations(w, &ctx)?;
+    write_library_animation_clips(w, &ctx)?;
+    write_library_visual_scenes(w, &ctx)?;
     write_scene(w)?;
     write_lines!(w,
         r##"</COLLADA>"##;
@@ -57,16 +72,12 @@ fn write_asset<W: Write>(w: &mut W) -> Result<()> {
     Ok(())
 }
 
-fn write_library_images<W: Write>(
-    w: &mut W,
-    image_namer: &ImageNamer,
-    model: &Model,
-) -> Result<()> {
+fn write_library_images<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     use std::collections::HashSet;
 
-    let image_names = model.materials.iter()
+    let image_names = ctx.model.materials.iter()
         .filter_map(|material| ImageSpec::from_material(material))
-        .filter_map(|spec| image_namer.names.get(&spec))
+        .filter_map(|spec| ctx.image_namer.names.get(&spec))
         .collect::<HashSet<_>>();
 
     write_lines!(w,
@@ -87,11 +98,11 @@ fn write_library_images<W: Write>(
     Ok(())
 }
 
-fn write_library_materials<W: Write>(w: &mut W, model: &Model) -> Result<()> {
+fn write_library_materials<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     write_lines!(w,
         r##"  <library_materials>"##;
     )?;
-    for (i, mat) in model.materials.iter().enumerate() {
+    for (i, mat) in ctx.model.materials.iter().enumerate() {
         write_lines!(w,
             r##"    <material id="material{i}" name="{name}">"##,
             r##"      <instance_effect url="#effect{i}"/>"##,
@@ -106,17 +117,13 @@ fn write_library_materials<W: Write>(w: &mut W, model: &Model) -> Result<()> {
     Ok(())
 }
 
-fn write_library_effects<W: Write>(
-    w: &mut W,
-    image_namer: &ImageNamer,
-    model: &Model,
-) -> Result<()> {
+fn write_library_effects<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     write_lines!(w,
         r##"  <library_effects>"##;
     )?;
-    for (i, mat) in model.materials.iter().enumerate() {
+    for (i, mat) in ctx.model.materials.iter().enumerate() {
         let image_name = ImageSpec::from_material(mat)
-            .and_then(|spec| image_namer.names.get(&spec));
+            .and_then(|spec| ctx.image_namer.names.get(&spec));
 
         write_lines!(w,
             r##"    <effect id="effect{i}" name="{name}">"##,
@@ -187,15 +194,16 @@ fn write_library_effects<W: Write>(
     Ok(())
 }
 
-fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
+fn write_library_geometries<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     write_lines!(w,
         r##"  <library_geometries>"##;
     )?;
 
-    for (i, call) in geom.draw_calls.iter().enumerate() {
-        let mesh = &model.meshes[call.mesh_id as usize];
+    for (i, call) in ctx.prims.draw_calls.iter().enumerate() {
+        let mesh = &ctx.model.meshes[call.mesh_id as usize];
         let vert_range = call.vertex_range.start as usize .. call.vertex_range.end as usize;
-        let verts = &geom.vertices[vert_range];
+        let verts = &ctx.prims.vertices[vert_range];
+        let indices = &ctx.prims.indices;
 
         write_lines!(w,
             r##"    <geometry id="geometry{i}" name="{name}">"##,
@@ -291,7 +299,7 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
             r##"        </triangles>"##;
             i = i, mat_id = call.mat_id, num_tris = num_tris,
             indices = FnFmt(|f| {
-                for index in &geom.indices[call.index_range.clone()] {
+                for index in &indices[call.index_range.clone()] {
                     // The indices in geom are counting from the first vertex
                     // in the whole model, but we want them relative to the
                     // start of just this <mesh>.
@@ -315,7 +323,7 @@ fn write_library_geometries<W: Write>(w: &mut W, model: &Model, geom: &GeometryD
     Ok(())
 }
 
-fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result<()> {
+fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     write_lines!(w,
         r##"  <library_controllers>"##;
     )?;
@@ -323,7 +331,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
     let mut all_joints = InsOrderSet::new();
     let mut all_weights = InsOrderSet::new();
 
-    for (i, call) in geom.draw_calls.iter().enumerate() {
+    for (i, call) in ctx.prims.draw_calls.iter().enumerate() {
         write_lines!(w,
             r##"    <controller id="controller{i}">"##,
             r##"      <skin source="#geometry{i}">"##;
@@ -337,14 +345,14 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         // use for this draw call into a list and reference them by index later on.
         // This is what `IncOrderSet` is for.
         all_joints.clear();
-        for j in &geom.joint_data.vertices[vrange.clone()] {
+        for j in &ctx.skel.vertices[vrange.clone()] {
             for &SymbolicTerm { joint_id, .. } in &j.terms {
                 // Insert every joint which appears and all its ancestors.
                 all_joints.insert(joint_id);
-                let mut parents = geom.joint_data.tree.neighbors_directed(joint_id, Direction::Incoming);
+                let mut parents = ctx.skel.tree.neighbors_directed(joint_id, Direction::Incoming);
                 while let Some(parent) = parents.next() {
                     all_joints.insert(parent);
-                    parents = geom.joint_data.tree.neighbors_directed(parent, Direction::Incoming)
+                    parents = ctx.skel.tree.neighbors_directed(parent, Direction::Incoming)
                 }
             }
         }
@@ -379,7 +387,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             i = i, num_floats = 16 * all_joints.len(), num_joints = all_joints.len(),
             floats = FnFmt(|f| {
                 for &j in all_joints.iter() {
-                    let inv_bind = &geom.joint_data.tree[j].inv_bind_matrix;
+                    let inv_bind = &ctx.skel.tree[j].inv_bind_matrix;
                     write!(f, "{} ", Mat(inv_bind))?;
                 }
                 Ok(())
@@ -398,7 +406,7 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
         let encode = |x: f64| (x * 4096.0) as u32;
         let decode = |x: u32| x as f64 / 4096.0;
         all_weights.clear();
-        for j in &geom.joint_data.vertices[vrange.clone()] {
+        for j in &ctx.skel.vertices[vrange.clone()] {
             for &SymbolicTerm { weight, .. } in &j.terms {
                 all_weights.insert(encode(weight));
             }
@@ -440,13 +448,13 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
             r##"        </vertex_weights>"##;
             i = i, num_verts = num_verts,
             vcount = FnFmt(|f| {
-                for j in &geom.joint_data.vertices[vrange.clone()] {
+                for j in &ctx.skel.vertices[vrange.clone()] {
                     write!(f, "{} ", j.terms.len())?;
                 }
                 Ok(())
             }),
             v = FnFmt(|f| {
-                for j in &geom.joint_data.vertices[vrange.clone()] {
+                for j in &ctx.skel.vertices[vrange.clone()] {
                     for &SymbolicTerm { weight, joint_id } in &j.terms {
                         write!(f, "{} {} ",
                             all_joints.get_index_from_value(&joint_id).unwrap(),
@@ -471,15 +479,15 @@ fn write_library_controllers<W: Write>(w: &mut W, geom: &GeometryData) -> Result
     Ok(())
 }
 
-fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
-    let num_objects = model.objects.len();
-    let any_animations = anims.iter().any(|a| a.objects_curves.len() == num_objects);
+fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
+    let num_objects = ctx.model.objects.len();
+    let any_animations = ctx.db.animations.iter().any(|a| a.objects_curves.len() == num_objects);
 
     if !any_animations {
         return Ok(()); // no matching animations
     }
 
-    let matching_anims = anims.iter().enumerate()
+    let matching_anims = ctx.db.animations.iter().enumerate()
         .filter(|&(_, a)| a.objects_curves.len() == num_objects);
 
     write_lines!(w,
@@ -489,8 +497,8 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
     for (anim_id, anim) in matching_anims {
         let num_frames = anim.num_frames;
 
-        for joint_id in geom.joint_data.tree.node_indices() {
-            let joint = &geom.joint_data.tree[joint_id];
+        for joint_id in ctx.skel.tree.node_indices() {
+            let joint = &ctx.skel.tree[joint_id];
             let object_id = match joint.transform {
                 Transform::Object(id) => id,
                 _ => continue,
@@ -584,15 +592,15 @@ fn write_library_animations<W: Write>(w: &mut W, model: &Model, anims: &[Animati
 }
 
 
-fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[Animation], geom: &GeometryData) -> Result<()> {
-    let num_objects = model.objects.len();
-    let any_animations = anims.iter().any(|a| a.objects_curves.len() == num_objects);
+fn write_library_animation_clips<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
+    let num_objects = ctx.model.objects.len();
+    let any_animations = ctx.db.animations.iter().any(|a| a.objects_curves.len() == num_objects);
 
     if !any_animations {
         return Ok(()); // no matching animations
     }
 
-    let matching_anims = anims.iter().enumerate()
+    let matching_anims = ctx.db.animations.iter().enumerate()
         .filter(|&(_, a)| a.objects_curves.len() == num_objects);
 
     write_lines!(w,
@@ -607,7 +615,7 @@ fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[An
             r##"    <animation_clip id="anim{anim_id}" name="{name}" end="{end_time}">"##;
             anim_id = anim_id, name = anim.name.print_safe(), end_time = end_time,
         )?;
-        for joint_id in geom.joint_data.tree.node_indices() {
+        for joint_id in ctx.skel.tree.node_indices() {
             write_lines!(w,
                 r##"      <instance_animation url="#anim{anim_id}-joint{joint_id}"/>"##;
                 anim_id = anim_id, joint_id = joint_id.index(),
@@ -625,17 +633,17 @@ fn write_library_animation_clips<W: Write>(w: &mut W, model: &Model, anims: &[An
     Ok(())
 }
 
-fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
+fn write_library_visual_scenes<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     write_lines!(w,
         r#"  <library_visual_scenes>"#,
         r#"    <visual_scene id="scene0" name="{model_name}">"#;
-        model_name = model.name.print_safe(),
+        model_name = ctx.model.name.print_safe(),
     )?;
 
-    write_joint_hierarchy(w, model, geom)?;
+    write_joint_hierarchy(w, ctx)?;
 
-    for (i, call) in geom.draw_calls.iter().enumerate() {
-        let mesh = &model.meshes[call.mesh_id as usize];
+    for (i, call) in ctx.prims.draw_calls.iter().enumerate() {
+        let mesh = &ctx.model.meshes[call.mesh_id as usize];
         write_lines!(w,
             r##"      <node id="node{i}" name="{mesh_name}" type="NODE">"##,
             r##"        <instance_controller url="#controller{i}">"##,
@@ -644,9 +652,9 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
             r##"            <technique_common>"##,
             r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}">"##;
             i = i, mesh_name = mesh.name.print_safe(),
-            root_id = geom.joint_data.root.index(), mat_id = call.mat_id,
+            root_id = ctx.skel.root.index(), mat_id = call.mat_id,
         )?;
-        if model.materials[call.mat_id as usize].texture_name.is_some() {
+        if ctx.model.materials[call.mat_id as usize].texture_name.is_some() {
             write_lines!(w,
                 r##"                <bind_vertex_input semantic="tc" input_semantic="TEXCOORD"/>"##;
             )?;
@@ -668,7 +676,7 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, model: &Model, geom: &Geomet
     Ok(())
 }
 
-fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData) -> Result<()> {
+fn write_joint_hierarchy<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     fn write_indent<W: Write>(w: &mut W, indent: u32) -> Result<()> {
         // Base indent
         write!(w, "      ")?;
@@ -679,42 +687,42 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, model: &Model, geom: &GeometryData
     }
 
     /// Write the name for a joint that will appear in DCC programs.
-    fn write_joint_name<W: Write>(w: &mut W, model: &Model, tree: &JointTree, node: NodeIndex) -> fmt::Result {
-        match tree[node].transform {
+    fn write_joint_name<W: Write>(w: &mut W, ctx: &Ctx, node: NodeIndex) -> fmt::Result {
+        match ctx.skel.tree[node].transform {
             Transform::Root => write!(w, "__ROOT__"),
-            Transform::Object(id) => write!(w, "{}", model.objects[id as usize].name.print_safe()),
-            Transform::UnknownStackSlot(id) => write!(w, "__STACK{}", id),
+            Transform::Object(id) => write!(w, "{}", ctx.model.objects[id as usize].name.print_safe()),
+            Transform::UninitializedSlot(id) => write!(w, "__UNINITIALIZED{}", id),
         }
     }
 
-    fn write_rec<W: Write>(w: &mut W, model: &Model, geom: &GeometryData, node: NodeIndex, indent: u32) -> Result<()> {
-        let tree = &geom.joint_data.tree;
+    fn write_rec<W: Write>(w: &mut W, ctx: &Ctx, node: NodeIndex, indent: u32) -> Result<()> {
+        let tree = &ctx.skel.tree;
 
         write_indent(w, indent)?;
         write_lines!(w,
             r#"<node id="joint{joint_id}" sid="joint{joint_id}" name="{name}" type="JOINT">"#;
             joint_id = node.index(),
-            name = FnFmt(|f| write_joint_name(f, model, tree, node)),
+            name = FnFmt(|f| write_joint_name(f, ctx, node)),
         )?;
 
         let mat = match tree[node].transform {
             Transform::Root => Matrix4::one(),
-            Transform::Object(id) => geom.objects[id as usize],
-            Transform::UnknownStackSlot(_) => Matrix4::one(),
+            Transform::Object(id) => ctx.objects[id as usize],
+            Transform::UninitializedSlot(_) => Matrix4::one(),
         };
         write_indent(w, indent + 1)?;
         write_lines!(w, r#"<matrix sid="transform">{}</matrix>"#; Mat(&mat))?;
 
         let children = tree.neighbors_directed(node, Direction::Outgoing);
         for child in children {
-            write_rec(w, model, geom, child, indent + 1)?;
+            write_rec(w, ctx, child, indent + 1)?;
         }
 
         write_indent(w, indent)?;
         write!(w, "</node>\n")?;
         Ok(())
     }
-    write_rec(w, model, &geom, geom.joint_data.root, 0)
+    write_rec(w, ctx, ctx.skel.root, 0)
 }
 
 fn write_scene<W: Write>(w: &mut W) -> Result<()> {

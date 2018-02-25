@@ -2,6 +2,7 @@
 mod format;
 mod collada;
 mod image_namer;
+mod make_invertible;
 
 use clap::ArgMatches;
 use errors::Result;

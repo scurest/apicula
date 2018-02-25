@@ -1,3 +1,5 @@
+
+
 //! Build the joint tree for a model.
 //!
 //! Models are skinned on the DS with a series of imperative commands
@@ -12,12 +14,26 @@
 //! transition.
 
 use cgmath::{ApproxEq, Matrix4, One, SquareMatrix};
-use nds::gpu_cmds::GpuCmd;
-use nitro::Model;
-use petgraph::Direction;
-use petgraph::graph::NodeIndex;
-use petgraph::stable_graph::StableGraph;
-use util::first_if_only::first_if_only;
+use errors::Result;
+use nds::gpu_cmds::{self, GpuCmd};
+use nitro::{Model, render_cmds};
+use util::cur::Cur;
+use petgraph::{Direction, stable_graph::StableGraph, graph::NodeIndex};
+
+pub struct Skeleton {
+    pub tree: JointTree,
+    pub root: NodeIndex,
+    /// The nth entry is the matrix which should be applied to the nth vertex.
+    pub vertices: Vec<SymbolicMatrix>,
+}
+
+impl Skeleton {
+    pub fn build(model: &Model, objects: &[Matrix4<f64>]) -> Result<Skeleton> {
+        let mut builder = Builder::new(model, objects);
+        render_cmds::run_commands(Cur::new(&model.render_cmds), &mut builder)?;
+        Ok(builder.done())
+    }
+}
 
 /// Tree of joints.
 ///
@@ -44,9 +60,9 @@ pub enum Transform {
     Root,
     /// The object matrix with the given id.
     Object(u8),
-    /// An unassigned stack slot. We treat it as having the identity as its
-    /// value. If this shows up, there's probably a bug.
-    UnknownStackSlot(u8),
+    /// An stack slot that hasn't been assigned to. We treat it as having the
+    /// identity as its value. This probably shouldn't show up.
+    UninitializedSlot(u8),
 }
 
 /// A linear combination of pure matrices. Basically the free linear space
@@ -100,135 +116,47 @@ impl SymbolicMatrix {
     }
 }
 
-
-#[derive(Clone)]
-pub struct JointBuilder<'a, 'b> {
-    data: JointData,
+struct Builder<'a, 'b> {
     model: &'a Model,
     objects: &'b [Matrix4<f64>],
+    gpu: GpuState,
+    skel: Skeleton,
+}
 
-    /// GPU's current matrix.
+struct GpuState {
     cur_matrix: SymbolicMatrix,
-    /// The GPU's matrix stack. If an entry contains `None`, it means it hasn't been
-    /// written to, so we don't know its value.
     matrix_stack: Vec<Option<SymbolicMatrix>>,
 }
 
-#[derive(Clone)]
-pub struct JointData {
-    pub tree: JointTree,
-    pub root: NodeIndex,
-    /// The nth entry is the matrix which should be applied to the nth vertex.
-    pub vertices: Vec<SymbolicMatrix>,
-}
-
-impl<'a, 'b> JointBuilder<'a, 'b> {
-    pub fn new(
-        model: &'a Model,
-        objects: &'b [Matrix4<f64>]
-    ) -> JointBuilder<'a, 'b> {
+impl<'a, 'b> Builder<'a, 'b> {
+    pub fn new(model: &'a Model, objects: &'b [Matrix4<f64>]) -> Builder<'a, 'b> {
         let mut tree = StableGraph::new();
-
         let root = tree.add_node(Node {
             transform: Transform::Root,
             ref_count: 0,
             inv_bind_matrix: Matrix4::one(),
         });
+        let vertices = vec![];
+        let skel = Skeleton { tree, root, vertices };
 
         let cur_matrix = SymbolicMatrix::from_joint(root);
         let matrix_stack = vec![None; 32];
+        let gpu = GpuState { cur_matrix, matrix_stack };
 
-        let data = JointData {
-            tree,
-            root,
-            vertices: vec![],
-        };
-
-        JointBuilder { data, model, objects, cur_matrix, matrix_stack }
+        Builder { model, objects, gpu, skel }
     }
 
-    pub fn data(self) -> JointData {
-        cleanup(self.data)
-    }
-
-    pub fn run_gpu_cmd(&mut self, cmd: GpuCmd) {
-        match cmd {
-            GpuCmd::Restore { idx } => self.load_matrix(idx as u8),
-            GpuCmd::Vertex { .. } => self.vertex(),
-            _ => ()
-        }
-    }
-
-    pub fn load_matrix(&mut self, stack_pos: u8) {
-        self.cur_matrix = self.get_from_stack(stack_pos);
-    }
-
-    pub fn mul_by_object(&mut self, object_id: u8) {
-        let cur_matrix = self.cur_matrix.clone();
-        let new_matrix = self.mul_comb(cur_matrix, Transform::Object(object_id));
-        self.cur_matrix = new_matrix;
-    }
-
-    pub fn store_matrix(&mut self, stack_pos: u8) {
-        self.matrix_stack[stack_pos as usize] = Some(self.cur_matrix.clone());
-    }
-
-    pub fn blend(&mut self, blend_terms: &[(u8, u8, f64)]) {
-        // Set the current matrix to Σ (weight * stack_matrix * inv_bind_matrix).
-
-        // First, check that each stack matrix is a pure matrix (otherwise, it
-        // can't have an inverse bind matrix), and if it is, check that the
-        // inverse bind we computed is close to the one stored in the model.
-        for &(stack_id, inv_bind_id, _weight) in blend_terms {
-            let stack_matrix = self.get_from_stack(stack_id);
-            if stack_matrix.terms.len() != 1 {
-                warn!(
-                    "a blended matrix was blended again; this will be ignored \
-                     but there will likely by errors in the model's skeleton"
-                );
-            } else {
-                let our_inv_bind = self.data.tree[stack_matrix.terms[0].joint_id].inv_bind_matrix;
-                let stored_inv_bind = self.model.inv_binds[inv_bind_id as usize];
-                let close_enough = our_inv_bind.relative_eq(
-                    &stored_inv_bind,
-                    0.005, // fairly generous epsilon
-                    <Matrix4<f64> as ApproxEq>::default_max_relative(),
-                );
-                if !close_enough {
-                    warn!(
-                        "an inverse bind matrix stored in the model file differed \
-                        significantly from the inverse bind computed while building \
-                        the joint tree; this will be ignored but there will likely \
-                        be errors in the model's skeleton"
-                    );
-                }
-
-            }
-        }
-
-        // Ok, now assuming the inverse bind matrices are correct, we can
-        // just compute Σ (weight * stack_matrix)
-        // Distribute over the sum, then group like terms.
-        let terms = blend_terms.iter()
-            .flat_map(|&(stack_id, _inv_bind_id, weight)| {
-                let mut m = self.get_from_stack(stack_id);
-                m.mul_scalar_in_place(weight);
-                m.terms
-            })
-            .collect::<Vec<_>>();
-        let mut distributed = SymbolicMatrix { terms: terms };
-        distributed.group_like_terms_in_place();
-
-        self.cur_matrix = distributed;
+    pub fn done(self) -> Skeleton {
+        cleanup(self.skel)
     }
 
     pub fn vertex(&mut self) {
         // Update the refcounts
-        for &SymbolicTerm { joint_id, .. } in &self.cur_matrix.terms {
-            self.data.tree[joint_id].ref_count += 1;
+        for &SymbolicTerm { joint_id, .. } in &self.gpu.cur_matrix.terms {
+            self.skel.tree[joint_id].ref_count += 1;
         }
 
-        self.data.vertices.push(self.cur_matrix.clone());
+        self.skel.vertices.push(self.gpu.cur_matrix.clone());
     }
 
     /// Premultiplies a symbolic matrix by the given transform.
@@ -248,12 +176,12 @@ impl<'a, 'b> JointBuilder<'a, 'b> {
     /// Returns the matrix at `stack_pos`. Handles unknown stack slots
     /// for you.
     fn get_from_stack(&mut self, stack_pos: u8) -> SymbolicMatrix {
-        self.matrix_stack[stack_pos as usize].clone()
+        self.gpu.matrix_stack[stack_pos as usize].clone()
             .unwrap_or_else(|| {
-                let root = self.data.root;
+                let root = self.skel.root;
                 let node_idx = self.find_or_add_child(
                     root,
-                    Transform::UnknownStackSlot(stack_pos),
+                    Transform::UninitializedSlot(stack_pos),
                 );
                 SymbolicMatrix::from_joint(node_idx)
             })
@@ -266,23 +194,23 @@ impl<'a, 'b> JointBuilder<'a, 'b> {
     /// This corresponds to multiplying the matrix represented by `node_id` by the
     /// given transform.
     fn find_or_add_child(&mut self, node_id: NodeIndex, transform: Transform) -> NodeIndex {
-        let found = self.data.tree
+        let found = self.skel.tree
             .neighbors_directed(node_id, Direction::Outgoing)
-            .find(|&idx| self.data.tree[idx].transform == transform);
+            .find(|&idx| self.skel.tree[idx].transform == transform);
         match found {
             Some(idx) => idx,
             None => {
                 // Make a new one.
-                let parent_inv_bind = self.data.tree[node_id].inv_bind_matrix;
+                let parent_inv_bind = self.skel.tree[node_id].inv_bind_matrix;
                 let object_mat = self.transform_to_matrix(transform);
                 let inv_object_mat = object_mat.invert().unwrap();
                 let inv_bind_matrix = inv_object_mat * parent_inv_bind;
-                let new_child = self.data.tree.add_node(Node {
+                let new_child = self.skel.tree.add_node(Node {
                     transform,
                     inv_bind_matrix,
                     ref_count: 0,
                 });
-                self.data.tree.add_edge(node_id, new_child, ());
+                self.skel.tree.add_edge(node_id, new_child, ());
                 new_child
             }
         }
@@ -293,29 +221,140 @@ impl<'a, 'b> JointBuilder<'a, 'b> {
         match transform {
             Transform::Root => Matrix4::one(),
             Transform::Object(id) => self.objects[id as usize],
-            Transform::UnknownStackSlot(_) => Matrix4::one(),
+            Transform::UninitializedSlot(_) => Matrix4::one(),
         }
     }
 }
 
-/// Pass to clean up the joint data, making it a little nicer for humans.
-fn cleanup(mut data: JointData) -> JointData {
+impl<'a, 'b> render_cmds::Sink for Builder<'a, 'b> {
+    fn load_matrix(&mut self, stack_pos: u8) -> Result<()> {
+        self.gpu.cur_matrix = self.get_from_stack(stack_pos);
+        Ok(())
+    }
+
+    fn store_matrix(&mut self, stack_pos: u8) -> Result<()> {
+        self.gpu.matrix_stack[stack_pos as usize] = Some(self.gpu.cur_matrix.clone());
+        Ok(())
+    }
+
+    fn mul_by_object(&mut self, object_id: u8) -> Result<()> {
+        let cur_matrix = self.gpu.cur_matrix.clone();
+        let new_matrix = self.mul_comb(cur_matrix, Transform::Object(object_id));
+        self.gpu.cur_matrix = new_matrix;
+        Ok(())
+    }
+
+    fn blend(&mut self, blend_terms: &[(u8, u8, f64)]) -> Result<()> {
+        // Set the current matrix to Σ (weight * stack_matrix * inv_bind_matrix).
+
+        // First, check that each stack matrix is a pure matrix (otherwise, it
+        // can't have an inverse bind matrix), and if it is, check that the
+        // inverse bind we computed is close to the one stored in the model.
+        for &(stack_id, inv_bind_id, _weight) in blend_terms {
+            let stack_matrix = self.get_from_stack(stack_id);
+            if stack_matrix.terms.len() != 1 {
+                warn!(
+                    "a blended matrix was blended again; this can't be represented \
+                    with a COLLADA file. We'll pretend this didn't happen. Your model \
+                    may look wrong."
+                );
+            } else {
+                let our_inv_bind = self.skel.tree[stack_matrix.terms[0].joint_id].inv_bind_matrix;
+                let stored_inv_bind = self.model.inv_binds[inv_bind_id as usize];
+                let close_enough = our_inv_bind.relative_eq(
+                    &stored_inv_bind,
+                    0.05, // very generous epsilon
+                    <Matrix4<f64> as ApproxEq>::default_max_relative(),
+                );
+                if !close_enough {
+                    warn!(
+                        "an inverse bind matrix stored in the model file differed \
+                        significantly from the inverse bind computed while building \
+                        the joint tree; this can't be represented with a COLLADA file. \
+                        We'll pretend this didn't happen. Your model may look wrong."
+                    );
+                }
+            }
+        }
+
+        // Ok, now assuming the inverse bind matrices are correct, we can
+        // just compute Σ (weight * stack_matrix)
+        // Distribute over the sum, then group like terms.
+        let terms = blend_terms.iter()
+            .flat_map(|&(stack_id, _inv_bind_id, weight)| {
+                let mut m = self.get_from_stack(stack_id);
+                m.mul_scalar_in_place(weight);
+                m.terms
+            })
+            .collect::<Vec<_>>();
+        let mut distributed = SymbolicMatrix { terms: terms };
+        distributed.group_like_terms_in_place();
+
+        self.gpu.cur_matrix = distributed;
+
+        Ok(())
+    }
+
+    fn draw(&mut self, mesh_id: u8, _mat_id: u8) -> Result<()> {
+        run_gpu_cmds(self, &self.model.meshes[mesh_id as usize].commands)?;
+        Ok(())
+    }
+
+    // Don't need to care about these (the scaling is pre-applied to the
+    // vertices).
+    fn scale_up(&mut self) -> Result<()> { Ok(()) }
+    fn scale_down(&mut self) -> Result<()> { Ok(()) }
+
+}
+
+fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) -> Result<()> {
+    let interpreter = gpu_cmds::CmdParser::new(commands);
+
+    for cmd_res in interpreter {
+        match cmd_res? {
+            GpuCmd::Restore { idx } => {
+                use nitro::render_cmds::Sink;
+                b.load_matrix(idx as u8)?;
+            }
+            GpuCmd::Vertex { .. } => b.vertex(),
+            _ => (),
+        }
+    }
+
+    Ok(())
+}
+
+
+/// Pass to clean up the skeleton, making it a little nicer for humans.
+fn cleanup(mut skel: Skeleton) -> Skeleton {
+    /// If `it` yields a single value, returns that value. Otherwise, returns `None`.
+    fn first_if_only<I: Iterator>(mut it: I) -> Option<<I as Iterator>::Item> {
+        let first = it.next()?;
+        match it.next() {
+            Some(_) => None,
+            None => Some(first),
+        }
+    }
+
+    //TODO delete leaves that have ref_count == 0?
+
     // If the dummy root was inserted has a single child, delete the
     // dummy and make its child the new root.
-    let root = data.root;
+    let root = skel.root;
     let root_child = first_if_only(
-        data.tree.neighbors_directed(root, Direction::Outgoing)
+        skel.tree.neighbors_directed(root, Direction::Outgoing)
     );
     if let Some(r) = root_child {
         // Make sure no one's using this node...
-        if data.tree[root].ref_count == 0 {
-            data.tree.remove_node(root);
-            data.root = r;
+        if skel.tree[root].ref_count == 0 {
+            skel.tree.remove_node(root);
+            skel.root = r;
         }
     }
 
-    data
+    skel
 }
+
 
 #[test]
 fn test_group_like_terms() {
