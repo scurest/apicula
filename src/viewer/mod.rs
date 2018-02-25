@@ -17,15 +17,10 @@ use db::Database;
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let db = Database::from_arg_matches(matches)?;
 
-    let num_models = db.models.len();
-    let num_animations = db.animations.len();
+    db.print_status();
 
-    let plural = |x| if x != 1 { "s" } else { "" };
-    println!("Found {} model{}.", num_models, plural(num_models));
-    println!("Found {} animation{}.", num_animations, plural(num_animations));
-
-    if num_models == 0 {
-        println!("Nothing to do.");
+    if db.models.is_empty() {
+        println!("No models. Nothing to do.\n");
         return Ok(())
     }
 

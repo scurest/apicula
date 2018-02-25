@@ -6,9 +6,7 @@ use nitro::{Model, Texture, Animation};
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let db = Database::from_arg_matches(matches)?;
 
-    println!("Found {} models, {} textures, {} palettes, {} animations.",
-        db.models.len(), db.textures.len(),
-        db.palettes.len(), db.animations.len());
+    db.print_status();
 
     println!("");
 

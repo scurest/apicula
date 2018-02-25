@@ -22,6 +22,15 @@ pub struct Database {
 }
 
 impl Database {
+    pub fn from_arg_matches(matches: &ArgMatches) -> Result<Database> {
+        let file_paths: Vec<PathBuf> =
+            matches
+            .values_of_os("INPUT").unwrap()
+            .map(|os_str| PathBuf::from(os_str))
+            .collect();
+        Database::build(file_paths)
+    }
+
     pub fn build(file_paths: Vec<PathBuf>) -> Result<Database> {
         use std::default::Default;
 
@@ -81,14 +90,19 @@ impl Database {
         }
     }
 
-    pub fn from_arg_matches(matches: &ArgMatches) -> Result<Database> {
-        let file_paths: Vec<PathBuf> =
-            matches
-            .values_of_os("INPUT").unwrap()
-            .map(|os_str| PathBuf::from(os_str))
-            .collect();
-        Database::build(file_paths)
+    pub fn print_status(&self) {
+        let num_models = self.models.len();
+        let num_textures = self.textures.len();
+        let num_palettes = self.palettes.len();
+        let num_animations = self.animations.len();
+
+        let plural = |x| if x != 1 { "s" } else { "" };
+        println!("\nGot {} model{}, {} texture{}, {} palette{}, {} animation{}.\n",
+            num_models, plural(num_models), num_textures, plural(num_textures),
+            num_palettes, plural(num_palettes), num_animations, plural(num_animations),
+        );
     }
+
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>> {

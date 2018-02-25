@@ -78,10 +78,12 @@ impl Extractor {
     /// Print a report on how extraction went; namely, the number of each kind of
     /// file found.
     fn print_report(&self) {
-        let suf = |x| if x != 1 { "s" } else { "" };
-        println!("Found {} BMD{}.", self.num_bmds, suf(self.num_bmds));
-        println!("Found {} BTX{}.", self.num_btxs, suf(self.num_btxs)); // er, maybes BTXes?
-        println!("Found {} BCA{}.", self.num_bcas, suf(self.num_bcas));
+        let plural = |x| if x != 1 { "s" } else { "" };
+        println!("Found {} BMD{}, {} BTX{}, {} BCA{}.\n",
+            self.num_bmds, plural(self.num_bmds),
+            self.num_btxs, plural(self.num_btxs),
+            self.num_bcas, plural(self.num_bcas),
+        );
     }
 
     /// Assuming a Nitro stamp is found at `cur`, try to detect a container
