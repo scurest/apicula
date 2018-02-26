@@ -78,7 +78,8 @@ impl<'a> Ui<'a> {
 
         let mut cur_time = time::precise_time_s();
         let mut last_time;
-        let mut last_anim_time = cur_time;
+        // Time when the animation last changed; None if we aren't animating
+        let mut last_anim_time: Option<f64> = None;
 
         loop {
             self.update_title();
@@ -111,15 +112,22 @@ impl<'a> Ui<'a> {
             }
 
             if self.view_state.anim_state.is_some() {
+                if last_anim_time.is_none() {
+                    last_anim_time = Some(cur_time);
+                }
+                let last_anim_time = last_anim_time.as_mut().unwrap();
+
                 let frame_length = 1.0 / 60.0; // 60 fps
-                let mut time_since_last_frame = cur_time - last_anim_time;
+                let mut time_since_last_frame = cur_time - *last_anim_time;
                 if time_since_last_frame > frame_length {
                     while time_since_last_frame > frame_length {
                         self.view_state.next_frame(&self.db);
                         time_since_last_frame -= frame_length;
                     }
-                    last_anim_time = cur_time;
+                    *last_anim_time = cur_time;
                 }
+            } else {
+                last_anim_time = None;
             }
 
             // Move the camera
