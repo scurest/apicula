@@ -37,12 +37,18 @@ impl Database {
         let mut db: Database = Default::default();
         db.file_paths = file_paths;
 
+        debug!("Building database...");
+
         for path in &db.file_paths {
+            debug!("Processing {:?}...", path);
+
+            // Hard-fail if we can't open the path. We don't expect the caller
+            // to know which files are valid Nitro files but we expect them to
+            // give us files we can actually open.
             let buf = read_file(&path)?;
-            let cur = Cur::new(&buf);
 
             use nitro::container::read_container;
-            match read_container(cur) {
+            match read_container(Cur::new(&buf)) {
                 Ok(cont) => {
                     db.models.extend(cont.models.into_iter());
                     db.textures.extend(cont.textures.into_iter());

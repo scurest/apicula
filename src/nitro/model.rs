@@ -41,7 +41,6 @@ pub struct Object {
 
 pub fn read_model(cur: Cur, name: Name) -> Result<Model> {
     debug!("model: {:?}", name);
-    debug!("=======================");
 
     fields!(cur, model {
         section_size: u32,

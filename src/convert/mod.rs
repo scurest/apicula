@@ -5,7 +5,7 @@ mod image_namer;
 mod make_invertible;
 
 use clap::ArgMatches;
-use errors::Result;
+use errors::{Result, ResultExt};
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -15,12 +15,16 @@ use db::Database;
 use convert::image_namer::ImageNamer;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
+    let out_dir = PathBuf::from(matches.value_of("OUTPUT").unwrap());
+    fs::create_dir(&out_dir)
+        .chain_err(||
+            "output directory could not be created -- maybe it \
+            already exists?"
+        )?;
+
     let db = Database::from_arg_matches(matches)?;
 
     db.print_status();
-
-    let out_dir = PathBuf::from(matches.value_of("OUTPUT").unwrap());
-    fs::create_dir(&out_dir)?;
 
     let mut image_namer = ImageNamer::build(&db);
 
@@ -35,7 +39,10 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     let mut s = String::new();
     for model in &db.models {
         s.clear();
-        collada::write(&mut s, &db, &image_namer, model)?;
+
+        if collada::write(&mut s, &db, &image_namer, model).is_err() {
+            continue;
+        }
 
         let name = dae_namer.get_fresh_name(format!("{}", model.name.print_safe()));
         let dae_path = out_dir.join(&format!("{}.dae", name));

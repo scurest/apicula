@@ -53,7 +53,7 @@ fn main2() -> i32 {
     match main3() {
         Ok(()) => 0,
         Err(e) => {
-            error!("error: {:#?}", e);
+            error!("error: {}", e);
             1
         }
     }
@@ -91,8 +91,8 @@ fn main3() -> Result<()> {
             (@arg INPUT: +required +multiple "Nitro file")
             (@arg OUTPUT: -o --output +required +takes_value "Output directory")
             (@arg more_textures: --("more-textures") +hidden
-                "Try to extract more textures; only textures that are used by a \
-                model are extracted by default")
+                "Try to extract more textures; only textures that are needed for a \
+                model are extracted by default (EXPERIMENTAL)")
         )
         (@subcommand extract =>
             (about: "Extract Nitro files from a ROM or archive")

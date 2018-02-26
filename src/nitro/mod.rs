@@ -4,13 +4,13 @@
 //! the binary format for Nitro files into domain objects and provide other
 //! tools specific to these formats.
 //!
-//! The file types are
+//! Partial documentation on these formats can be found here.
 //!
-//! * MDL - a 3D model file
-//! * TEX - textures and palettes for models
-//! * JNT - skinned vertex animations for models
+//! * http://llref.emutalk.net/docs/?file=xml/bmd0.xml
+//! * http://llref.emutalk.net/docs/?file=xml/btx0.xml
+//! * http://llref.emutalk.net/docs/?file=xml/bca0.xml
 //!
-//! A container file (eg. NSBMD) holds one or more of these.
+//! The code in this module should be more complete.
 
 pub mod model;
 pub mod tex;

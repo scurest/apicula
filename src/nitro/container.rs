@@ -1,7 +1,22 @@
+//! Nitro containers.
+//!
+//! A Nitro container holds... well, subcontainers, but inside of _those_ are
+//! the model, texture, or animation files. A Nitro container is recognized by
+//! an identifying stamp: eg. b"BMD0". The subcontainers also contain a stamp
+//! eg. b"MDL0". An MDL0 contains models, a TEX0 contains textures and palettes,
+//! and a JNT0 contains animations.
+//!
+//! The different types of containers are supposed to only contain certain kinds
+//! of subcontainers. For example, a BMD0 (a "Nitro model") typically only
+//! contains MDL0s and TEX0s (ie. models, textures and palettes) and a BCA0
+//! usually only contains JNT0s (animations), but we don't do anything to
+//! enforce this. We'll read any kind of file we can get our hands on!
+
 use errors::Result;
 use nitro::{Model, Texture, Palette, Animation};
 use nitro::info_block;
 use util::cur::Cur;
+
 const STAMPS: [&[u8]; 3] = [b"BMD0", b"BTX0", b"BCA0"];
 
 pub struct Container {
@@ -14,7 +29,7 @@ pub struct Container {
 }
 
 pub fn read_container(cur: Cur) -> Result<Container> {
-    fields!(cur, BMD0 {
+    fields!(cur, container {
         stamp: [u8; 4],
         bom: u16,
         version: u16,
@@ -24,15 +39,15 @@ pub fn read_container(cur: Cur) -> Result<Container> {
         section_offs: [u32; num_sections],
     });
 
-    check!(bom == 0xfeff)?;
-    check!(header_size == 16)?;
-
     let stamp =
         match STAMPS.iter().find(|&s| s == &stamp) {
             Some(x) => x,
             None => bail!("unrecognized Nitro container: expected \
                 the first four bytes to be one of: BMD0, BTX0, BCA0"),
         };
+
+    check!(bom == 0xfeff)?;
+    check!(header_size == 16)?;
 
     let mut cont = Container {
         stamp, file_size, models: vec![], textures: vec![],

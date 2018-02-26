@@ -229,7 +229,7 @@ fn build_textures(display: &glium::Display, db: &Database, materials: &[Material
         .map(|(id, material)| {
             let res = build_texture(material);
             if let Err(ref e) = res {
-                error!("error generating texture for material {}: {:?}", id, e);
+                error!("error generating texture for material {}: {}", id, e);
             }
             res
         })
