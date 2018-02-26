@@ -8,19 +8,19 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     db.print_status();
 
-    println!("");
+    println!();
 
     for (i, model) in db.models.iter().enumerate() {
         model_info(i, model);
     }
 
-    println!("");
+    println!();
 
     for (i, texture) in db.textures.iter().enumerate() {
         texture_info(i, texture);
     }
 
-    println!("");
+    println!();
 
     for (i, animation) in db.animations.iter().enumerate() {
         animation_info(i, animation);
@@ -52,7 +52,7 @@ fn model_info(id: usize, model: &Model) {
             println!("      Palette: {:?}", name);
         }
     }
-    println!("");
+    println!();
 }
 
 
@@ -80,7 +80,7 @@ fn texture_info(id: usize, texture: &Texture) {
     );
     println!("  Color 0 Transparent?: {}", texture.params.is_color0_transparent);
     println!("  Texcoord Transform Mode: {}", texture.params.texcoord_transform_mode);
-    println!("");
+    println!();
 }
 
 fn animation_info(id: usize, anim: &Animation) {
@@ -114,5 +114,5 @@ fn animation_info(id: usize, anim: &Animation) {
         curve_info("Scale Y", &trs_curves.scale[1]);
         curve_info("Scale Z", &trs_curves.scale[2]);
     }
-    println!("");
+    println!();
 }

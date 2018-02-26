@@ -34,8 +34,8 @@ pub fn write<W: Write>(
     let objects = &model.objects.iter()
         .map(|o| make_invertible(&o.xform))
         .collect::<Vec<_>>();
-    let prims = &Primitives::build(model, &objects)?;
-    let skel = &Skeleton::build(model, &objects)?;
+    let prims = &Primitives::build(model, objects)?;
+    let skel = &Skeleton::build(model, objects)?;
 
     let ctx = Ctx { model, db, image_namer, objects, prims, skel };
 

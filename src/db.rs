@@ -26,7 +26,7 @@ impl Database {
         let file_paths: Vec<PathBuf> =
             matches
             .values_of_os("INPUT").unwrap()
-            .map(|os_str| PathBuf::from(os_str))
+            .map(PathBuf::from)
             .collect();
         Database::build(file_paths)
     }
@@ -45,7 +45,7 @@ impl Database {
             // Hard-fail if we can't open the path. We don't expect the caller
             // to know which files are valid Nitro files but we expect them to
             // give us files we can actually open.
-            let buf = read_file(&path)?;
+            let buf = read_file(path)?;
 
             use nitro::container::read_container;
             match read_container(Cur::new(&buf)) {

@@ -15,7 +15,7 @@ pub struct DecompressResult<'a> {
 ///
 /// The compression method is guessed from the methods that were
 /// included in the GBA/DS BIOS. See
-/// http://problemkaputt.de/gbatek.htm#biosdecompressionfunctions.
+/// <http://problemkaputt.de/gbatek.htm#biosdecompressionfunctions>.
 ///
 /// Presently, only LZ77 is tried (an attempt at RLE did not bear
 /// fruit).

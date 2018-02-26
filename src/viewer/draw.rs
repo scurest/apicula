@@ -12,21 +12,21 @@ use db::Database;
 
 /// GL data needed to render the scene.
 pub struct DrawingData {
-    obj_geom_data: Result<ObjectGeometryData>,
+    obj_geom_data: Result<GLPrimitives>,
     /// textures[i] contains the GL texture that needs to be
     /// bound for materials[i]; either `Ok(None)` (use default
     /// texture), `Ok(Some(tex))` (use tex), or `Err(e)` (use
     /// error texture).
     textures: Vec<Result<Option<Texture2d>>>,
     /// Cache of the `ViewState` that was used to generate the
-    /// other members. Caching it lets us update less data when
+    /// other members. Caching itle ts us update less data when
     /// we need to change this (eg. we don't need to rebuild the
     /// textures if the model we're viewing didn't change).
     view_state: ViewState,
 }
 
-struct ObjectGeometryData {
-    objects: Vec<Matrix4<f64>>,
+/// Primitive data that's been uploaded to the GPU for drawing.
+struct GLPrimitives {
     primitives: Primitives,
     vertex_buffer: VertexBuffer<Vertex>,
     index_buffer: IndexBuffer<u16>,
@@ -41,7 +41,7 @@ impl DrawingData {
         let model = &db.models[view_state.model_id];
 
         let obj_geom_data =
-            ObjectGeometryData::from_view_state(display, db, view_state);
+            GLPrimitives::from_view_state(display, db, view_state);
 
         let textures =
             build_textures(display, db, &model.materials[..]);
@@ -63,29 +63,28 @@ impl DrawingData {
         &mut self,
         display: &Display,
         db: &Database,
-        view_state: &ViewState,
+        new_view_state: &ViewState,
     ) {
-        if view_state.model_id == self.view_state.model_id {
-            if view_state.anim_state == self.view_state.anim_state {
-                // Only the eye changed. There are actually render commands
-                // that depend on this (for billboard-type stuff) but they're
-                // not implemented, so we can reuse the geometry. Do nothing.
-                self.view_state = view_state.clone();
-                return;
-            } else {
-                // Animation changed.
-                // We should try reusing the old `ObjectGeometryData`'s buffers,
-                // but this is kind of a pain because we need to do something
-                // like `replace_with`. Since the biggest gain is from not
-                // rebuilding textures, this is TODO for now.
-                self.obj_geom_data =
-                    ObjectGeometryData::from_view_state(display, db, view_state);
-                self.view_state = view_state.clone();
-            }
-        } else {
-            // Model changed, regen everything from scratch
-            *self = DrawingData::from_view_state(display, db, view_state);
+        let model_changed = self.view_state.model_id != new_view_state.model_id;
+        if model_changed {
+            // Regen everything from scratch
+            *self = DrawingData::from_view_state(display, db, new_view_state);
+            return;
         }
+
+        let anim_changed = self.view_state.anim_state != new_view_state.anim_state;
+        if anim_changed {
+            // We can reuse the textures.
+            self.obj_geom_data =
+                GLPrimitives::from_view_state(display, db, new_view_state);
+            self.view_state = new_view_state.clone();
+            return;
+        }
+
+        // Only the eye changed. There are actually render commands
+        // that depend on this (for billboard-type stuff) but they're
+        // not implemented, so we can reuse the geometry. Do nothing.
+        self.view_state = new_view_state.clone();
     }
 
 
@@ -157,12 +156,12 @@ impl DrawingData {
     }
 }
 
-impl ObjectGeometryData {
+impl GLPrimitives {
     fn from_view_state(
         display: &glium::Display,
         db: &Database,
         view_state: &ViewState,
-    ) -> Result<ObjectGeometryData>
+    ) -> Result<GLPrimitives>
     {
         let model = &db.models[view_state.model_id];
 
@@ -187,8 +186,7 @@ impl ObjectGeometryData {
         let index_buffer =
             IndexBuffer::new(display, PrimitiveType::TrianglesList, &primitives.indices)?;
 
-        Ok(ObjectGeometryData {
-            objects,
+        Ok(GLPrimitives {
             primitives,
             vertex_buffer,
             index_buffer,

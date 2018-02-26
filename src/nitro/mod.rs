@@ -6,9 +6,9 @@
 //!
 //! Partial documentation on these formats can be found here.
 //!
-//! * http://llref.emutalk.net/docs/?file=xml/bmd0.xml
-//! * http://llref.emutalk.net/docs/?file=xml/btx0.xml
-//! * http://llref.emutalk.net/docs/?file=xml/bca0.xml
+//! * <http://llref.emutalk.net/docs/?file=xml/bmd0.xml>
+//! * <http://llref.emutalk.net/docs/?file=xml/btx0.xml>
+//! * <http://llref.emutalk.net/docs/?file=xml/bca0.xml>
 //!
 //! The code in this module should be more complete.
 

@@ -41,7 +41,7 @@ impl ImageNamer {
                 };
 
                 if spec_in_db(db, &spec) {
-                    image_namer.add_spec(spec);
+                    image_namer.add_spec(&spec);
                 }
             }
         }
@@ -53,7 +53,7 @@ impl ImageNamer {
         for texture in &db.textures {
             // Direct color textures don't need a palette.
             if texture.params.format == 7 {
-                self.add_spec(ImageSpec {
+                self.add_spec(&ImageSpec {
                     texture_name: texture.name,
                     palette_name: None,
                 });
@@ -61,8 +61,8 @@ impl ImageNamer {
             }
 
             let mut guess_palette_name = |name: &Name| {
-                if db.palettes_by_name.contains_key(&name) {
-                    self.add_spec(ImageSpec {
+                if db.palettes_by_name.contains_key(name) {
+                    self.add_spec(&ImageSpec {
                         texture_name: texture.name,
                         palette_name: Some(*name),
                     });
@@ -74,7 +74,7 @@ impl ImageNamer {
 
     }
 
-    fn add_spec(&mut self, spec: ImageSpec) {
+    fn add_spec(&mut self, spec: &ImageSpec) {
         let namer = &mut self.namer;
         self.names.entry(spec.clone()).or_insert_with(|| {
             namer.get_fresh_name(
@@ -92,11 +92,11 @@ fn spec_in_db(db: &Database, spec: &ImageSpec) -> bool {
         return false;
     }
     if let Some(ref palette_name) = spec.palette_name {
-        if !db.palettes_by_name.contains_key(&palette_name) {
+        if !db.palettes_by_name.contains_key(palette_name) {
             return false;
         }
     }
-    return true;
+    true
 }
 
 /// Append "_pl" to the end of a name.
