@@ -83,7 +83,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     // Print results
     let plural = |x| if x != 1 { "s" } else { "" };
-    println!("Wrote {} DAE{}, {} PNG{}.\n",
+    println!("Wrote {} DAE{}, {} PNG{}.",
         daes_written, plural(daes_written), pngs_written, plural(pngs_written));
 
     Ok(())

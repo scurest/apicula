@@ -103,7 +103,7 @@ impl Database {
         let num_animations = self.animations.len();
 
         let plural = |x| if x != 1 { "s" } else { "" };
-        println!("\nGot {} model{}, {} texture{}, {} palette{}, {} animation{}.\n",
+        println!("Got {} model{}, {} texture{}, {} palette{}, {} animation{}.",
             num_models, plural(num_models), num_textures, plural(num_textures),
             num_palettes, plural(num_palettes), num_animations, plural(num_animations),
         );

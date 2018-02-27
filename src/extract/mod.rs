@@ -79,7 +79,7 @@ impl Extractor {
     /// file found.
     fn print_report(&self) {
         let plural = |x| if x != 1 { "s" } else { "" };
-        println!("Found {} BMD{}, {} BTX{}, {} BCA{}.\n",
+        println!("Found {} BMD{}, {} BTX{}, {} BCA{}.",
             self.num_bmds, plural(self.num_bmds),
             self.num_btxs, plural(self.num_btxs),
             self.num_bcas, plural(self.num_bcas),

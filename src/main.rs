@@ -13,6 +13,8 @@ extern crate time;
 extern crate petgraph;
 extern crate png as png_crate;
 extern crate regex;
+extern crate termcolor;
+extern crate atty;
 
 #[macro_use]
 mod errors;

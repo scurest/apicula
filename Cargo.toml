@@ -6,6 +6,7 @@ license = "CC0-1.0"
 build = "build.rs"
 
 [dependencies]
+atty = "0.2"
 cgmath = "0.16.0"
 clap = "2.30.0"
 error-chain = "0.11.0"
@@ -14,6 +15,7 @@ log = "0.4.1"
 petgraph = "0.4.9"
 png = "0.11.0"
 regex = "0.2.6"
+termcolor = "0.3.5"
 time = "0.1.36"
 
 [build-dependencies]

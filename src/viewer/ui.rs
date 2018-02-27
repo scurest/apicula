@@ -314,6 +314,7 @@ impl<'a> Ui<'a> {
 
 fn print_controls() {
     print!(concat!(
+        "--------\n",
         "Controls\n",
         "--------\n",
         "  WASD         Forward/Left/Back/Right\n",
