@@ -9,7 +9,6 @@ extern crate glium;
 #[macro_use]
 extern crate clap;
 extern crate cgmath;
-extern crate env_logger;
 extern crate time;
 extern crate petgraph;
 extern crate png as png_crate;
@@ -30,9 +29,9 @@ mod db;
 mod info;
 mod primitives;
 mod skeleton;
+mod logger;
 
 use errors::Result;
-use std::env;
 
 // See build.rs.
 pub static VERSION: &'static str = concat!(
@@ -45,41 +44,22 @@ pub static VERSION: &'static str = concat!(
 );
 
 fn main() {
-    std::process::exit(main2());
-}
-
-fn main2() -> i32 {
-    init_logger();
-    match main3() {
+    let ret_code = match main2() {
         Ok(()) => 0,
         Err(e) => {
             error!("error: {}", e);
             1
         }
-    }
+    };
+    std::process::exit(ret_code);
 }
 
-fn init_logger() {
-    use log;
-    use env_logger;
-
-    let mut builder = env_logger::Builder::new();
-
-    // Show warnings by default
-    builder.filter(None, log::LevelFilter::Warn);
-
-    if env::var("RUST_LOG").is_ok() {
-       builder.parse(&env::var("RUST_LOG").unwrap());
-    }
-
-    builder.init();
-}
-
-fn main3() -> Result<()> {
+fn main2() -> Result<()> {
     let app = clap_app!(apicula =>
         (@setting SubcommandRequiredElseHelp)
         (version: VERSION)
         (about: "NSBMD model viewer/converter")
+        (@arg VERBOSE: -v --verbose +multiple "Print verbose debug info")
         (@subcommand view =>
             (about: "View models")
             (alias: "v")
@@ -108,6 +88,9 @@ fn main3() -> Result<()> {
     );
     let matches = app.get_matches();
 
+    // Set the log level from the number of --verbose flags we got.
+    init_logger(matches.occurrences_of("VERBOSE"));
+
     match matches.subcommand() {
         ("view", Some(m)) => viewer::main(m)?,
         ("convert", Some(m)) => convert::main(m)?,
@@ -116,4 +99,15 @@ fn main3() -> Result<()> {
         _ => {}
     };
     Ok(())
+}
+
+pub fn init_logger(verbosity: u64) {
+    use log::Level;
+    let max_log_level = match verbosity {
+        0 => Level::Warn,
+        // Level::Info would go here but we don't use it
+        1 => Level::Debug,
+        _ => Level::Trace,
+    };
+    logger::init(max_log_level);
 }

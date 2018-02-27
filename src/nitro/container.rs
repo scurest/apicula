@@ -57,7 +57,7 @@ pub fn read_container(cur: Cur) -> Result<Container> {
     for section_off in section_offs {
         let section_cur = cur + section_off;
         if let Err(e) = read_section(&mut cont, section_cur) {
-            info!("skipping Nitro section: {}", e);
+            debug!("skipping Nitro section: {}", e);
         }
     }
 

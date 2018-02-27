@@ -145,7 +145,7 @@ impl RenderInterpreterState {
                 0x0c => {} // TODO: ???
                 0x0d => {} // TODO: ???
                 _ => {
-                    info!("unknown render command: {:#x} {:?}", opcode, params);
+                    debug!("unknown render command: {:#x} {:?}", opcode, params);
                 }
             }
         }
