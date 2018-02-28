@@ -2,6 +2,7 @@ use cgmath::{InnerSpace, Point3, vec2, vec3, Vector3};
 use errors::Result;
 use glium;
 use glium::Surface;
+use glium::glutin::EventsLoop;
 use std::default::Default;
 use std::fmt::Write;
 use time;
@@ -16,13 +17,12 @@ use viewer::state::Dir;
 use viewer::state::ViewState;
 use db::Database;
 
-pub struct Ui<'a> {
+pub struct Ui {
     db: Database,
-    ctx: &'a GlContext,
-
+    ctx: GlContext,
+    events_loop: EventsLoop,
     view_state: ViewState,
     drawing_data: DrawingData,
-
     win_title: String,
     mouse: MouseState,
     fps_tracker: FpsTracker,
@@ -30,12 +30,17 @@ pub struct Ui<'a> {
     move_speed: SpeedLevel,
 }
 
-type KeyEvent = (glium::glutin::ElementState, glium::glutin::VirtualKeyCode);
-type MouseEvent = (glium::glutin::ElementState, glium::glutin::MouseButton);
-
-impl<'a> Ui<'a> {
-    pub fn new(db: Database, ctx: &'a GlContext) -> Result<Ui<'a>> {
+impl Ui {
+    pub fn new(db: Database) -> Result<Ui> {
         assert!(!db.models.is_empty());
+
+        let events_loop = EventsLoop::new();
+        let window = glium::glutin::WindowBuilder::new()
+            .with_dimensions(512, 384); // 2x DS resolution
+        let context = glium::glutin::ContextBuilder::new()
+            .with_depth_buffer(24);
+        let display = glium::Display::new(window, context, &events_loop)?;
+        let ctx = GlContext::new(display)?;
 
         // Initial position at the origin, viewing the first
         // model in its bind pose.
@@ -63,6 +68,7 @@ impl<'a> Ui<'a> {
         Ok(Ui {
             db,
             ctx,
+            events_loop,
             view_state,
             drawing_data,
             win_title,
@@ -95,20 +101,150 @@ impl<'a> Ui<'a> {
 
             self.fps_tracker.update(cur_time);
 
-            for ev in self.ctx.display.poll_events() {
-                use glium::glutin::Event as Ev;
-                match ev {
-                    Ev::Closed => return,
-                    Ev::KeyboardInput(press_state, _, Some(keycode)) =>
-                        self.process_key((press_state, keycode)),
-                    Ev::MouseInput(press_state, button) =>
-                        self.process_mouse_button((press_state, button)),
-                    Ev::MouseMoved(x, y) =>
-                        self.process_mouse_motion((x,y)),
-                    Ev::Focused(false) =>
-                        self.process_blur(),
-                    _ => ()
-                }
+            {
+                // HACK HACK HACK: borrow these so bottowck knows we're not going
+                // to mutate self.events_loop while its borrowed for poll_events.
+                let db = &self.db;
+                let ctx = &self.ctx;
+                let move_dir = &mut self.move_dir;
+                let move_speed = &mut self.move_speed;
+                let view_state = &mut self.view_state;
+                let mouse = &mut self.mouse;
+
+                let mut should_close = false;
+
+                self.events_loop.poll_events(|ev| {
+                    use glium::glutin::Event as Ev;
+                    use glium::glutin::WindowEvent as WEv;
+
+                    // By the way, according to the docs we should probably be using
+                    // DeviceEvents instead of these WindowEvents (it specifically
+                    // calls out first-person cameras lol). But I don't know how to
+                    // do it. For example, DeviceEvent::MouseMotion has a mouse
+                    // delta in an unspecified coordinate system--so what good is
+                    // it?!
+
+                    // TODO handle touch events
+
+                    let win_ev = match ev {
+                        Ev::WindowEvent { event, .. } => event,
+                        _ => return,
+                    };
+                    match win_ev {
+                        WEv::Closed => {
+                            should_close = true;
+                        }
+                        WEv::KeyboardInput { input, .. } => {
+                            use glium::glutin::ElementState::{Pressed, Released};
+                            use glium::glutin::VirtualKeyCode as K;
+
+                            if input.virtual_keycode.is_none() { return; }
+                            let keycode = input.virtual_keycode.unwrap();
+
+                            match (input.state, keycode) {
+                                // WASD Movement
+                                (Pressed, K::W) => move_dir.x =  1.0,
+                                (Pressed, K::S) => move_dir.x = -1.0,
+                                (Pressed, K::D) => move_dir.y =  1.0,
+                                (Pressed, K::A) => move_dir.y = -1.0,
+                                (Pressed, K::E) => move_dir.z =  1.0,
+                                (Pressed, K::Q) => move_dir.z = -1.0,
+                                (Released, K::W) => move_dir.x = 0.0,
+                                (Released, K::D) => move_dir.y = 0.0,
+                                (Released, K::S) => move_dir.x = 0.0,
+                                (Released, K::A) => move_dir.y = 0.0,
+                                (Released, K::Q) => move_dir.z = 0.0,
+                                (Released, K::E) => move_dir.z = 0.0,
+
+                                // Change speed
+                                (Pressed, K::LShift) => move_speed.speed_up(),
+                                (Pressed, K::LControl) => move_speed.speed_down(),
+
+                                // Change model
+                                (Pressed, K::Comma) =>
+                                    view_state.advance_model(db, Dir::Prev),
+                                (Pressed, K::Period) =>
+                                    view_state.advance_model(db, Dir::Next),
+
+                                // Change animation
+                                (Pressed, K::O) =>
+                                    view_state.advance_anim(db, Dir::Prev),
+                                (Pressed, K::P) =>
+                                    view_state.advance_anim(db, Dir::Next),
+
+                                _ => ()
+                            }
+                        }
+                        WEv::MouseInput { state, button, .. } => {
+                            use glium::glutin::ElementState as Es;
+                            use glium::glutin::MouseButton as MB;
+
+                            let window = ctx.display.gl_window();
+
+                            match (state, button) {
+                                (Es::Pressed, MB::Left) => {
+                                    mouse.grabbed =
+                                        GrabState::Grabbed { saved_pos: mouse.pos };
+                                    let (w,h) = window.get_inner_size().unwrap();
+                                    let center = (w as f64 / 2.0, h as f64 / 2.0);
+                                    mouse.set_position(&window, center);
+                                    let _ = window.set_cursor_state(glium::glutin::CursorState::Hide);
+                                }
+                                (Es::Released, MB::Left) => {
+                                    if let GrabState::Grabbed { saved_pos } = mouse.grabbed {
+                                        let _ = window.set_cursor_state(glium::glutin::CursorState::Normal);
+                                        mouse.set_position(&window, saved_pos);
+                                    }
+                                    mouse.grabbed = GrabState::NotGrabbed;
+                                }
+                                _ => ()
+                            }
+                        }
+                        WEv::CursorMoved { position : (x, y), .. } => {
+                            let last_pos = mouse.pos;
+                            mouse.pos = (x, y);
+
+                            if let GrabState::Grabbed { .. } = mouse.grabbed {
+                                let (dx, dy) = (x - last_pos.0, y - last_pos.1);
+
+                                // Warping the mouse (with set_position) appears to generate
+                                // these mouse motion events. In particular, the initial warp to
+                                // the center of the window can generate a large displacement
+                                // that makes the camera jump. Since there's no real way to tell
+                                // which events are caused by warps and which are "real", we
+                                // solve this issue by just ignoring large displacements.
+                                let ignore_cutoff = 20.0;
+                                let ignore = dx.abs() > ignore_cutoff || dy.abs() > ignore_cutoff;
+
+                                if !ignore {
+                                    let dv = 0.01 * vec2(dx as f32, dy as f32);
+                                    view_state.eye.free_look(dv);
+                                }
+
+                                let window = ctx.display.gl_window();
+                                let (w, h) = match window.get_inner_size() {
+                                    Some(dim) => dim,
+                                    None => return,
+                                };
+                                let center = (w as f64 / 2.0, h as f64 / 2.0);
+                                mouse.set_position(&window, center);
+                            }
+                        }
+                        WEv::Focused(false) => {
+                            // Process loss of window focus. Try to release any grab
+                            // and stop moving.
+
+                            let window = ctx.display.gl_window();
+
+                            let _ = window.set_cursor_state(glium::glutin::CursorState::Normal);
+                            mouse.grabbed = GrabState::NotGrabbed;
+                            *move_dir = vec3(0.0, 0.0, 0.0);
+                        }
+                        _ => ()
+                    }
+                });
+
+                if should_close { return; }
             }
 
             if self.view_state.anim_state.is_some() {
@@ -139,108 +275,6 @@ impl<'a> Ui<'a> {
         }
     }
 
-    fn process_key(&mut self, ev: KeyEvent) {
-        use glium::glutin::ElementState as Es;
-        use glium::glutin::VirtualKeyCode as K;
-
-        match ev {
-            // WASD Movement
-            (Es::Pressed, K::W) => self.move_dir.x =  1.0,
-            (Es::Pressed, K::S) => self.move_dir.x = -1.0,
-            (Es::Pressed, K::D) => self.move_dir.y =  1.0,
-            (Es::Pressed, K::A) => self.move_dir.y = -1.0,
-            (Es::Pressed, K::E) => self.move_dir.z =  1.0,
-            (Es::Pressed, K::Q) => self.move_dir.z = -1.0,
-            (Es::Released, K::W) => self.move_dir.x = 0.0,
-            (Es::Released, K::D) => self.move_dir.y = 0.0,
-            (Es::Released, K::S) => self.move_dir.x = 0.0,
-            (Es::Released, K::A) => self.move_dir.y = 0.0,
-            (Es::Released, K::Q) => self.move_dir.z = 0.0,
-            (Es::Released, K::E) => self.move_dir.z = 0.0,
-
-            // Change speed
-            (Es::Pressed, K::LShift) => self.move_speed.speed_up(),
-            (Es::Pressed, K::LControl) => self.move_speed.speed_down(),
-
-            // Change model
-            (Es::Pressed, K::Comma) =>
-                self.view_state.advance_model(&self.db, Dir::Prev),
-            (Es::Pressed, K::Period) =>
-                self.view_state.advance_model(&self.db, Dir::Next),
-
-            // Change animation
-            (Es::Pressed, K::O) =>
-                self.view_state.advance_anim(&self.db, Dir::Prev),
-            (Es::Pressed, K::P) =>
-                self.view_state.advance_anim(&self.db, Dir::Next),
-
-            _ => ()
-        }
-    }
-
-    fn process_mouse_button(&mut self, ev: MouseEvent) {
-        use glium::glutin::ElementState as Es;
-        use glium::glutin::MouseButton as MB;
-
-        let window = self.ctx.display.get_window().unwrap();
-
-        match ev {
-            (Es::Pressed, MB::Left) => {
-                self.mouse.grabbed =
-                    GrabState::Grabbed { saved_pos: self.mouse.pos };
-                let (w,h) = window.get_inner_size_pixels().unwrap();
-                let center = (w as i32 / 2, h as i32 / 2);
-                self.mouse.set_position(&window, center);
-                let _ = window.set_cursor_state(glium::glutin::CursorState::Hide);
-            }
-            (Es::Released, MB::Left) => {
-                if let GrabState::Grabbed { saved_pos } = self.mouse.grabbed {
-                    let _ = window.set_cursor_state(glium::glutin::CursorState::Normal);
-                    self.mouse.set_position(&window, saved_pos);
-                }
-                self.mouse.grabbed = GrabState::NotGrabbed;
-            }
-            _ => ()
-        }
-    }
-
-    fn process_mouse_motion(&mut self, (x, y): (i32, i32)) {
-        let last_pos = self.mouse.pos;
-        self.mouse.pos = (x,y);
-
-        if let GrabState::Grabbed { .. } = self.mouse.grabbed {
-            let (dx, dy) = (x - last_pos.0, y - last_pos.1);
-
-            // Warping the mouse (with set_position) appears to generate
-            // these mouse motion events. In particular, the initial warp to
-            // the center of the window can generate a large displacement
-            // that makes the camera jump. Since there's no real way to tell
-            // which events are caused by warps and which are "real", we
-            // solve this issue by just ignoring large displacements.
-            let ignore_cutoff = 20;
-            let ignore = dx.abs() > ignore_cutoff || dy.abs() > ignore_cutoff;
-
-            if !ignore {
-                let dv = 0.01 * vec2(dx as f32, dy as f32);
-                self.view_state.eye.free_look(dv);
-            }
-
-            let window = self.ctx.display.get_window().unwrap();
-            let (w,h) = window.get_inner_size_pixels().unwrap();
-            let center = (w as i32 / 2, h as i32 / 2);
-            self.mouse.set_position(&window, center);
-        }
-    }
-
-    /// Process loss of window focus. Try to release any grab and stop moving.
-    fn process_blur(&mut self) {
-        let window = self.ctx.display.get_window().unwrap();
-
-        let _ = window.set_cursor_state(glium::glutin::CursorState::Normal);
-        self.mouse.grabbed = GrabState::NotGrabbed;
-        self.move_dir = vec3(0.0, 0.0, 0.0);
-    }
-
     fn draw_frame(&mut self) {
         self.drawing_data.change_view_state(&self.ctx.display, &self.db, &self.view_state);
 
@@ -265,7 +299,7 @@ impl<'a> Ui<'a> {
 
             self.drawing_data.draw(
                 &self.db,
-                self.ctx,
+                &self.ctx,
                 &mut target,
                 &draw_params,
             );
@@ -301,13 +335,13 @@ impl<'a> Ui<'a> {
         let fps = self.fps_tracker.get_fps();
         write!(&mut self.win_title, "{:5.2}fps", fps).unwrap();
 
-        let window = self.ctx.display.get_window().unwrap();
+        let window = self.ctx.display.gl_window();
         window.set_title(&self.win_title);
     }
 
     fn update_aspect_ratio(&mut self) {
-        let window = self.ctx.display.get_window().unwrap();
-        let (w, h) = window.get_inner_size_pixels().unwrap();
+        let window = self.ctx.display.gl_window();
+        let (w, h) = window.get_inner_size().unwrap();
         self.view_state.eye.aspect_ratio = w as f32 / h as f32;
     }
 }

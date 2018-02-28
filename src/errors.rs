@@ -4,6 +4,7 @@ error_chain! {
         Io(::std::io::Error);
         TimeFmt(::time::ParseError);
         Png(::png_crate::EncodingError);
+        GliumDisplayCreate(::glium::backend::glutin::DisplayCreationError);
         GliumVertexCreate(::glium::vertex::BufferCreationError);
         GliumIndexCreate(::glium::index::BufferCreationError);
         GliumTextureCreate(::glium::texture::TextureCreationError);

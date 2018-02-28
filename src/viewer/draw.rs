@@ -220,7 +220,7 @@ fn build_textures(display: &glium::Display, db: &Database, materials: &[Material
         let rgba = decode(texture, palette)?;
 
         let dim = (texture.params.width, texture.params.height);
-        let image = RawImage2d::from_raw_rgba_reversed(rgba, dim);
+        let image = RawImage2d::from_raw_rgba_reversed(&rgba, dim);
         Ok(Some(Texture2d::new(display, image)?))
     };
 
