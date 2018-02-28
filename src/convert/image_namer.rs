@@ -1,5 +1,6 @@
 use db::Database;
-use nitro::{Name, model::Material};
+use nitro::Name;
+use nitro::model::Material;
 use std::collections::HashMap;
 use util::namers::UniqueNamer;
 

@@ -1,9 +1,10 @@
 use cgmath::Matrix4;
 use errors::Result;
 use primitives::{Primitives, Vertex};
-use glium::{self, VertexBuffer, IndexBuffer, Display, Frame,
-    DrawParameters, Surface, texture::Texture2d,
+use glium::{self, VertexBuffer, IndexBuffer,
+    Display, Frame, DrawParameters, Surface,
 };
+use glium::texture::Texture2d;
 use nitro::model::Material;
 use viewer::gl_context::GlContext;
 use viewer::state::ViewState;

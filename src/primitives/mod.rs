@@ -13,7 +13,8 @@ use cgmath::{Matrix4, Point2, Transform, vec4, Zero};
 use errors::Result;
 use primitives::index_builder::IndexBuilder;
 use nitro::{Model, render_cmds};
-use std::{default::Default, ops::Range};
+use std::default::Default;
+use std::ops::Range;
 use util::cur::Cur;
 
 pub struct Primitives {

@@ -1,7 +1,9 @@
 use cgmath::{Matrix3, Matrix4};
 use util::bits::BitField;
-use util::{cur::Cur, fixed::{fix16, fix32}};
-use nitro::{Name, rotation::{pivot_mat, basis_mat}};
+use util::cur::Cur;
+use util::fixed::{fix16, fix32};
+use nitro::Name;
+use nitro::rotation::{pivot_mat, basis_mat};
 use std::ops::{Mul, Add};
 use errors::Result;
 

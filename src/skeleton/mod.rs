@@ -18,7 +18,9 @@ use errors::Result;
 use nds::gpu_cmds::{self, GpuCmd};
 use nitro::{Model, render_cmds};
 use util::cur::Cur;
-use petgraph::{Direction, stable_graph::StableGraph, graph::NodeIndex};
+use petgraph::Direction;
+use petgraph::stable_graph::StableGraph;
+use petgraph::graph::NodeIndex;
 
 pub struct Skeleton {
     pub tree: JointTree,

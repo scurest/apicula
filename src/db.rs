@@ -112,7 +112,8 @@ impl Database {
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>> {
-    use std::{fs::File, io::Read};
+    use std::fs::File;
+    use std::io::Read;
     let mut f = File::open(&path)?;
     let mut b: Vec<u8> = vec![];
     f.read_to_end(&mut b)?;

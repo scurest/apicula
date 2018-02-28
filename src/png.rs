@@ -5,7 +5,8 @@ use errors::Result;
 pub fn write_rgba<S: AsRef<OsStr>>(s: &S, rgba: &[u8], width: u32, height: u32)
 -> Result<()>
 {
-    use std::{fs::File, path::Path};
+    use std::fs::File;
+    use std::path::Path;
     use png_crate::{ColorType, BitDepth, Encoder};
 
     let f = File::create(&Path::new(s))?;

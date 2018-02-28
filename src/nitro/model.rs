@@ -3,7 +3,9 @@ use errors::Result;
 use nitro::info_block;
 use nitro::Name;
 use nitro::TextureParameters;
-use util::{bits::BitField, cur::Cur, fixed::{fix16, fix32}};
+use util::bits::BitField;
+use util::cur::Cur;
+use util::fixed::{fix16, fix32};
 
 pub struct Model {
     pub name: Name,
