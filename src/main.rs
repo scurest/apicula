@@ -106,8 +106,7 @@ fn main2() -> Result<()> {
 pub fn init_logger(verbosity: u64) {
     use log::Level;
     let max_log_level = match verbosity {
-        0 => Level::Warn,
-        // Level::Info would go here but we don't use it
+        0 => Level::Info,
         1 => Level::Debug,
         _ => Level::Trace,
     };

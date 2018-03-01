@@ -37,11 +37,15 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     // Save each model as a COLLADA file
     let mut s = String::new();
-    for model in &db.models {
+    for (model_id, model) in db.models.iter().enumerate() {
         s.clear();
 
-        if collada::write(&mut s, &db, &image_namer, model).is_err() {
-            continue;
+        match collada::write(&mut s, &db, &image_namer, model_id) {
+            Ok(()) => (),
+            Err(e) => {
+                error!("error building COLLADA for model {}: {}", model_id, e);
+                continue;
+            }
         }
 
         let name = dae_namer.get_fresh_name(format!("{}", model.name.print_safe()));
@@ -58,11 +62,9 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     }
 
     // Save PNGs for all the images
-    for (spec, image_name) in &image_namer.names {
-        let texture = &db.textures[db.textures_by_name[&spec.texture_name]];
-        let palette = spec.palette_name.map(|name| {
-            &db.palettes[db.palettes_by_name[&name]]
-        });
+    for ((texture_id, palette_id), image_name) in image_namer.names.drain() {
+        let texture = &db.textures[texture_id];
+        let palette = palette_id.map(|id| &db.palettes[id]);
 
         use nitro::decode_image::decode;
         let rgba = match decode(texture, palette) {

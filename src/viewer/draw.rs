@@ -5,7 +5,6 @@ use glium::{self, VertexBuffer, IndexBuffer,
     Display, Frame, DrawParameters, Surface,
 };
 use glium::texture::Texture2d;
-use nitro::model::Material;
 use viewer::gl_context::GlContext;
 use viewer::state::ViewState;
 use db::Database;
@@ -13,7 +12,7 @@ use db::Database;
 
 /// GL data needed to render the scene.
 pub struct DrawingData {
-    obj_geom_data: Result<GLPrimitives>,
+    gl_prims: Result<GLPrimitives>,
     /// textures[i] contains the GL texture that needs to be
     /// bound for materials[i]; either `Ok(None)` (use default
     /// texture), `Ok(Some(tex))` (use tex), or `Err(e)` (use
@@ -39,23 +38,15 @@ impl DrawingData {
         db: &Database,
         view_state: &ViewState,
     ) -> DrawingData {
-        let model = &db.models[view_state.model_id];
-
-        let obj_geom_data =
+        let gl_prims =
             GLPrimitives::from_view_state(display, db, view_state);
-
         let textures =
-            build_textures(display, db, &model.materials[..]);
-
-        DrawingData {
-            obj_geom_data,
-            textures,
-            view_state: view_state.clone(),
-        }
+            build_textures(display, db, view_state.model_id);
+        DrawingData { gl_prims, textures, view_state: view_state.clone() }
     }
 
     pub fn has_error(&self) -> bool {
-        self.obj_geom_data.is_err()
+        self.gl_prims.is_err()
     }
 
     /// Update the `DrawingData` when the `ViewState` changes. This requires
@@ -76,7 +67,7 @@ impl DrawingData {
         let anim_changed = self.view_state.anim_state != new_view_state.anim_state;
         if anim_changed {
             // We can reuse the textures.
-            self.obj_geom_data =
+            self.gl_prims =
                 GLPrimitives::from_view_state(display, db, new_view_state);
             self.view_state = new_view_state.clone();
             return;
@@ -96,12 +87,12 @@ impl DrawingData {
         target: &mut Frame,
         draw_params: &DrawParameters
     ) {
-        if let Ok(ref obj_geom_data) = self.obj_geom_data {
+        if let Ok(ref gl_prims) = self.gl_prims {
             let model = &db.models[self.view_state.model_id];
 
             let mvp = self.view_state.eye.model_view_persp();
 
-            for call in &obj_geom_data.primitives.draw_calls {
+            for call in &gl_prims.primitives.draw_calls {
                 let texture =
                     match self.textures[call.mat_id as usize] {
                         Ok(Some(ref tex)) => tex,
@@ -142,11 +133,11 @@ impl DrawingData {
                     tex: sampler,
                 };
 
-                let indices =
-                    &obj_geom_data.index_buffer.slice(call.index_range.clone()).unwrap();
+                let indices = &gl_prims.index_buffer
+                    .slice(call.index_range.clone()).unwrap();
 
                 target.draw(
-                    &obj_geom_data.vertex_buffer,
+                    &gl_prims.vertex_buffer,
                     indices,
                     &ctx.program,
                     &uniforms,
@@ -196,41 +187,33 @@ impl GLPrimitives {
 }
 
 
-fn build_textures(display: &glium::Display, db: &Database, materials: &[Material])
+fn build_textures(display: &glium::Display, db: &Database, model_id: usize)
 -> Vec<Result<Option<Texture2d>>> {
-    use nitro::decode_image::decode;
-    use glium::texture::RawImage2d;
+    let num_materials = db.models[model_id].materials.len();
+    (0..num_materials)
+        .map(|material_id| {
+            use db::ImageDesc;
 
-    let build_texture = |material: &Material| -> Result<Option<Texture2d>> {
-        if material.texture_name.is_none() {
-            return Ok(None);
-        }
-        let texture_name = material.texture_name.unwrap();
+            // The right texture/palette were already computed when the DB was
+            // built. Just look them up in the table.
 
-        let texture_id = match db.textures_by_name.get(&texture_name) {
-            Some(&x) => x,
-            None => { bail!("no texture named {}", texture_name); }
-        };
-        let texture = &db.textures[texture_id];
+            match db.material_table[&(model_id, material_id)] {
+                ImageDesc::NoImage => Ok(None),
+                ImageDesc::Missing => bail!("texture/palette missing"),
+                ImageDesc::Image { texture_id, palette_id } => {
+                    use nitro::decode_image::decode;
+                    use glium::texture::RawImage2d;
 
-        let palette = material.palette_name
-            .and_then(|name| db.palettes_by_name.get(&name))
-            .map(|&id| &db.palettes[id]);
+                    let texture = &db.textures[texture_id];
+                    let palette = palette_id.map(|id| &db.palettes[id]);
 
-        let rgba = decode(texture, palette)?;
+                    let rgba = decode(texture, palette)?;
 
-        let dim = (texture.params.width, texture.params.height);
-        let image = RawImage2d::from_raw_rgba_reversed(&rgba, dim);
-        Ok(Some(Texture2d::new(display, image)?))
-    };
-
-    materials.iter().enumerate()
-        .map(|(id, material)| {
-            let res = build_texture(material);
-            if let Err(ref e) = res {
-                error!("error generating texture for material {}: {}", id, e);
+                    let dim = (texture.params.width, texture.params.height);
+                    let image = RawImage2d::from_raw_rgba_reversed(&rgba, dim);
+                    Ok(Some(Texture2d::new(display, image)?))
+                }
             }
-            res
         })
         .collect()
 }

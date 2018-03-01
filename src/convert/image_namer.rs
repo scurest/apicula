@@ -1,26 +1,11 @@
-use db::Database;
+use db::{Database, TextureId, PaletteId};
 use nitro::Name;
-use nitro::model::Material;
 use std::collections::HashMap;
 use util::namers::UniqueNamer;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ImageSpec {
-    pub texture_name: Name,
-    pub palette_name: Option<Name>,
-}
-
-impl ImageSpec {
-    pub fn from_material(material: &Material) -> Option<ImageSpec> {
-        material.texture_name.map(|name| {
-            ImageSpec { texture_name: name, palette_name: material.palette_name }
-        })
-    }
-}
-
 pub struct ImageNamer {
     pub namer: UniqueNamer,
-    pub names: HashMap<ImageSpec, String>,
+    pub names: HashMap<(TextureId, Option<PaletteId>), String>,
 }
 
 impl ImageNamer {
@@ -30,74 +15,62 @@ impl ImageNamer {
             names: HashMap::new(),
         };
 
-        for model in &db.models {
-            for material in &model.materials {
-                if material.texture_name.is_none() {
-                    continue;
-                }
+        for image_desc in db.material_table.values() {
+            use db::ImageDesc;
+            let (texture_id, palette_id) = match *image_desc {
+                ImageDesc::Image { texture_id, palette_id } =>
+                    (texture_id, palette_id),
+                _ => continue,
+            };
 
-                let spec = ImageSpec {
-                    texture_name: material.texture_name.unwrap(),
-                    palette_name: material.palette_name,
-                };
-
-                if spec_in_db(db, &spec) {
-                    image_namer.add_spec(&spec);
-                }
-            }
+            let namer = &mut image_namer.namer;
+            image_namer.names.entry((texture_id, palette_id)).or_insert_with(|| {
+                let name = format!("{}", db.textures[texture_id].name.print_safe());
+                namer.get_fresh_name(name)
+            });
         }
 
         image_namer
     }
 
     pub fn add_more_images(&mut self, db: &Database) {
-        for texture in &db.textures {
+        let mut num_guesses = 0;
+
+        for (texture_id, texture) in db.textures.iter().enumerate() {
+
+            let mut guess = |(texture_id, palette_id)| {
+                use std::collections::hash_map::Entry;
+                let namer = &mut self.namer;
+                match self.names.entry((texture_id, palette_id)) {
+                    Entry::Vacant(ve) => {
+                        let name = format!("{}", db.textures[texture_id].name.print_safe());
+                        ve.insert(namer.get_fresh_name(name));
+                        num_guesses += 1;
+                    }
+                    _ => (),
+                };
+            };
+
             // Direct color textures don't need a palette.
             if texture.params.format == 7 {
-                self.add_spec(&ImageSpec {
-                    texture_name: texture.name,
-                    palette_name: None,
-                });
+                guess((texture_id, None));
                 continue;
             }
 
             let mut guess_palette_name = |name: &Name| {
-                if db.palettes_by_name.contains_key(name) {
-                    self.add_spec(&ImageSpec {
-                        texture_name: texture.name,
-                        palette_name: Some(*name),
-                    });
+                if let Some(ids) = db.palettes_by_name.get(name) {
+                    guess((texture_id, Some(ids[0])));
                 }
             };
+
             guess_palette_name(&texture.name);
             guess_palette_name(&append_pl(&texture.name));
         }
 
-    }
-
-    fn add_spec(&mut self, spec: &ImageSpec) {
-        let namer = &mut self.namer;
-        self.names.entry(spec.clone()).or_insert_with(|| {
-            namer.get_fresh_name(
-                format!("{}", spec.texture_name.print_safe())
-            )
-        });
-    }
-
-}
-
-/// Check if the given texture and palette (if given) names occur in the
-/// database.
-fn spec_in_db(db: &Database, spec: &ImageSpec) -> bool {
-    if !db.textures_by_name.contains_key(&spec.texture_name) {
-        return false;
-    }
-    if let Some(ref palette_name) = spec.palette_name {
-        if !db.palettes_by_name.contains_key(palette_name) {
-            return false;
+        if num_guesses > 0 {
+            info!("guessed {} new images (for --more-textures)", num_guesses);
         }
     }
-    true
 }
 
 /// Append "_pl" to the end of a name.

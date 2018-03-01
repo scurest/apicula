@@ -1,15 +1,19 @@
 use clap::ArgMatches;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
-use nitro::{Name, Model, Texture, Palette, Animation};
+use nitro::{Name, Model, Texture, Palette, Animation, Container};
 use errors::Result;
 use util::cur::Cur;
 
-type TextureId = usize;
-type PaletteId = usize;
+pub type FileId = usize;
+pub type ModelId = usize;
+pub type TextureId = usize;
+pub type PaletteId = usize;
+pub type MaterialId = usize;
 
 #[derive(Default)]
 pub struct Database {
+    /// Files provided by the user on the command line.
     pub file_paths: Vec<PathBuf>,
 
     pub models: Vec<Model>,
@@ -17,8 +21,24 @@ pub struct Database {
     pub palettes: Vec<Palette>,
     pub animations: Vec<Animation>,
 
-    pub textures_by_name: HashMap<Name, TextureId>,
-    pub palettes_by_name: HashMap<Name, PaletteId>,
+    pub models_found_in: Vec<FileId>,
+    pub textures_found_in: Vec<FileId>,
+    pub palettes_found_in: Vec<FileId>,
+    pub animations_found_in: Vec<FileId>,
+
+    pub material_table: HashMap<(ModelId, MaterialId), ImageDesc>,
+
+    pub textures_by_name: HashMap<Name, Vec<TextureId>>,
+    pub palettes_by_name: HashMap<Name, Vec<PaletteId>>,
+}
+
+pub enum ImageDesc {
+    NoImage,
+    Image {
+        texture_id: TextureId,
+        palette_id: Option<PaletteId>,
+    },
+    Missing,
 }
 
 impl Database {
@@ -29,71 +49,6 @@ impl Database {
             .map(PathBuf::from)
             .collect();
         Database::build(file_paths)
-    }
-
-    pub fn build(file_paths: Vec<PathBuf>) -> Result<Database> {
-        use std::default::Default;
-
-        let mut db: Database = Default::default();
-        db.file_paths = file_paths;
-
-        debug!("Building database...");
-
-        for path in &db.file_paths {
-            debug!("Processing {:?}...", path);
-
-            // Hard-fail if we can't open the path. We don't expect the caller
-            // to know which files are valid Nitro files but we expect them to
-            // give us files we can actually open.
-            let buf = read_file(path)?;
-
-            use nitro::container::read_container;
-            match read_container(Cur::new(&buf)) {
-                Ok(cont) => {
-                    db.models.extend(cont.models.into_iter());
-                    db.textures.extend(cont.textures.into_iter());
-                    db.palettes.extend(cont.palettes.into_iter());
-                    db.animations.extend(cont.animations.into_iter());
-                }
-                Err(e) => {
-                    error!("error in file {}: {}", path.to_string_lossy(), e);
-                }
-            }
-        }
-
-        db.build_by_name_maps();
-
-        Ok(db)
-    }
-
-    /// Fill out `textures_by_name` and `palettes_by_name`.
-    fn build_by_name_maps(&mut self) {
-        use std::collections::hash_map::Entry::*;
-
-        let mut name_clash = false;
-        for (id, texture) in self.textures.iter().enumerate() {
-            match self.textures_by_name.entry(texture.name) {
-                Vacant(ve) => { ve.insert(id); },
-                Occupied(_) => {
-                    warn!("multiple textures have the name {}", texture.name);
-                    name_clash = true;
-                }
-            }
-        }
-
-        for (id, palette) in self.palettes.iter().enumerate() {
-            match self.palettes_by_name.entry(palette.name) {
-                Vacant(ve) => { ve.insert(id); },
-                Occupied(_) => {
-                    warn!("multiple palettes have the name {}", palette.name);
-                    name_clash = true;
-                }
-            }
-        }
-
-        if name_clash {
-            warn!("since there were name clashes, some textures might be wrong");
-        }
     }
 
     pub fn print_status(&self) {
@@ -109,7 +64,176 @@ impl Database {
         );
     }
 
+    pub fn build(file_paths: Vec<PathBuf>) -> Result<Database> {
+        use std::default::Default;
+
+        let mut db: Database = Default::default();
+        db.file_paths = file_paths;
+
+        debug!("Building database...");
+
+        for file_id in 0..db.file_paths.len() {
+            debug!("Processing {:?}...", db.file_paths[file_id]);
+
+            // Hard-fail if we can't open the path. We don't expect the caller
+            // to know which files are valid Nitro files but we expect them to
+            // give us files we can actually open.
+            let buf = read_file(&db.file_paths[file_id])?;
+
+            use nitro::container::read_container;
+            match read_container(Cur::new(&buf)) {
+                Ok(cont) => {
+                    db.add_container(file_id, cont);
+                }
+                Err(e) => {
+                    error!("error in file {}: {}",
+                        db.file_paths[file_id].to_string_lossy(), e);
+                }
+            }
+        }
+
+        db.build_by_name_maps();
+        db.build_material_table();
+
+        Ok(db)
+    }
+
+    fn add_container(&mut self, file_id: FileId, cont: Container) {
+        use std::iter::repeat;
+
+        let num_models = cont.models.len();
+        let num_textures = cont.textures.len();
+        let num_palettes = cont.palettes.len();
+        let num_animations = cont.animations.len();
+
+        // Move the items from the container into the DB, marking which
+        // file we found them in as we go.
+
+        self.models.extend(cont.models.into_iter());
+        self.models_found_in.extend(repeat(file_id).take(num_models));
+
+        self.textures.extend(cont.textures.into_iter());
+        self.textures_found_in.extend(repeat(file_id).take(num_textures));
+
+        self.palettes.extend(cont.palettes.into_iter());
+        self.palettes_found_in.extend(repeat(file_id).take(num_palettes));
+
+        self.animations.extend(cont.animations.into_iter());
+        self.animations_found_in.extend(repeat(file_id).take(num_animations));
+    }
+
+    /// Fill out `textures_by_name` and `palettes_by_name`.
+    fn build_by_name_maps(&mut self) {
+        for (id, texture) in self.textures.iter().enumerate() {
+            self.textures_by_name.entry(texture.name)
+                .or_insert(vec![])
+                .push(id);
+        }
+
+        for (id, palette) in self.palettes.iter().enumerate() {
+            self.palettes_by_name.entry(palette.name)
+                .or_insert(vec![])
+                .push(id);
+        }
+    }
+
+    fn build_material_table(&mut self) {
+        let mut missing = false;
+        let mut clash = false;
+
+        for (model_id, model) in self.models.iter().enumerate() {
+            let file_id = self.models_found_in[model_id];
+            for (material_id, material) in model.materials.iter().enumerate() {
+                let desc =
+                    if material.texture_name.is_none() {
+                        ImageDesc::NoImage
+                    } else {
+                        let texture_name = material.texture_name.as_ref().unwrap();
+
+                        let best_texture = self.find_best_texture(texture_name, file_id, &mut clash);
+                        let best_palette = material.palette_name
+                            .and_then(|ref name| self.find_best_palette(name, file_id, &mut clash));
+
+                        match best_texture {
+                            None => {
+                                missing = true;
+                                ImageDesc::Missing
+                            }
+                            Some(texture_id) => ImageDesc::Image {
+                                texture_id, palette_id: best_palette,
+                            }
+                        }
+                    };
+                self.material_table.insert((model_id, material_id), desc);
+            }
+        }
+
+        if missing {
+            warn!("couldn't find a texture/palette for some materials. Some textures \
+                may be missing in your model.");
+            info!("to fix this, try providing more files (textures may be stored in a \
+                separate .nsbtx file)");
+        }
+        if clash {
+            warn!("there were multiple textures/palettes with the same name. The \
+                one we picked might not be the right one. Some textures may be wrong \
+                in your model.");
+            info!("to fix this, try providing fewer files at once");
+        }
+    }
+
+    // The next two functions look for the best texture/palette of a given name.
+    // Ones in the same file as the model we're looking at are considered better
+    // than ones that aren't. The `clash` variable is set to true if there are
+    // multiple possible candidates that are as good as one another.
+
+    fn find_best_texture(&self, name: &Name, file_id: FileId, clash: &mut bool)
+    -> Option<TextureId> {
+        let candidates = self.textures_by_name.get(name)?;
+
+        if candidates.len() == 1 { return Some(candidates[0]); }
+
+        // Try to find one from the same file first.
+        let mut candidates_from_same_file = candidates.iter()
+            .filter(|&&id| self.textures_found_in[id] == file_id);
+        if let Some(&can) = candidates_from_same_file.next() {
+            if candidates_from_same_file.next().is_some() {
+                *clash = true;
+                warn!("multiple textures named {:?} in the same file", name);
+            }
+            return Some(can);
+        }
+
+        // Just give the first one
+        *clash = true;
+        warn!("multiple textures named {:?}; using the first one", name);
+        Some(candidates[0])
+    }
+
+    fn find_best_palette(&self, name: &Name, file_id: FileId, clash: &mut bool)
+    -> Option<PaletteId> {
+        let candidates = self.palettes_by_name.get(name)?;
+
+        if candidates.len() == 1 { return Some(candidates[0]); }
+
+        // Try to find one from the same file first.
+        let mut candidates_from_same_file = candidates.iter()
+            .filter(|&&id| self.palettes_found_in[id] == file_id);
+        if let Some(&can) = candidates_from_same_file.next() {
+            if candidates_from_same_file.next().is_some() {
+                *clash = true;
+                warn!("multiple palettes named {:?} in the same file", name);
+            }
+            return Some(can);
+        }
+
+        // Just give the first one
+        *clash = true;
+        warn!("multiple palettes named {:?}; using the first one", name);
+        Some(candidates[0])
+    }
 }
+
 
 fn read_file(path: &Path) -> Result<Vec<u8>> {
     use std::fs::File;

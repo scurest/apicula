@@ -1,7 +1,7 @@
 use cgmath::{Matrix4, One};
 use convert::format::{FnFmt, Mat};
-use convert::image_namer::{ImageNamer, ImageSpec};
-use db::Database;
+use convert::image_namer::ImageNamer;
+use db::{Database, ModelId};
 use errors::Result;
 use skeleton::{Skeleton, SymbolicTerm, Transform};
 use primitives::Primitives;
@@ -15,6 +15,7 @@ use util::ins_set::InsOrderSet;
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
 struct Ctx<'a> {
+    model_id: ModelId,
     model: &'a Model,
     db: &'a Database,
     image_namer: &'a ImageNamer,
@@ -27,8 +28,10 @@ pub fn write<W: Write>(
     w: &mut W,
     db: &Database,
     image_namer: &ImageNamer,
-    model: &Model,
+    model_id: ModelId,
 ) -> Result<()> {
+    let model = &db.models[model_id];
+
     // We need invertible matrices since we're obliged to give values for
     // inverse bind matrices.
     use convert::make_invertible::make_invertible;
@@ -38,7 +41,7 @@ pub fn write<W: Write>(
     let prims = &Primitives::build(model, objects)?;
     let skel = &Skeleton::build(model, objects)?;
 
-    let ctx = Ctx { model, db, image_namer, objects, prims, skel };
+    let ctx = Ctx { model_id, model, db, image_namer, objects, prims, skel };
 
     write_lines!(w,
         r##"<?xml version="1.0" encoding="utf-8"?>"##,
@@ -76,9 +79,17 @@ fn write_asset<W: Write>(w: &mut W) -> Result<()> {
 fn write_library_images<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     use std::collections::HashSet;
 
-    let image_names = ctx.model.materials.iter()
-        .filter_map(|material| ImageSpec::from_material(material))
-        .filter_map(|spec| ctx.image_namer.names.get(&spec))
+    // Find the names for all the images this model uses
+    let image_names = (0..ctx.model.materials.len())
+        .filter_map(|material_id| {
+            use db::ImageDesc;
+            match ctx.db.material_table[&(ctx.model_id, material_id)] {
+                ImageDesc::Image { texture_id, palette_id } =>
+                    Some((texture_id, palette_id)),
+                _ => None,
+            }
+        })
+        .filter_map(|ids| ctx.image_namer.names.get(&ids))
         .collect::<HashSet<_>>();
 
     write_lines!(w,
@@ -122,14 +133,19 @@ fn write_library_effects<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     write_lines!(w,
         r##"  <library_effects>"##;
     )?;
-    for (i, mat) in ctx.model.materials.iter().enumerate() {
-        let image_name = ImageSpec::from_material(mat)
-            .and_then(|spec| ctx.image_namer.names.get(&spec));
+    for (material_id, mat) in ctx.model.materials.iter().enumerate() {
+        use db::ImageDesc;
+        let image_spec = match ctx.db.material_table[&(ctx.model_id, material_id)] {
+            ImageDesc::Image { texture_id, palette_id } =>
+                Some((texture_id, palette_id)),
+            _ => None,
+        };
+        let image_name = image_spec.and_then(|spec| ctx.image_namer.names.get(&spec));
 
         write_lines!(w,
             r##"    <effect id="effect{i}" name="{name}">"##,
             r##"      <profile_COMMON>"##;
-            i = i, name = mat.name.print_safe(),
+            i = material_id, name = mat.name.print_safe(),
         )?;
 
         if let Some(name) = image_name {
