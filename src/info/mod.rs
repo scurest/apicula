@@ -1,38 +1,34 @@
 use clap::ArgMatches;
 use errors::Result;
 use db::Database;
-use nitro::{Model, Texture, Animation};
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let db = Database::from_arg_matches(matches)?;
 
     db.print_status();
-
     println!();
-
-    for (i, model) in db.models.iter().enumerate() {
-        model_info(i, model);
+    for model_id in 0..db.models.len() {
+        model_info(&db, model_id);
     }
-
     println!();
-
-    for (i, texture) in db.textures.iter().enumerate() {
-        texture_info(i, texture);
+    for texture_id in 0..db.textures.len() {
+        texture_info(&db, texture_id);
     }
-
     println!();
-
-    for (i, animation) in db.animations.iter().enumerate() {
-        animation_info(i, animation);
+    for animation_id in 0..db.animations.len() {
+        animation_info(&db, animation_id);
     }
 
     Ok(())
 }
 
 
-fn model_info(id: usize, model: &Model) {
-    println!("Model {}:", id);
+fn model_info(db: &Database, model_id: usize) {
+    let model = &db.models[model_id];
+    println!("Model {}:", model_id);
     println!("  Name: {:?}", model.name);
+    println!("  Found In: {}",
+        db.file_paths[db.models_found_in[model_id]].to_string_lossy());
     println!("  Up Scale: {:?}", model.up_scale);
     println!("  Down Scale: {:?}", model.down_scale);
     println!("  Num Meshes: {}", model.meshes.len());
@@ -51,14 +47,30 @@ fn model_info(id: usize, model: &Model) {
         if let Some(name) = material.palette_name {
             println!("      Palette: {:?}", name);
         }
+        use db::ImageDesc;
+        match db.material_table[&(model_id, i)] {
+            ImageDesc::NoImage => (),
+            ImageDesc::Missing => {
+                println!("      Texture/Palette Not Found");
+            }
+            ImageDesc::Image { texture_id, palette_id } => {
+                println!("      Using Texture Id: {}", texture_id);
+                if let Some(id) = palette_id {
+                    println!("      Using Palette Id: {}", id);
+                }
+            }
+        }
     }
     println!();
 }
 
 
-fn texture_info(id: usize, texture: &Texture) {
-    println!("Texture {}:", id);
+fn texture_info(db: &Database, texture_id: usize) {
+    let texture = &db.textures[texture_id];
+    println!("Texture {}:", texture_id);
     println!("  Name: {:?}", texture.name);
+    println!("  Found In: {}",
+        db.file_paths[db.textures_found_in[texture_id]].to_string_lossy());
     println!("  Offset: {:#x}", texture.params.offset);
     println!("  Repeat S: {}", texture.params.repeat_s);
     println!("  Repeat T: {}", texture.params.repeat_t);
@@ -83,9 +95,12 @@ fn texture_info(id: usize, texture: &Texture) {
     println!();
 }
 
-fn animation_info(id: usize, anim: &Animation) {
-    println!("Animation {}:", id);
+fn animation_info(db: &Database, anim_id: usize) {
+    let anim = &db.animations[anim_id];
+    println!("Animation {}:", anim_id);
     println!("  Name: {:?}", anim.name);
+    println!("  Found In: {}",
+        db.file_paths[db.animations_found_in[anim_id]].to_string_lossy());
     println!("  Frames: {}", anim.num_frames);
     println!("  Objects: {}", anim.objects_curves.len());
     println!("  TRS Curves:",);
