@@ -78,7 +78,7 @@ fn decode_paletted(texture: &Texture, palette: &Palette) -> Vec<u8>
                 for &v in &[x.bits(0,2), x.bits(2,4), x.bits(4,6), x.bits(6,8)] {
                     let transparent = v == 0 && color0_is_transparent;
                     write_pixel(&mut pixels, &mut i, rgb555a5(
-                        pdata.get(v as usize),
+                        pdata.nth(v as usize),
                         if transparent { 0 } else { 31 },
                     ));
                 }
@@ -90,7 +90,7 @@ fn decode_paletted(texture: &Texture, palette: &Palette) -> Vec<u8>
                 for &v in &[x.bits(0,4), x.bits(4,8)] {
                     let transparent = v == 0 && color0_is_transparent;
                     write_pixel(&mut pixels, &mut i, rgb555a5(
-                        pdata.get(v as usize),
+                        pdata.nth(v as usize),
                         if transparent { 0 } else { 31 },
                     ));
                 }
@@ -101,7 +101,7 @@ fn decode_paletted(texture: &Texture, palette: &Palette) -> Vec<u8>
             for &v in tdata {
                 let transparent = v == 0 && color0_is_transparent;
                 write_pixel(&mut pixels, &mut i, rgb555a5(
-                    pdata.get(v as usize),
+                    pdata.nth(v as usize),
                     if transparent { 0 } else { 31 },
                 ));
             }
@@ -110,7 +110,7 @@ fn decode_paletted(texture: &Texture, palette: &Palette) -> Vec<u8>
             // A3I5 Translucent Texture (3-bit Alpha, 5-bit Color Index)
             for &x in tdata {
                 write_pixel(&mut pixels, &mut i, rgb555a5(
-                    pdata.get(x.bits(0,5) as usize),
+                    pdata.nth(x.bits(0,5) as usize),
                     a3_to_a5(x.bits(5,8)),
                 ));
             }
@@ -119,7 +119,7 @@ fn decode_paletted(texture: &Texture, palette: &Palette) -> Vec<u8>
             // A5I3 Translucent Texture (5-bit Alpha, 3-bit Color Index)
             for &x in tdata {
                 write_pixel(&mut pixels, &mut i, rgb555a5(
-                    pdata.get(x.bits(0,3) as usize),
+                    pdata.nth(x.bits(0,3) as usize),
                     x.bits(3,8),
                 ));
             }
@@ -149,14 +149,14 @@ pub fn decode_compressed(texture: &Texture, palette: &Palette) -> Vec<u8> {
     for y in 0..height {
         for x in 0..width {
             let idx = num_blocks_x * (y/4) + (x/4);
-            let block = block_data.get(idx);
-            let extra = extra_data.get(idx);
+            let block = block_data.nth(idx);
+            let extra = extra_data.nth(idx);
 
             let texel_off = 2 * (4 * (y%4) + (x%4)) as u32;
             let texel = block.bits(texel_off, texel_off+2);
 
             let pal_addr = (extra.bits(0,14) as usize) << 1;
-            let color = |n| rgb555a5(palette.get(pal_addr+n), 31);
+            let color = |n| rgb555a5(palette.nth(pal_addr+n), 31);
 
             let mode = extra.bits(14,16);
 

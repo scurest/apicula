@@ -110,15 +110,25 @@ impl<'a, T: Viewable> View<'a, T> {
         self.buf.len() / size
     }
 
-    pub fn get(&self, pos: usize) -> T {
+    pub fn get(&self, pos: usize) -> Option<T> {
         let size = <T as Viewable>::size();
         let begin = size * pos;
         let end = begin + size;
         if end > self.buf.len() {
-            panic!("index {} out of range for view of length {}", pos, self.len());
+            return None;
         }
         let bytes = &self.buf[begin..end];
-        <T as Viewable>::view(bytes)
+        Some(<T as Viewable>::view(bytes))
+    }
+
+    pub fn nth(&self, pos: usize) -> T {
+        match self.get(pos) {
+            Some(x) => x,
+            None => {
+                panic!("index {} out of range for view of length {}",
+                    pos, self.len());
+            }
+        }
     }
 }
 
@@ -126,9 +136,9 @@ impl<'a, T: Viewable + Debug> Debug for View<'a, T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "View [")?;
         if self.len() != 0 {
-            write!(f, "{:?}", self.get(0))?;
+            write!(f, "{:?}", self.nth(0))?;
             for i in 1..self.len() {
-                write!(f, ", {:?}", self.get(i))?;
+                write!(f, ", {:?}", self.nth(i))?;
             }
         }
         f.write_char(']')

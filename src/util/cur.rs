@@ -24,11 +24,11 @@ impl<'a> Cur<'a> {
     }
 
     pub fn next<T: Viewable>(&mut self) -> Result<T> {
-        Ok(self.next_n::<T>(1)?.get(0))
+        Ok(self.next_n::<T>(1)?.nth(0))
     }
 
     pub fn nth<T: Viewable>(&self, n: usize) -> Result<T> {
-        Ok(self.clone().next_n::<T>(n+1)?.get(n))
+        Ok(self.clone().next_n::<T>(n+1)?.nth(n))
     }
 
     pub fn next_n<T: Viewable>(&mut self, n: usize) -> Result<View<'a, T>> {

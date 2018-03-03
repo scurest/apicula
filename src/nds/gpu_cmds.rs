@@ -149,21 +149,21 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // MTX_RESTORE - Restore Current Matrix from Stack
         0x14 => {
-            let idx = params.get(0);
+            let idx = params.nth(0);
             GpuCmd::Restore { idx }
         }
 
         // MTX_SCALE - Multiply Current Matrix by Scale Matrix
         0x1b => {
-            let sx = fix32(params.get(0), 1, 19, 12);
-            let sy = fix32(params.get(1), 1, 19, 12);
-            let sz = fix32(params.get(2), 1, 19, 12);
+            let sx = fix32(params.nth(0), 1, 19, 12);
+            let sy = fix32(params.nth(1), 1, 19, 12);
+            let sz = fix32(params.nth(2), 1, 19, 12);
             GpuCmd::Scale { scale: (sx, sy, sz) }
         }
 
         // BEGIN_VTXS - Start of Vertex List
         0x40 => {
-            let prim_type = params.get(0);
+            let prim_type = params.nth(0);
             GpuCmd::Begin { prim_type }
         }
 
@@ -172,8 +172,8 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // VTX_16 - Set Vertex XYZ Coordinates
         0x23 => {
-            let p0 = params.get(0);
-            let p1 = params.get(1);
+            let p0 = params.nth(0);
+            let p1 = params.nth(1);
             let x = fix16(p0.bits(0, 16) as u16, 1, 3, 12);
             let y = fix16(p0.bits(16, 32) as u16, 1, 3, 12);
             let z = fix16(p1.bits(0, 16) as u16, 1, 3, 12);
@@ -184,7 +184,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // VTX_10 - Set Vertex XYZ Coordinates
         0x24 => {
-            let p = params.get(0);
+            let p = params.nth(0);
             let x = fix16(p.bits(0, 10) as u16, 1, 3, 6);
             let y = fix16(p.bits(10, 20) as u16, 1, 3, 6);
             let z = fix16(p.bits(20, 30) as u16, 1, 3, 6);
@@ -195,7 +195,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // VTX_XY - Set Vertex XY Coordinates
         0x25 => {
-            let p = params.get(0);
+            let p = params.nth(0);
             let x = fix16(p.bits(0, 16) as u16, 1, 3, 12);
             let y = fix16(p.bits(16, 32) as u16, 1, 3, 12);
             let position = Point3::new(x, y, state.vertex.z);
@@ -205,7 +205,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // VTX_XZ - Set Vertex XZ Coordinates
         0x26 => {
-            let p = params.get(0);
+            let p = params.nth(0);
             let x = fix16(p.bits(0, 16) as u16, 1, 3, 12);
             let z = fix16(p.bits(16, 32) as u16, 1, 3, 12);
             let position = Point3::new(x, state.vertex.y, z);
@@ -215,7 +215,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // VTX_YZ - Set Vertex YZ Coordinates
         0x27 => {
-            let p = params.get(0);
+            let p = params.nth(0);
             let y = fix16(p.bits(0, 16) as u16, 1, 3, 12);
             let z = fix16(p.bits(16, 32) as u16, 1, 3, 12);
             let position = Point3::new(state.vertex.x, y, z);
@@ -225,7 +225,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // VTX_DIFF - Set Relative Vertex Coordinates
         0x28 => {
-            let p = params.get(0);
+            let p = params.nth(0);
             // Differences are 10-bit numbers, scaled by 1/2^3 to put them
             // in the same 1,3,12 format as the others VTX commands.
             let scale = (0.5f64).powi(3);
@@ -239,7 +239,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // TEXCOORD - Set Texture Coordinates
         0x22 => {
-            let p = params.get(0);
+            let p = params.nth(0);
             let s = fix16(p.bits(0, 16) as u16, 1, 11, 4);
             let t = fix16(p.bits(16, 32) as u16, 1, 11, 4);
             let texcoord = Point2::new(s, t);
@@ -248,7 +248,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // COLOR - Set Vertex Color
         0x20 => {
-            let p = params.get(0);
+            let p = params.nth(0);
             let r = p.bits(0, 5) as f32 / 31.0;
             let g = p.bits(5, 10) as f32 / 31.0;
             let b = p.bits(10, 15) as f32 / 31.0;
@@ -258,7 +258,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // NORMAL - Set Normal Vector
         0x21 => {
-            let p = params.get(0);
+            let p = params.nth(0);
             let x = fix32(p.bits(0, 10), 1, 0, 9);
             let y = fix32(p.bits(10, 20), 1, 0, 9);
             let z = fix32(p.bits(20, 30), 1, 0, 9);

@@ -233,7 +233,7 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
     // Translation
     if t == 0 {
         let xyz = cur.next_n::<u32>(3)?;
-        trans = [fx32(xyz.get(0)), fx32(xyz.get(1)), fx32(xyz.get(2))];
+        trans = [fx32(xyz.nth(0)), fx32(xyz.nth(1)), fx32(xyz.nth(2))];
     }
     trace!("trans: {:?}", trans);
 
@@ -248,9 +248,9 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
     } else if r == 0 {
         let m = cur.next_n::<u16>(8)?;
         rotation = Matrix3::new(
-            fx16(m0), fx16(m.get(0)), fx16(m.get(1)),
-            fx16(m.get(2)), fx16(m.get(3)), fx16(m.get(4)),
-            fx16(m.get(5)), fx16(m.get(6)), fx16(m.get(7)),
+            fx16(m0), fx16(m.nth(0)), fx16(m.nth(1)),
+            fx16(m.nth(2)), fx16(m.nth(3)), fx16(m.nth(4)),
+            fx16(m.nth(5)), fx16(m.nth(6)), fx16(m.nth(7)),
         );
     }
     trace!("rotation: {:?}", rotation);
@@ -258,7 +258,7 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
     // Scale
     if s == 0 {
         let xyz = cur.next_n::<u32>(3)?;
-        scale = [fx32(xyz.get(0)), fx32(xyz.get(1)), fx32(xyz.get(2))];
+        scale = [fx32(xyz.nth(0)), fx32(xyz.nth(1)), fx32(xyz.nth(2))];
     }
     trace!("scale: {:?}", scale);
 
@@ -290,7 +290,7 @@ fn read_inv_binds(mut cur: Cur, num_objects: usize) -> Vec<Matrix4<f64>> {
         if cur.bytes_remaining() < elem_size { break; }
 
         let entries = cur.next_n::<u32>(4*3).unwrap();
-        let m = |i| fix32(entries.get(i), 1, 19, 12);
+        let m = |i| fix32(entries.nth(i), 1, 19, 12);
         inv_binds.push(Matrix4::new(
             m(0), m(1), m(2), 0.0,
             m(3), m(4), m(5), 0.0,
