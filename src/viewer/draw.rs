@@ -1,9 +1,7 @@
 use cgmath::Matrix4;
 use errors::Result;
 use primitives::{Primitives, Vertex};
-use glium::{self, VertexBuffer, IndexBuffer,
-    Display, Frame, DrawParameters, Surface,
-};
+use glium::{self, VertexBuffer, IndexBuffer, Display, Frame, Surface};
 use glium::texture::Texture2d;
 use viewer::gl_context::GlContext;
 use viewer::state::ViewState;
@@ -85,7 +83,6 @@ impl DrawingData {
         db: &Database,
         ctx: &GlContext,
         target: &mut Frame,
-        draw_params: &DrawParameters
     ) {
         if let Ok(ref gl_prims) = self.gl_prims {
             let model = &db.models[self.view_state.model_id];
@@ -93,6 +90,8 @@ impl DrawingData {
             let mvp = self.view_state.eye.model_view_persp();
 
             for call in &gl_prims.primitives.draw_calls {
+                let material = &model.materials[call.mat_id as usize];
+
                 let texture =
                     match self.textures[call.mat_id as usize] {
                         Ok(Some(ref tex)) => tex,
@@ -116,7 +115,7 @@ impl DrawingData {
                             (true, true) => SamplerWrapFunction::Mirror,
                         }
                     };
-                    let params = &model.materials[call.mat_id as usize].params;
+                    let params = &material.params;
                     s.1.wrap_function.0 = wrap_fn(params.repeat_s, params.mirror_s);
                     s.1.wrap_function.1 = wrap_fn(params.repeat_t, params.mirror_t);
 
@@ -136,12 +135,30 @@ impl DrawingData {
                 let indices = &gl_prims.index_buffer
                     .slice(call.index_range.clone()).unwrap();
 
+                let draw_params = glium::DrawParameters {
+                    depth: glium::Depth {
+                        test: glium::draw_parameters::DepthTest::IfLess,
+                        write: true,
+                        .. Default::default()
+                    },
+                    backface_culling: {
+                        use glium::draw_parameters::BackfaceCullingMode as Mode;
+                        match (material.cull_backface, material.cull_frontface) {
+                            (false, false) => Mode::CullingDisabled,
+                            (true, false) => Mode::CullClockwise,
+                            (false, true) => Mode::CullCounterClockwise,
+                            (true, true) => continue,
+                        }
+                    },
+                    .. Default::default()
+                };
+
                 target.draw(
                     &gl_prims.vertex_buffer,
                     indices,
                     &ctx.program,
                     &uniforms,
-                    draw_params,
+                    &draw_params,
                 ).unwrap();
             }
         }

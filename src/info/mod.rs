@@ -64,6 +64,14 @@ fn model_info(db: &Database, model_id: usize) {
                 }
             }
         }
+        println!("      Culling Mode: {}",
+            match (material.cull_backface, material.cull_frontface) {
+                (true, true) => "Cull All",
+                (true, false) => "Cull Backfacing",
+                (false, true) => "Cull Frontfacing",
+                (false, false) => "No Culling",
+            }
+        );
     }
     println!();
 }

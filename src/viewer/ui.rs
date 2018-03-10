@@ -286,23 +286,7 @@ impl Ui {
         } else {
             let middle_grey = (0.4666, 0.4666, 0.4666, 1.0);
             target.clear_color_srgb_and_depth(middle_grey, 1.0);
-
-            let draw_params = glium::DrawParameters {
-                depth: glium::Depth {
-                    test: glium::draw_parameters::DepthTest::IfLess,
-                    write: true,
-                    .. Default::default()
-                },
-                backface_culling: glium::draw_parameters::BackfaceCullingMode::CullClockwise,
-                .. Default::default()
-            };
-
-            self.drawing_data.draw(
-                &self.db,
-                &self.ctx,
-                &mut target,
-                &draw_params,
-            );
+            self.drawing_data.draw(&self.db, &self.ctx, &mut target);
         }
 
         target.finish().unwrap();

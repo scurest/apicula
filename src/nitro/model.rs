@@ -25,6 +25,8 @@ pub struct Material {
     pub params: TextureParameters,
     pub width: u16,
     pub height: u16,
+    pub cull_backface: bool,
+    pub cull_frontface: bool,
     pub texture_mat: Matrix4<f64>,
 }
 
@@ -176,6 +178,9 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
 
     let params = TextureParameters::from_u32(params);
 
+    let cull_backface = polygon_attr.bits(6,7) == 0;
+    let cull_frontface = polygon_attr.bits(7,8) == 0;
+
     // For now, use the section size to determine whether there
     // is texture matrix data.
     let texture_mat = match section_size {
@@ -196,6 +201,8 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
         params,
         width,
         height,
+        cull_backface,
+        cull_frontface,
         texture_mat,
     })
 }
