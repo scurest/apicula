@@ -14,6 +14,10 @@ impl<'a> Cur<'a> {
         Cur { buf_: buf, pos_: 0 }
     }
 
+    pub fn from_buf_pos(buf: &[u8], pos: usize) -> Cur {
+        Cur { buf_: buf, pos_: pos }
+    }
+
     pub fn pos(&self) -> usize {
         self.pos_
     }
