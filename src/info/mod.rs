@@ -15,6 +15,10 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         texture_info(&db, texture_id);
     }
     println!();
+    for palette_id in 0..db.palettes.len() {
+        palette_info(&db, palette_id);
+    }
+    println!();
     for animation_id in 0..db.animations.len() {
         animation_info(&db, animation_id);
     }
@@ -75,7 +79,7 @@ fn texture_info(db: &Database, texture_id: usize) {
     println!("  Repeat S: {}", texture.params.repeat_s);
     println!("  Repeat T: {}", texture.params.repeat_t);
     println!("  Mirror S: {}", texture.params.mirror_s);
-    println!("  Mirror S: {}", texture.params.mirror_t);
+    println!("  Mirror T: {}", texture.params.mirror_t);
     println!("  Width: {}", texture.params.width);
     println!("  Height: {}", texture.params.height);
     println!("  Format: {} ({})", texture.params.format,
@@ -92,6 +96,16 @@ fn texture_info(db: &Database, texture_id: usize) {
     );
     println!("  Color 0 Transparent?: {}", texture.params.is_color0_transparent);
     println!("  Texcoord Transform Mode: {}", texture.params.texcoord_transform_mode);
+    println!();
+}
+
+fn palette_info(db: &Database, palette_id: usize) {
+    let palette = &db.palettes[palette_id];
+    println!("Palette {}:", palette_id);
+    println!("  Name: {:?}", palette.name);
+    println!("  Found In: {}",
+        db.file_paths[db.palettes_found_in[palette_id]].to_string_lossy());
+    println!("  Offset: {:#x}", palette.off);
     println!();
 }
 
