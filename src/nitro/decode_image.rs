@@ -5,37 +5,78 @@ use util::cur::Cur;
 
 pub fn decode(texture: &Texture, palette: Option<&Palette>) -> Result<Vec<u8>>
 {
+    let w = texture.params.width as usize;
+    let h = texture.params.height as usize;
     let format = texture.params.format;
+    let mut state = DecodeState {
+        rgba: vec![0; 4 * w * h],
+        idx: 0,
+        bad_texture: false,
+        bad_palette: false,
+    };
 
-    if format == 7 {
-        return Ok(decode_format7(texture));
-    }
+    match format {
+        7 => decode_format7(&mut state, texture),
+        1 | 2 | 3 | 4 | 5 | 6 => {
+            if palette.is_none() {
+                bail!("texture is missing a required palette");
+            }
+            let palette = palette.unwrap();
 
-    if palette.is_none() {
-        bail!("texture is missing palette");
-    }
-    let palette = palette.unwrap();
-
-    Ok(match format {
-        1 | 2 | 3 | 4 | 6 => decode_paletted(texture, palette),
-        5 => decode_compressed(texture, palette),
+            if format == 5 {
+                decode_compressed(&mut state, texture, palette);
+            } else {
+                decode_paletted(&mut state, texture, palette);
+            }
+        }
         _ => { bail!("bad texture format (format={})", format); }
-    })
+    }
+
+    if state.bad_texture || state.bad_palette {
+        warn!("texture/palette data is probably corrupt!");
+        debug!("namely with texture={:?}, palette={:?}", texture.name, palette.map(|p| &p.name));
+    }
+
+    Ok(state.rgba)
 }
 
-/// This macro is used when fetching texels. We don't want to return an `Err`
-/// since we might have _some_ usable data, so instead when a fetch fails we
-/// return what RGBA we've built so far.
-macro_rules! try_fetch{
-    ($fetch:expr, $ret:expr) => {
-        match $fetch {
+/// RGBA data in the process of being decoded.
+///
+/// The purpose of this struct is that if an error occurs, the appropriate flag
+/// can be set by the decoding loop and then a higher level can report an error
+/// and still be able to use the partially decoded RGBA data.
+struct DecodeState {
+    /// RGBA pixel data (each pixel is four bytes).
+    rgba: Vec<u8>,
+    /// Index in `rgba` where to write the next RGBA value.
+    idx: usize,
+    /// Set if we got an OOB access when fetching a texel.
+    bad_texture: bool,
+    /// Set if we got an OOB access when fetching a palette color.
+    bad_palette: bool,
+}
+
+impl DecodeState {
+    fn write_pixel(&mut self, pixel: [u8; 4]) {
+        assert!(self.idx + 3 < self.rgba.len());
+        self.rgba[self.idx] = pixel[0];
+        self.rgba[self.idx+1] = pixel[1];
+        self.rgba[self.idx+2] = pixel[2];
+        self.rgba[self.idx+3] = pixel[3];
+        self.idx += 4;
+    }
+}
+
+macro_rules! try_or_else {
+    ($e:expr, $f:expr) => {
+        match $e {
             Ok(x) => x,
-            Err(_) => return $ret,
+            Err(_) => $f,
         }
     };
 }
 
-fn decode_format7(texture: &Texture) -> Vec<u8> {
+fn decode_format7(state: &mut DecodeState, texture: &Texture) {
     // Direct Color Texture
     // Holds actual 16-bit color values (no palette)
 
@@ -46,25 +87,20 @@ fn decode_format7(texture: &Texture) -> Vec<u8> {
     let data =
         Cur::from_buf_pos(&texture.tex_data.texture_data, offset);
 
-    let mut pixels = vec![0u8; 4 * width * height]; // 4 bytes (RGBA) for every texel
-    let mut i = 0;
-
     for n in 0..(width * height) {
-        let texel = try_fetch!(data.nth::<u16>(n), pixels);
-
+        let texel = try_or_else!(data.nth::<u16>(n),
+            { state.bad_texture = true; return }
+        );
         let alpha_bit = texel.bits(15,16);
-        write_pixel(&mut pixels, &mut i, rgb555a5(
+        state.write_pixel(rgb555a5(
             texel,
             if alpha_bit == 0 { 0 } else { 31 },
         ));
     }
-
-    pixels
 }
 
 
-fn decode_paletted(texture: &Texture, palette: &Palette) -> Vec<u8>
-{
+fn decode_paletted(state: &mut DecodeState, texture: &Texture, palette: &Palette) {
     let texture_off = texture.params.offset as usize;
     let width = texture.params.width as usize;
     let height = texture.params.height as usize;
@@ -81,74 +117,84 @@ fn decode_paletted(texture: &Texture, palette: &Palette) -> Vec<u8>
     let pal_data =
         Cur::from_buf_pos(&palette.tex_data.palette_data, palette_off);
 
-    let mut pixels = vec![0u8; 4 * width * height]; // 4 bytes (RGBA) for every texel
-    let mut i = 0;
-
     match format {
         2 => {
             // 4-Color Palette Texture
             for n in 0..size {
-                let x = try_fetch!(data.nth::<u8>(n), pixels);
+                let x = try_or_else!(data.nth::<u8>(n),
+                    { state.bad_texture = true; return }
+                );
                 for &v in &[x.bits(0,2), x.bits(2,4), x.bits(4,6), x.bits(6,8)] {
+                    let rgb = try_or_else!(pal_data.nth::<u16>(v as usize),
+                        { state.bad_palette = true; 0 }
+                    );
                     let transparent = v == 0 && color0_is_transparent;
-                    write_pixel(&mut pixels, &mut i, rgb555a5(
-                        pal_data.nth::<u16>(v as usize).unwrap_or(0),
-                        if transparent { 0 } else { 31 },
-                    ));
+                    let a = if transparent { 0 } else { 31 };
+                    state.write_pixel(rgb555a5(rgb, a));
                 }
             }
         }
         3 => {
             // 16-Color Palette Texture
             for n in 0..size {
-                let x = try_fetch!(data.nth::<u8>(n), pixels);
+                let x = try_or_else!(data.nth::<u8>(n),
+                    { state.bad_texture = true; return }
+                );
                 for &v in &[x.bits(0,4), x.bits(4,8)] {
+                    let rgb = try_or_else!(pal_data.nth::<u16>(v as usize),
+                        { state.bad_palette = true; 0 }
+                    );
                     let transparent = v == 0 && color0_is_transparent;
-                    write_pixel(&mut pixels, &mut i, rgb555a5(
-                        pal_data.nth::<u16>(v as usize).unwrap_or(0),
-                        if transparent { 0 } else { 31 },
-                    ));
+                    let a = if transparent { 0 } else { 31 };
+                    state.write_pixel(rgb555a5(rgb, a));
                 }
             }
         }
         4 => {
             // 256-Color Palette Texture
             for n in 0..size {
-                let v = try_fetch!(data.nth::<u8>(n), pixels);
+                let v = try_or_else!(data.nth::<u8>(n),
+                    { state.bad_texture = true; return }
+                );
+                let rgb = try_or_else!(pal_data.nth::<u16>(v as usize),
+                    { state.bad_palette = true; 0 }
+                );
                 let transparent = v == 0 && color0_is_transparent;
-                write_pixel(&mut pixels, &mut i, rgb555a5(
-                    pal_data.nth::<u16>(v as usize).unwrap_or(0),
-                    if transparent { 0 } else { 31 },
-                ));
+                let a = if transparent { 0 } else { 31 };
+                state.write_pixel(rgb555a5(rgb, a));
             }
         }
         1 => {
             // A3I5 Translucent Texture (3-bit Alpha, 5-bit Color Index)
             for n in 0..size {
-                let x = try_fetch!(data.nth::<u8>(n), pixels);
-                write_pixel(&mut pixels, &mut i, rgb555a5(
-                    pal_data.nth::<u16>(x.bits(0,5) as usize).unwrap_or(0),
-                    a3_to_a5(x.bits(5,8)),
-                ));
+                let x = try_or_else!(data.nth::<u8>(n),
+                    { state.bad_texture = true; return }
+                );
+                let rgb = try_or_else!(pal_data.nth::<u16>(x.bits(0,5) as usize),
+                    { state.bad_palette = true; 0 }
+                );
+                let a = a3_to_a5(x.bits(5,8));
+                state.write_pixel(rgb555a5(rgb, a));
             }
         }
         6 => {
             // A5I3 Translucent Texture (5-bit Alpha, 3-bit Color Index)
             for n in 0..size {
-                let x = try_fetch!(data.nth::<u8>(n), pixels);
-                write_pixel(&mut pixels, &mut i, rgb555a5(
-                    pal_data.nth::<u16>(x.bits(0,3) as usize).unwrap_or(0),
-                    x.bits(3,8),
-                ));
+                let x = try_or_else!(data.nth::<u8>(n),
+                    { state.bad_texture = true; return }
+                );
+                let rgb = try_or_else!(pal_data.nth::<u16>(x.bits(0,3) as usize),
+                    { state.bad_palette = true; 0 }
+                );
+                let a = a3_to_a5(x.bits(3,8));
+                state.write_pixel(rgb555a5(rgb, a));
             }
         }
         _ => unreachable!(),
     }
-
-    pixels
 }
 
-pub fn decode_compressed(texture: &Texture, palette: &Palette) -> Vec<u8> {
+fn decode_compressed(state: &mut DecodeState, texture: &Texture, palette: &Palette) {
     let texture_off = texture.params.offset as usize;
     let width = texture.params.width as usize;
     let height = texture.params.height as usize;
@@ -162,63 +208,59 @@ pub fn decode_compressed(texture: &Texture, palette: &Palette) -> Vec<u8> {
     let pal_data =
         Cur::from_buf_pos(&palette.tex_data.palette_data, palette_off);
 
-    let mut pixels = vec![0u8; 4*width*height];
-    let mut i = 0;
-
     for y in 0..height {
         for x in 0..width {
             let idx = num_blocks_x * (y/4) + (x/4);
-            let block = try_fetch!(data1.nth::<u32>(idx), pixels);
-            let extra = try_fetch!(data2.nth::<u16>(idx), pixels);
+            let block = try_or_else!(data1.nth::<u32>(idx),
+                { state.bad_texture = true; return; }
+            );
+            let extra = try_or_else!(data2.nth::<u16>(idx),
+                { state.bad_texture = true; return; }
+            );
 
             let texel_off = 2 * (4 * (y%4) + (x%4)) as u32;
             let texel = block.bits(texel_off, texel_off+2);
-
-            let pal_addr = (extra.bits(0,14) as usize) << 1;
-            let color = |n| {
-                rgb555a5(pal_data.nth::<u16>(pal_addr+n).unwrap_or(0), 31)
-            };
-
             let mode = extra.bits(14,16);
+            let pal_addr = (extra.bits(0,14) as usize) << 1;
 
-            let color = match (mode, texel) {
-                (0, 0) => color(0),
-                (0, 1) => color(1),
-                (0, 2) => color(2),
-                (0, 3) => [0, 0, 0, 0],
+            let pixel = {
+                let mut color = |n| {
+                    let rgb = try_or_else!(pal_data.nth::<u16>(pal_addr+n),
+                        { state.bad_palette = true; 0 }
+                    );
+                    rgb555a5(rgb, 31)
+                };
 
-                (1, 0) => color(0),
-                (1, 1) => color(1),
-                (1, 2) => avg(color(0), color(1)),
-                (1, 3) => [0, 0, 0, 0],
+                match (mode, texel) {
+                    (0, 0) => color(0),
+                    (0, 1) => color(1),
+                    (0, 2) => color(2),
+                    (0, 3) => [0, 0, 0, 0],
 
-                (2, 0) => color(0),
-                (2, 1) => color(1),
-                (2, 2) => color(2),
-                (2, 3) => color(3),
+                    (1, 0) => color(0),
+                    (1, 1) => color(1),
+                    (1, 2) => avg(color(0), color(1)),
+                    (1, 3) => [0, 0, 0, 0],
 
-                (3, 0) => color(0),
-                (3, 1) => color(1),
-                (3, 2) => avg358(color(1), color(0)),
-                (3, 3) => avg358(color(0), color(1)),
+                    (2, 0) => color(0),
+                    (2, 1) => color(1),
+                    (2, 2) => color(2),
+                    (2, 3) => color(3),
 
-                _ => unreachable!(),
+                    (3, 0) => color(0),
+                    (3, 1) => color(1),
+                    (3, 2) => avg358(color(1), color(0)),
+                    (3, 3) => avg358(color(0), color(1)),
+
+                    _ => unreachable!(),
+                }
             };
-            write_pixel(&mut pixels, &mut i, color);
+
+            state.write_pixel(pixel);
         }
     }
-
-    pixels
 }
 
-fn write_pixel(pixels: &mut [u8], i: &mut usize, pixel: [u8; 4]) {
-    assert!(*i + 3 < pixels.len());
-    pixels[*i] = pixel[0];
-    pixels[*i+1] = pixel[1];
-    pixels[*i+2] = pixel[2];
-    pixels[*i+3] = pixel[3];
-    *i += 4;
-}
 
 /// Converts RGB555 color and A5 alpha into RGBA8888.
 fn rgb555a5(rgb555: u16, a5: u8) -> [u8; 4] {
