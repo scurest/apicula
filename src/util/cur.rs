@@ -1,5 +1,4 @@
-use errors::Result;
-use std::fmt;
+use std::{fmt, error};
 use std::ops::Add;
 use util::view::{View, Viewable};
 
@@ -23,24 +22,24 @@ impl<'a> Cur<'a> {
         self.buf_.len().saturating_sub(self.pos_)
     }
 
-    pub fn next<T: Viewable>(&mut self) -> Result<T> {
+    pub fn next<T: Viewable>(&mut self) -> Result<T, Error> {
         Ok(self.next_n::<T>(1)?.nth(0))
     }
 
-    pub fn nth<T: Viewable>(&self, n: usize) -> Result<T> {
+    pub fn nth<T: Viewable>(&self, n: usize) -> Result<T, Error> {
         Ok(self.clone().next_n::<T>(n+1)?.nth(n))
     }
 
-    pub fn next_n<T: Viewable>(&mut self, n: usize) -> Result<View<'a, T>> {
+    pub fn next_n<T: Viewable>(&mut self, n: usize) -> Result<View<'a, T>, Error> {
         let size = <T as Viewable>::size();
         let buf = self.next_n_u8s(size * n)?;
         Ok(View::from_buf(buf))
     }
 
-    pub fn next_n_u8s(&mut self, n: usize) -> Result<&'a [u8]> {
+    pub fn next_n_u8s(&mut self, n: usize) -> Result<&'a [u8], Error> {
         let end_pos = self.pos_ + n;
         if end_pos > self.buf_.len() {
-            bail!("buffer was too short");
+            return Err(Error::TooShort);
         }
         let res = &self.buf_[self.pos_ .. self.pos_ + n];
         self.pos_ += n;
@@ -87,3 +86,21 @@ impl<'a> fmt::Debug for Cur<'a> {
     }
 }
 
+#[derive(Debug)]
+pub enum Error {
+    TooShort,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "buffer too short")
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::TooShort => "buffer too short",
+        }
+    }
+}

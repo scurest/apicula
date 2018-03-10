@@ -1,5 +1,6 @@
 error_chain! {
     foreign_links {
+        Cur(::util::cur::Error);
         Fmt(::std::fmt::Error);
         Io(::std::io::Error);
         TimeFmt(::time::ParseError);

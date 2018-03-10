@@ -1,7 +1,6 @@
-use errors::Result;
-use errors::ResultExt;
+use std::{fmt, error, result};
 use util::bits::BitField;
-use util::cur::Cur;
+use util::cur::{self, Cur};
 
 /// The result of successfully calling `try_decompress(cur)`.
 pub struct DecompressResult<'a> {
@@ -33,7 +32,7 @@ fn try_decompress_lz77(mut cur: Cur) -> Result<DecompressResult> {
     //
     // So back up by 5 and then decompress LZ77 data.
     if cur.pos() < 5 {
-       bail!("not enough space for LZ77 header");
+        return Err(Error::BadDecompress);
     }
     let pos = cur.pos();
     cur.jump_to(pos - 5);
@@ -46,8 +45,9 @@ fn de_lz77(mut cur: Cur) -> Result<DecompressResult> {
     let ty = header.bits(4,8);
     let decompressed_size = header.bits(8, 32) as usize;
 
-    check!(ty == 1)
-        .chain_err(|| "compression method wasn't LZ77")?;
+    if ty != 1 {
+        return Err(Error::BadDecompress);
+    }
 
     let mut out = vec![0; decompressed_size].into_boxed_slice();
     let mut outp = 0;
@@ -72,10 +72,14 @@ fn de_lz77(mut cur: Cur) -> Result<DecompressResult> {
 
             let len = n + 3;
 
-            check!(outp + len <= decompressed_size)
-                .chain_err(|| "backreference copies too much data")?;
-            check!(outp >= ofs + 1)
-                .chain_err(|| "backreference to OOB data")?;
+            if outp + len <= decompressed_size {
+                // backreference copies too much data
+                return Err(Error::BadDecompress);
+            }
+            if outp >= ofs + 1 {
+                // backreference to OOB data
+                return Err(Error::BadDecompress);
+            }
 
             for i in 0 .. len {
                 out[outp + i] = out[outp - ofs - 1 + i];
@@ -91,4 +95,30 @@ fn de_lz77(mut cur: Cur) -> Result<DecompressResult> {
         data: out,
         end_cur: cur,
     })
+}
+
+type Result<T> = result::Result<T, Error>;
+
+// Don't bother storing any info in the error type.
+#[derive(Debug)]
+pub enum Error {
+    BadDecompress,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::BadDecompress => "bad decompress",
+        }
+    }
+}
+
+impl From<cur::Error> for Error {
+    fn from(_: cur::Error) -> Error { Error::BadDecompress }
 }
