@@ -497,21 +497,24 @@ fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
 }
 
 fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    let num_objects = ctx.model.objects.len();
-    let any_animations = ctx.db.animations.iter().any(|a| a.objects_curves.len() == num_objects);
+    // COLLADA is dumb and doesn't allow an empty <library_animations>
+    // so we emit the open tag lazily if we find any. This flag remembers
+    // if we've emitted it yet.
+    let mut start_tag_emitted = false;
 
-    if !any_animations {
-        return Ok(()); // no matching animations
-    }
+    for anim_id in 0..ctx.db.animations.len() {
+        if !ctx.db.can_apply_anim(ctx.model_id, anim_id) {
+            continue;
+        }
 
-    let matching_anims = ctx.db.animations.iter().enumerate()
-        .filter(|&(_, a)| a.objects_curves.len() == num_objects);
+        if !start_tag_emitted {
+            write_lines!(w,
+                r##"  <library_animations>"##;
+            )?;
+            start_tag_emitted = true;
+        }
 
-    write_lines!(w,
-        r##"  <library_animations>"##;
-    )?;
-
-    for (anim_id, anim) in matching_anims {
+        let anim = &ctx.db.animations[anim_id];
         let num_frames = anim.num_frames;
 
         for joint_id in ctx.skel.tree.node_indices() {
@@ -520,7 +523,6 @@ fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
                 Transform::Object(id) => id,
                 _ => continue,
             };
-            let trs_curves = &anim.objects_curves[object_id as usize];
 
             write_lines!(w,
                 r##"    <animation id="anim{anim_id}-joint{joint_id}">"##;
@@ -557,7 +559,10 @@ fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
                 anim_id = anim_id, joint_id = joint_id.index(), num_floats = 16 * num_frames, num_frames = num_frames,
                 mats = FnFmt(|f| {
                     for frame in 0..num_frames {
-                        write!(f, "{} ", Mat(&trs_curves.sample_at(frame)))?;
+                        let mat = anim.objects_curves.get(object_id as usize)
+                            .map(|trs| trs.sample_at(frame))
+                            .unwrap_or_else(|| Matrix4::one());
+                        write!(f, "{} ", Mat(&mat))?;
                     }
                     Ok(())
                 }),
@@ -601,30 +606,33 @@ fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
         }
     }
 
-    write_lines!(w,
-        r##"  </library_animations>"##;
-    )?;
+    if start_tag_emitted {
+        write_lines!(w,
+            r##"  </library_animations>"##;
+        )?;
+    }
 
     Ok(())
 }
 
 
 fn write_library_animation_clips<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    let num_objects = ctx.model.objects.len();
-    let any_animations = ctx.db.animations.iter().any(|a| a.objects_curves.len() == num_objects);
+    // Same as above.
+    let mut start_tag_emitted = false;
 
-    if !any_animations {
-        return Ok(()); // no matching animations
-    }
+    for anim_id in 0..ctx.db.animations.len() {
+        if !ctx.db.can_apply_anim(ctx.model_id, anim_id) {
+            continue;
+        }
 
-    let matching_anims = ctx.db.animations.iter().enumerate()
-        .filter(|&(_, a)| a.objects_curves.len() == num_objects);
+        if !start_tag_emitted {
+            write_lines!(w,
+                r##"  <library_animation_clips>"##;
+            )?;
+            start_tag_emitted = true;
+        }
 
-    write_lines!(w,
-        r##"  <library_animation_clips>"##;
-    )?;
-
-    for (anim_id, anim) in matching_anims {
+        let anim = &ctx.db.animations[anim_id];
         check!(anim.num_frames != 0)?;
         let end_time = (anim.num_frames - 1) as f64 * FRAME_LENGTH;
 
@@ -643,9 +651,11 @@ fn write_library_animation_clips<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
         )?;
     }
 
-    write_lines!(w,
-        r##"  </library_animation_clips>"##;
-    )?;
+    if start_tag_emitted {
+        write_lines!(w,
+            r##"  </library_animation_clips>"##;
+        )?;
+    }
 
     Ok(())
 }

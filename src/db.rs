@@ -2,13 +2,14 @@ use clap::ArgMatches;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use nitro::{Name, Model, Texture, Palette, Animation, Container};
-use errors::Result;
+use errors::{Result, ResultExt};
 use util::cur::Cur;
 
 pub type FileId = usize;
 pub type ModelId = usize;
 pub type TextureId = usize;
 pub type PaletteId = usize;
+pub type AnimationId = usize;
 pub type MaterialId = usize;
 
 #[derive(Default)]
@@ -30,6 +31,10 @@ pub struct Database {
 
     pub textures_by_name: HashMap<Name, Vec<TextureId>>,
     pub palettes_by_name: HashMap<Name, Vec<PaletteId>>,
+
+    /// If this is true, the heuristic that an animation applies to a model only
+    /// if they have the same number of objects is disabled.
+    pub apply_any_animation: bool,
 }
 
 pub enum ImageDesc {
@@ -48,7 +53,16 @@ impl Database {
             .values_of_os("INPUT").unwrap()
             .map(PathBuf::from)
             .collect();
-        Database::build(file_paths)
+
+        let apply_any_animation =
+            matches
+            .is_present("apply_any_animation");
+
+        use std::default::Default;
+        let mut db: Database = Default::default();
+        db.build(file_paths)?;
+        db.apply_any_animation = apply_any_animation;
+        Ok(db)
     }
 
     pub fn print_status(&self) {
@@ -64,38 +78,38 @@ impl Database {
         );
     }
 
-    pub fn build(file_paths: Vec<PathBuf>) -> Result<Database> {
-        use std::default::Default;
-
-        let mut db: Database = Default::default();
-        db.file_paths = file_paths;
+    fn build(&mut self, file_paths: Vec<PathBuf>) -> Result<()> {
+        self.file_paths = file_paths;
 
         debug!("Building database...");
 
-        for file_id in 0..db.file_paths.len() {
-            debug!("Processing {:?}...", db.file_paths[file_id]);
+        for file_id in 0..self.file_paths.len() {
+            debug!("Processing {:?}...", self.file_paths[file_id]);
 
             // Hard-fail if we can't open the path. We don't expect the caller
             // to know which files are valid Nitro files but we expect them to
             // give us files we can actually open.
-            let buf = read_file(&db.file_paths[file_id])?;
+            let buf = read_file(&self.file_paths[file_id])
+                .chain_err(|| {
+                    format!("couldn't read file: {}", &self.file_paths[file_id].to_string_lossy())
+                })?;
 
             use nitro::container::read_container;
             match read_container(Cur::new(&buf)) {
                 Ok(cont) => {
-                    db.add_container(file_id, cont);
+                    self.add_container(file_id, cont);
                 }
                 Err(e) => {
                     error!("error in file {}: {}",
-                        db.file_paths[file_id].to_string_lossy(), e);
+                        self.file_paths[file_id].to_string_lossy(), e);
                 }
             }
         }
 
-        db.build_by_name_maps();
-        db.build_material_table();
+        self.build_by_name_maps();
+        self.build_material_table();
 
-        Ok(db)
+        Ok(())
     }
 
     fn add_container(&mut self, file_id: FileId, cont: Container) {
@@ -231,6 +245,16 @@ impl Database {
         *clash = true;
         warn!("multiple palettes named {:?}; using the first one", name);
         Some(candidates[0])
+    }
+
+    /// Can we apply the given animation to the given model?
+    ///
+    /// The default heuristic is "yes" if have the same number of objects.
+    pub fn can_apply_anim(&self, model_id: ModelId, anim_id: AnimationId) -> bool {
+        if self.apply_any_animation { return true; }
+        let model_num_objs = self.models[model_id].objects.len();
+        let anim_num_objs = self.animations[anim_id].objects_curves.len();
+        model_num_objs == anim_num_objs
     }
 }
 

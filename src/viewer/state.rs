@@ -46,17 +46,19 @@ impl ViewState {
 
     pub fn advance_anim(&mut self, db: &Database, dir: Dir) {
         let num_animations = db.animations.len();
-        let num_objects = db.models[self.model_id].objects.len();
+        let model_id = self.model_id;
 
         // Represent anim_id as anim_id+1, freeing up 0 to represent "no animation".
         let mut id = self.anim_state.as_ref()
             .map(|anim_state| anim_state.anim_id + 1)
             .unwrap_or(0);
 
-        // An animations can be applied to a model only if they have the same
-        // number of objects.
+        // Check whether we can apply the animation to this model.
         let is_good = |id: usize| {
-            id == 0 || db.animations[id - 1].objects_curves.len() == num_objects
+            // No animation -- can always apply.
+            if id == 0 { return true; }
+
+            db.can_apply_anim(model_id, id - 1)
         };
 
         loop {

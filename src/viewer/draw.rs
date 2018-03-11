@@ -176,11 +176,19 @@ impl GLPrimitives {
 
         let objects: Vec<Matrix4<f64>> =
             if let Some(ref anim_state) = view_state.anim_state {
+                // Get the object matrices by sampling the curves in the
+                // animation, padding with the identity is there aren't enough.
                 let anim = &db.animations[anim_state.anim_id];
-                anim.objects_curves.iter()
-                    .map(|trs_curves| trs_curves.sample_at(anim_state.cur_frame))
+                (0..model.objects.len())
+                    .map(|i| {
+                        use cgmath::One;
+                        anim.objects_curves.get(i)
+                            .map(|trs| trs.sample_at(anim_state.cur_frame))
+                            .unwrap_or_else(|| Matrix4::one())
+                    })
                     .collect()
             } else {
+                // Just read them from the model file.
                 model.objects.iter()
                     .map(|o| o.xform)
                     .collect()
