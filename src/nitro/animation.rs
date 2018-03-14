@@ -132,9 +132,9 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
 
         // In this case, the data at base_cur + off doesn't store the actual
         // curve values, it stores references into pivot_data and basis_data
-        // (see above, there were stored in the parent J0AC)  where the values
-        // are located. This is used to get the actual values.
-        let decode = |x: u16| -> Result<Matrix3<f64>> {
+        // (see above, these were stored in the parent J0AC) where the values
+        // are located. This lambda is used to get the actual values.
+        let fetch_matrix = |x: u16| -> Result<Matrix3<f64>> {
             let mode = x.bits(15, 16);
             let idx = x.bits(0, 15) as usize;
             Ok(match mode {
@@ -161,18 +161,26 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
             if is_const {
                 let v = cur.next::<u16>()?;
                 let _ = cur.next::<u16>()?; // Skipped? For alignment?
-                trs_curves.rotation = Curve::Constant(decode(v)?);
+                trs_curves.rotation = Curve::Constant(fetch_matrix(v)?);
             } else {
                 let info = CurveInfo::from_u32(cur.next::<u32>()?);
                 let off = cur.next::<u32>()?;
 
                 let start_frame = info.start_frame;
                 let end_frame = info.end_frame;
-                let values =
-                    (base_cur + off)
-                    .next_n::<u16>(info.num_samples())?
-                    .map(decode)
-                    .collect::<Result<Vec<Matrix3<f64>>>>()?;
+                let values = {
+                    // Do this with an explicit with_capacity + push loop
+                    // because collecting an iterator into a Result doesn't
+                    // reserve the capacity in advance.
+                    // See rust-lang/rust/#48994.
+                    let num_samples = info.num_samples();
+                    let mut samples: Vec<Matrix3<f64>> =
+                        Vec::with_capacity(num_samples);
+                    for v in (base_cur + off).next_n::<u16>(num_samples)? {
+                        samples.push(fetch_matrix(v)?);
+                    }
+                    samples
+                };
 
                 trs_curves.rotation = Curve::Samples {
                     start_frame, end_frame, values,
