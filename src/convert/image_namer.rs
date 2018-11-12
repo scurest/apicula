@@ -78,7 +78,7 @@ fn append_pl(name: &Name) -> Name {
     let mut res = name.clone();
 
     // Find the index of the first NUL byte in the suffix of NUL bytes.
-    let mut idx = res.0.iter().rposition(|&x| x != b'0')
+    let mut idx = res.0.iter().rposition(|&x| x != b'\0')
         .map(|pos| pos + 1)
         .unwrap_or(0);
 
