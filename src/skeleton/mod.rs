@@ -10,14 +10,13 @@
 //!
 //! --------
 //!
-//! TODO: rewrite documentation after the blend matrix -> inv bind matrix
-//! transition.
+//! TODO: refactor immanent.
 
 use cgmath::{ApproxEq, Matrix4, One, SquareMatrix};
 use errors::Result;
 use nds::gpu_cmds::{self, GpuCmd};
-use nitro::{Model, render_cmds};
-use util::cur::Cur;
+use nitro::Model;
+use nitro::render_cmds::SkinTerm;
 use petgraph::Direction;
 use petgraph::stable_graph::StableGraph;
 use petgraph::graph::NodeIndex;
@@ -32,7 +31,19 @@ pub struct Skeleton {
 impl Skeleton {
     pub fn build(model: &Model, objects: &[Matrix4<f64>]) -> Result<Skeleton> {
         let mut builder = Builder::new(model, objects);
-        render_cmds::run_commands(Cur::new(&model.render_cmds), &mut builder)?;
+        use nitro::render_cmds::Op;
+        for op in &model.render_ops {
+            match *op {
+                Op::LoadMatrix { stack_pos } => builder.load_matrix(stack_pos),
+                Op::StoreMatrix { stack_pos } => builder.store_matrix(stack_pos),
+                Op::MulObject { object_idx } => builder.mul_by_object(object_idx),
+                Op::Skin { ref terms } => builder.blend(&*terms),
+                Op::ScaleUp => (),
+                Op::ScaleDown => (),
+                Op::BindMaterial { .. } => (),
+                Op::Draw { mesh_idx } => builder.draw(mesh_idx),
+            }
+        }
         Ok(builder.done())
     }
 }
@@ -226,34 +237,29 @@ impl<'a, 'b> Builder<'a, 'b> {
             Transform::UninitializedSlot(_) => Matrix4::one(),
         }
     }
-}
 
-impl<'a, 'b> render_cmds::Sink for Builder<'a, 'b> {
-    fn load_matrix(&mut self, stack_pos: u8) -> Result<()> {
+    fn load_matrix(&mut self, stack_pos: u8) {
         self.gpu.cur_matrix = self.get_from_stack(stack_pos);
-        Ok(())
     }
 
-    fn store_matrix(&mut self, stack_pos: u8) -> Result<()> {
+    fn store_matrix(&mut self, stack_pos: u8) {
         self.gpu.matrix_stack[stack_pos as usize] = Some(self.gpu.cur_matrix.clone());
-        Ok(())
     }
 
-    fn mul_by_object(&mut self, object_id: u8) -> Result<()> {
+    fn mul_by_object(&mut self, object_id: u8) {
         let cur_matrix = self.gpu.cur_matrix.clone();
         let new_matrix = self.mul_comb(cur_matrix, Transform::Object(object_id));
         self.gpu.cur_matrix = new_matrix;
-        Ok(())
     }
 
-    fn blend(&mut self, blend_terms: &[(u8, u8, f64)]) -> Result<()> {
+    fn blend(&mut self, terms: &[SkinTerm]) {
         // Set the current matrix to Σ (weight * stack_matrix * inv_bind_matrix).
 
         // First, check that each stack matrix is a pure matrix (otherwise, it
         // can't have an inverse bind matrix), and if it is, check that the
         // inverse bind we computed is close to the one stored in the model.
-        for &(stack_id, inv_bind_id, _weight) in blend_terms {
-            let stack_matrix = self.get_from_stack(stack_id);
+        for &SkinTerm { stack_pos, inv_bind_idx, .. } in terms {
+            let stack_matrix = self.get_from_stack(stack_pos);
             if stack_matrix.terms.len() != 1 {
                 warn!(
                     "a blended matrix was blended again; this can't be represented \
@@ -262,7 +268,7 @@ impl<'a, 'b> render_cmds::Sink for Builder<'a, 'b> {
                 );
             } else {
                 let our_inv_bind = self.skel.tree[stack_matrix.terms[0].joint_id].inv_bind_matrix;
-                let stored_inv_bind = self.model.inv_binds[inv_bind_id as usize];
+                let stored_inv_bind = self.model.inv_binds[inv_bind_idx as usize];
                 let close_enough = our_inv_bind.relative_eq(
                     &stored_inv_bind,
                     0.05, // very generous epsilon
@@ -282,10 +288,10 @@ impl<'a, 'b> render_cmds::Sink for Builder<'a, 'b> {
         // Ok, now assuming the inverse bind matrices are correct, we can
         // just compute Σ (weight * stack_matrix)
         // Distribute over the sum, then group like terms.
-        let terms = blend_terms.iter()
-            .flat_map(|&(stack_id, _inv_bind_id, weight)| {
-                let mut m = self.get_from_stack(stack_id);
-                m.mul_scalar_in_place(weight);
+        let terms = terms.iter()
+            .flat_map(|&SkinTerm { stack_pos, weight, .. }| {
+                let mut m = self.get_from_stack(stack_pos);
+                m.mul_scalar_in_place(weight as f64);
                 m.terms
             })
             .collect::<Vec<_>>();
@@ -293,37 +299,26 @@ impl<'a, 'b> render_cmds::Sink for Builder<'a, 'b> {
         distributed.group_like_terms_in_place();
 
         self.gpu.cur_matrix = distributed;
-
-        Ok(())
     }
 
-    fn draw(&mut self, mesh_id: u8, _mat_id: u8) -> Result<()> {
-        run_gpu_cmds(self, &self.model.meshes[mesh_id as usize].commands)?;
-        Ok(())
+    fn draw(&mut self, mesh_id: u8) {
+        run_gpu_cmds(self, &self.model.meshes[mesh_id as usize].commands);
     }
-
-    // Don't need to care about these (the scaling is pre-applied to the
-    // vertices).
-    fn scale_up(&mut self) -> Result<()> { Ok(()) }
-    fn scale_down(&mut self) -> Result<()> { Ok(()) }
-
 }
 
-fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) -> Result<()> {
+fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
     let interpreter = gpu_cmds::CmdParser::new(commands);
 
     for cmd_res in interpreter {
-        match cmd_res? {
+        if cmd_res.is_err() { break; }
+        match cmd_res.unwrap() {
             GpuCmd::Restore { idx } => {
-                use nitro::render_cmds::Sink;
-                b.load_matrix(idx as u8)?;
+                b.load_matrix(idx as u8);
             }
             GpuCmd::Vertex { .. } => b.vertex(),
             _ => (),
         }
     }
-
-    Ok(())
 }
 
 

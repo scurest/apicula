@@ -3,6 +3,7 @@ use errors::Result;
 use nitro::info_block;
 use nitro::Name;
 use nitro::TextureParameters;
+use nitro::render_cmds::Op;
 use util::bits::BitField;
 use util::cur::Cur;
 use util::fixed::{fix16, fix32};
@@ -13,7 +14,7 @@ pub struct Model {
     pub meshes: Vec<Mesh>,
     pub objects: Vec<Object>,
     pub inv_binds: Vec<Matrix4<f64>>,
-    pub render_cmds: Vec<u8>,
+    pub render_ops: Vec<Op>,
     pub up_scale: f64,
     pub down_scale: f64,
 }
@@ -73,20 +74,44 @@ pub fn read_model(cur: Cur, name: Name) -> Result<Model> {
         objects_cur: Cur,
     });
 
+    use super::render_cmds::parse_render_cmds;
+    let render_ops = parse_render_cmds(cur + render_cmds_off)?;
+
     let meshes = read_meshes(cur + mesh_off)?;
-    let objects = read_objects(objects_cur)?;
     let materials = read_materials(cur + materials_off)?;
-    let render_cmds = read_render_cmds(cur + render_cmds_off)?;
+    let objects = read_objects(objects_cur)?;
     let inv_binds = read_inv_binds(cur + inv_binds_off, num_objects as usize);
 
-    Ok(Model {
+    let model = Model {
         name, materials, meshes, objects, inv_binds,
-        render_cmds, up_scale, down_scale,
-    })
+        render_ops, up_scale, down_scale,
+    };
+
+    validate_render_ops(&model)?;
+
+    Ok(model)
 }
 
-// Meshes
-//////////
+/// Validate that all the indices in the render ops are in-bounds.
+fn validate_render_ops(model: &Model) -> Result<()> {
+    for op in &model.render_ops {
+        let good = match *op {
+            Op::MulObject { object_idx } => (object_idx as usize) < model.objects.len(),
+            Op::BindMaterial { material_idx } => (material_idx as usize) < model.materials.len(),
+            Op::Draw { mesh_idx } => (mesh_idx as usize) < model.meshes.len(),
+            Op::Skin { ref terms } => {
+                terms.iter().all(|term| {
+                    (term.inv_bind_idx as usize) < model.inv_binds.len()
+                })
+            }
+            _ => true,
+        };
+        if !good {
+            bail!("model had out-of-bounds index in render commands");
+        }
+    }
+    Ok(())
+}
 
 fn read_meshes(cur: Cur) -> Result<Vec<Mesh>> {
     info_block::read::<u32>(cur)?
@@ -307,14 +332,4 @@ fn read_inv_binds(mut cur: Cur, num_objects: usize) -> Vec<Matrix4<f64>> {
         cur.jump_forward(3*3*4);
     }
     inv_binds
-}
-
-// Render commands
-////////////////////
-
-pub fn read_render_cmds(mut cur: Cur) -> Result<Vec<u8>> {
-    use nitro::render_cmds::find_end;
-    let end = find_end(cur)?;
-    let len = end.pos() - cur.pos();
-    Ok(cur.next_n_u8s(len).unwrap().to_vec())
 }

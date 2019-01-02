@@ -12,10 +12,10 @@ mod index_builder;
 use cgmath::{Matrix4, Point2, Transform, vec4, Zero};
 use errors::Result;
 use primitives::index_builder::IndexBuilder;
-use nitro::{Model, render_cmds};
+use nitro::Model;
+use nitro::render_cmds::SkinTerm;
 use std::default::Default;
 use std::ops::Range;
-use util::cur::Cur;
 
 pub struct Primitives {
     pub vertices: Vec<Vertex>,
@@ -64,7 +64,19 @@ implement_vertex!(Vertex, position, texcoord, color);
 impl Primitives {
     pub fn build(model: &Model, objects: &[Matrix4<f64>]) -> Result<Primitives> {
         let mut b = Builder::new(model, objects);
-        render_cmds::run_commands(Cur::new(&model.render_cmds), &mut b)?;
+        use nitro::render_cmds::Op;
+        for op in &model.render_ops {
+            match *op {
+                Op::LoadMatrix { stack_pos } => b.load_matrix(stack_pos),
+                Op::StoreMatrix { stack_pos } => b.store_matrix(stack_pos),
+                Op::MulObject { object_idx } => b.mul_by_object(object_idx),
+                Op::Skin { ref terms } => b.blend(&*terms),
+                Op::ScaleUp => b.scale_up(),
+                Op::ScaleDown => b.scale_down(),
+                Op::BindMaterial { material_idx } => b.bind_material(material_idx),
+                Op::Draw { mesh_idx } => b.draw(mesh_idx),
+            }
+        }
         Ok(b.done())
     }
 }
@@ -101,6 +113,7 @@ struct Builder<'a, 'b> {
 
     gpu: GpuState,
     cur_texture_dim: (u32, u32),
+    cur_material: u8,
     vertices: Vec<Vertex>,
     ind_builder: IndexBuilder,
     draw_calls: Vec<DrawCall>,
@@ -118,6 +131,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             vertices: vec![],
             ind_builder: IndexBuilder::new(),
             draw_calls: vec![],
+            cur_material: 0,
             cur_draw_call: DrawCall {
                 vertex_range: 0..0,
                 index_range: 0..0,
@@ -154,69 +168,61 @@ impl<'a, 'b> Builder<'a, 'b> {
         let draw_calls = self.draw_calls;
         Primitives { vertices, indices, draw_calls }
     }
-}
 
-impl<'a, 'b> render_cmds::Sink for Builder<'a, 'b> {
-    fn load_matrix(&mut self, stack_pos: u8) -> Result<()> {
+    fn load_matrix(&mut self, stack_pos: u8) {
         self.gpu.restore(stack_pos);
-        Ok(())
     }
 
-    fn store_matrix(&mut self, stack_pos: u8) -> Result<()> {
+    fn store_matrix(&mut self, stack_pos: u8) {
         self.gpu.store(stack_pos);
-        Ok(())
     }
 
-    fn mul_by_object(&mut self, object_id: u8) -> Result<()> {
+    fn mul_by_object(&mut self, object_id: u8) {
         self.gpu.mul_matrix(&self.objects[object_id as usize]);
-        Ok(())
     }
 
-    fn blend(&mut self, terms: &[(u8, u8, f64)]) -> Result<()> {
+    fn blend(&mut self, terms: &[SkinTerm]) {
         let mut mat = Matrix4::zero();
-        for term in terms {
-            let weight = term.2;
-            let stack_matrix = self.gpu.matrix_stack[term.0 as usize];
-            let inv_bind_matrix = self.model.inv_binds[term.1 as usize];
-            mat += weight * stack_matrix * inv_bind_matrix;
+        for &SkinTerm { weight, stack_pos, inv_bind_idx } in terms {
+            let stack_matrix = self.gpu.matrix_stack[stack_pos as usize];
+            let inv_bind_matrix = self.model.inv_binds[inv_bind_idx as usize];
+            mat += weight as f64 * stack_matrix * inv_bind_matrix;
         }
         self.gpu.cur_matrix = mat;
-
-        Ok(())
     }
 
-    fn scale_up(&mut self) -> Result<()> {
+    fn scale_up(&mut self) {
         self.gpu.mul_matrix(&Matrix4::from_scale(self.model.up_scale));
-        Ok(())
     }
 
-    fn scale_down(&mut self) -> Result<()> {
+    fn scale_down(&mut self) {
         self.gpu.mul_matrix(&Matrix4::from_scale(self.model.down_scale));
-        Ok(())
     }
 
-    fn draw(&mut self, mesh_id: u8, mat_id: u8) -> Result<()> {
-        let mat = &self.model.materials[mat_id as usize];
+    fn bind_material(&mut self, material_idx: u8) {
+        self.cur_material = material_idx;
+    }
+
+    fn draw(&mut self, mesh_idx: u8) {
+        let cur_material = self.cur_material;
+        let mat = &self.model.materials[cur_material as usize];
         let dim = (mat.width as u32, mat.height as u32);
         self.cur_texture_dim = dim;
         self.gpu.texture_matrix = mat.texture_mat;
 
-        self.begin_draw_call(mesh_id, mat_id);
-        run_gpu_cmds(self, &self.model.meshes[mesh_id as usize].commands)?;
+        self.begin_draw_call(mesh_idx, cur_material);
+        run_gpu_cmds(self, &self.model.meshes[mesh_idx as usize].commands);
         self.end_draw_call();
-
-        Ok(())
     }
 }
 
-fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) -> Result<()> {
+fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
     use nds::gpu_cmds::{CmdParser, GpuCmd};
     let interpreter = CmdParser::new(commands);
 
     for cmd_res in interpreter {
-        let cmd = cmd_res?;
-
-        match cmd {
+        if cmd_res.is_err() { break; }
+        match cmd_res.unwrap() {
             GpuCmd::Nop => (),
             GpuCmd::Restore { idx } => b.gpu.restore(idx as u8),
             GpuCmd::Scale { scale: (sx, sy, sz) } => {
@@ -247,6 +253,4 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) -> Result<()> {
             }
         }
     }
-
-    Ok(())
 }
