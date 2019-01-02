@@ -36,13 +36,16 @@ fn model_info(db: &Database, model_id: usize) {
     println!("  Up Scale: {:?}", model.up_scale);
     println!("  Down Scale: {:?}", model.down_scale);
     println!("  Num Meshes: {}", model.meshes.len());
-    println!("  Num Objects: {}", model.objects.len());
-    println!("  Num Materials: {}", model.materials.len());
-    println!("  Objects:");
+    println!("  Objects ({} total):", model.objects.len());
     for (i, object) in model.objects.iter().enumerate() {
-        println!("    Object {}: {:?}", i, object.name);
+        print!("    Object {}: {:?} ", i, object.name);
+        println!("({}{}{})",
+            object.trans.map(|_| "T").unwrap_or("-"),
+            object.rot.map(|_| "R").unwrap_or("-"),
+            object.scale.map(|_| "S").unwrap_or("-"),
+        );
     }
-    println!("  Materials:");
+    println!("  Materials ({} total):", model.materials.len());
     for (i, material) in model.materials.iter().enumerate() {
         println!("    Material {}:", i);
         if let Some(name) = material.texture_name {
