@@ -1,4 +1,4 @@
-use cgmath::{Matrix3, Matrix4, One, vec3};
+use cgmath::{Matrix3, Matrix4, One, vec3, Vector3};
 use errors::Result;
 use nitro::info_block;
 use nitro::Name;
@@ -8,6 +8,8 @@ use util::bits::BitField;
 use util::cur::Cur;
 use util::fixed::{fix16, fix32};
 
+/// NSBMD model. Consists of data like meshes and materials, and a list of
+/// rendering commands. Drawn by executing the rendering commands.
 pub struct Model {
     pub name: Name,
     pub materials: Vec<Material>,
@@ -17,31 +19,6 @@ pub struct Model {
     pub render_ops: Vec<Op>,
     pub up_scale: f64,
     pub down_scale: f64,
-}
-
-pub struct Material {
-    pub name: Name,
-    pub texture_name: Option<Name>,
-    pub palette_name: Option<Name>,
-    pub params: TextureParameters,
-    pub width: u16,
-    pub height: u16,
-    pub cull_backface: bool,
-    pub cull_frontface: bool,
-    pub texture_mat: Matrix4<f64>,
-}
-
-pub struct Mesh {
-    pub name: Name,
-    pub commands: Vec<u8>,
-}
-
-pub struct Object {
-    pub name: Name,
-    pub trans: [f64; 3],
-    pub rotation: Matrix3<f64>,
-    pub scale: [f64; 3],
-    pub xform: Matrix4<f64>,
 }
 
 pub fn read_model(cur: Cur, name: Name) -> Result<Model> {
@@ -54,7 +31,7 @@ pub fn read_model(cur: Cur, name: Name) -> Result<Model> {
         mesh_off: u32,
         inv_binds_off: u32,
         unknown1: [u8; 3],
-        num_objects: u8, //TODO maybe this is the number of inv bind mats?
+        num_objects: u8,
         num_materials: u8,
         num_meshes: u8,
         unknown2: [u8; 2],
@@ -113,6 +90,14 @@ fn validate_render_ops(model: &Model) -> Result<()> {
     Ok(())
 }
 
+/// A mesh is a "piece" of a model, containing the actual vertex/polygon data.
+/// It is really just a blob of NDS GPU commands, drawn by just submitting the
+/// blob to the GPU.
+pub struct Mesh {
+    pub name: Name,
+    pub gpu_commands: Vec<u8>,
+}
+
 fn read_meshes(cur: Cur) -> Result<Vec<Mesh>> {
     info_block::read::<u32>(cur)?
         .map(|(off, name)| read_mesh(cur + off, name))
@@ -126,22 +111,33 @@ fn read_mesh(cur: Cur, name: Name) -> Result<Mesh> {
         dummy: u16,
         section_size: u16,
         unknown: u32,
-        commands_off: u32,
-        commands_len: u32,
+        cmds_off: u32,
+        cmds_len: u32,
     });
 
     check!(section_size == 16)?;
-    check!(commands_len % 4 == 0)?;
+    check!(cmds_len % 4 == 0)?;
 
-    let commands = (cur + commands_off)
-        .next_n_u8s(commands_len as usize)?
+    let gpu_commands = (cur + cmds_off)
+        .next_n_u8s(cmds_len as usize)?
         .to_vec();
 
-    Ok(Mesh { name, commands })
+    Ok(Mesh { name, gpu_commands })
 }
 
-// Materials
-//////////////
+/// Material contains drawing state, eg. texture name, whether to cull
+/// backfacing polys, etc.
+pub struct Material {
+    pub name: Name,
+    pub texture_name: Option<Name>,
+    pub palette_name: Option<Name>,
+    pub params: TextureParameters,
+    pub width: u16,
+    pub height: u16,
+    pub cull_backface: bool,
+    pub cull_frontface: bool,
+    pub texture_mat: Matrix4<f64>,
+}
 
 fn read_materials(cur: Cur) -> Result<Vec<Material>> {
     fields!(cur, materials {
@@ -177,6 +173,11 @@ fn read_materials(cur: Cur) -> Result<Vec<Material>> {
             materials[mat_id as usize].palette_name = Some(name);
         }
     }
+
+    // NOTE: This apparently bizarre way of associating texture/palette names
+    // with materials suggests that there's something going on here we don't
+    // know about. Possibly related to whatever mechanism the run-time actually
+    // uses to resolve the names to the actual textures/palettes?
 
     Ok(materials)
 }
@@ -232,8 +233,18 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
     })
 }
 
-// Objects
-////////////
+/// An object, basically just a matrix, typically corresponding to a single bone
+/// in a skeleton. The value stored here is the rest pose. When the model is
+/// animated, its the object matrices that change.
+pub struct Object {
+    pub name: Name,
+    pub trans: Option<Vector3<f64>>,
+    pub rot: Option<Matrix3<f64>>,
+    pub scale: Option<Vector3<f64>>,
+
+    /// Matrix for the above TRS transform.
+    pub matrix: Matrix4<f64>,
+}
 
 fn read_objects(cur: Cur) -> Result<Vec<Object>> {
     info_block::read::<u32>(cur)?
@@ -258,54 +269,65 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
     // other rotation stuff?
     let m0 = cur.next::<u16>()?;
 
-    let mut trans = [0.0, 0.0, 0.0];
-    let mut rotation = Matrix3::one();
-    let mut scale = [1.0, 1.0, 1.0];
+    let mut trans = None;
+    let mut rot = None;
+    let mut scale = None;
 
     // Translation
     if t == 0 {
-        let xyz = cur.next_n::<u32>(3)?;
-        trans = [fx32(xyz.nth(0)), fx32(xyz.nth(1)), fx32(xyz.nth(2))];
+        let (x, y, z) = cur.next::<(u32, u32, u32)>()?;
+        trans = Some(vec3(fx32(x), fx32(y), fx32(z)));
     }
     trace!("trans: {:?}", trans);
 
-    // 3x3 Matrix (typically a rotation)
+    // 3x3 Matrix (typically rotation)
     if p == 1 {
         let a = fx16(cur.next::<u16>()?);
         let b = fx16(cur.next::<u16>()?);
         let select = flags.bits(4,8);
         let neg = flags.bits(8,12);
         use nitro::rotation::pivot_mat;
-        rotation = pivot_mat(select, neg, a, b);
+        rot = Some(pivot_mat(select, neg, a, b));
     } else if r == 0 {
         let m = cur.next_n::<u16>(8)?;
-        rotation = Matrix3::new(
+        rot = Some(Matrix3::new(
             fx16(m0), fx16(m.nth(0)), fx16(m.nth(1)),
             fx16(m.nth(2)), fx16(m.nth(3)), fx16(m.nth(4)),
             fx16(m.nth(5)), fx16(m.nth(6)), fx16(m.nth(7)),
-        );
+        ));
     }
-    trace!("rotation: {:?}", rotation);
+    trace!("rot: {:?}", rot);
 
     // Scale
     if s == 0 {
-        let xyz = cur.next_n::<u32>(3)?;
-        scale = [fx32(xyz.nth(0)), fx32(xyz.nth(1)), fx32(xyz.nth(2))];
+        let (x, y, z) = cur.next::<(u32, u32, u32)>()?;
+        scale = Some(vec3(fx32(x), fx32(y), fx32(z)));
     }
     trace!("scale: {:?}", scale);
 
-    let xform =
-        Matrix4::from_translation(vec3(trans[0], trans[1], trans[2])) *
-        Matrix4::from(rotation) *
-        Matrix4::from_nonuniform_scale(scale[0], scale[1], scale[2]);
+    // Compute TRS matrix
+    let mut matrix = Matrix4::one();
+    if let Some(s) = scale {
+        matrix = Matrix4::from_nonuniform_scale(s.x, s.y, s.z);
+    }
+    if let Some(r) = rot {
+        matrix = Matrix4::from(r) * matrix;
+    }
+    if let Some(t) = trans {
+        matrix = Matrix4::from_translation(t) * matrix;
+    }
 
-    Ok(Object { name, trans, rotation, scale, xform })
+    Ok(Object { name, trans, rot, scale, matrix })
 }
 
 
-// Inverse bind matrices
-//////////////////////////
-
+/// Read inverse bind matrices. Each seems to be the inverse bind matrix for the
+/// corresponding object (=bone) in the skeleton. A model only needs them if it
+/// uses skinning commands. Some models don't have them and other models don't
+/// need them but have them anyway.
+///
+/// We just read as many (up to num_objects) as we can get. (Thus why we don't
+/// need to return a Result.)
 fn read_inv_binds(mut cur: Cur, num_objects: usize) -> Vec<Matrix4<f64>> {
     // Each element in the inv bind array consists of
     // * one 4 x 3 matrix, the inverse of some local-to-world object
@@ -316,9 +338,6 @@ fn read_inv_binds(mut cur: Cur, num_objects: usize) -> Vec<Matrix4<f64>> {
 
     let mut inv_binds = Vec::<Matrix4<f64>>::with_capacity(num_objects);
     for _ in 0..num_objects {
-        // Sometimes there aren't num_objects matrices, so just take as many as we
-        // can. This doesn't matter since they might not even be used.
-        // (This is why this function doesn't return a Result.)
         if cur.bytes_remaining() < elem_size { break; }
 
         let entries = cur.next_n::<u32>(4*3).unwrap();

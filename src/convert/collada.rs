@@ -36,7 +36,7 @@ pub fn write<W: Write>(
     // inverse bind matrices.
     use convert::make_invertible::make_invertible;
     let objects = &model.objects.iter()
-        .map(|o| make_invertible(&o.xform))
+        .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
     let prims = &Primitives::build(model, objects)?;
     let skel = &Skeleton::build(model, objects)?;

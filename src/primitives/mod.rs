@@ -211,7 +211,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.gpu.texture_matrix = mat.texture_mat;
 
         self.begin_draw_call(mesh_idx, cur_material);
-        run_gpu_cmds(self, &self.model.meshes[mesh_idx as usize].commands);
+        run_gpu_cmds(self, &self.model.meshes[mesh_idx as usize].gpu_commands);
         self.end_draw_call();
     }
 }

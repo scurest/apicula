@@ -302,7 +302,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     fn draw(&mut self, mesh_id: u8) {
-        run_gpu_cmds(self, &self.model.meshes[mesh_id as usize].commands);
+        run_gpu_cmds(self, &self.model.meshes[mesh_id as usize].gpu_commands);
     }
 }
 

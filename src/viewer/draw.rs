@@ -190,7 +190,7 @@ impl GLPrimitives {
             } else {
                 // Just read them from the model file.
                 model.objects.iter()
-                    .map(|o| o.xform)
+                    .map(|o| o.matrix)
                     .collect()
             };
 
