@@ -3,7 +3,7 @@ use convert::format::{FnFmt, Mat};
 use convert::image_namer::ImageNamer;
 use db::{Database, ModelId};
 use errors::Result;
-use skeleton::{Skeleton, SymbolicTerm, Transform};
+use skeleton::{Skeleton, Transform, SMatrix};
 use primitives::Primitives;
 use nitro::Model;
 use petgraph::{Direction};
@@ -39,7 +39,7 @@ pub fn write<W: Write>(
         .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
     let prims = &Primitives::build(model, objects)?;
-    let skel = &Skeleton::build(model, objects)?;
+    let skel = &Skeleton::build(model, objects);
 
     let ctx = Ctx { model_id, model, db, image_namer, objects, prims, skel };
 
@@ -362,11 +362,11 @@ fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
         // use for this draw call into a list and reference them by index later on.
         // This is what `IncOrderSet` is for.
         all_joints.clear();
-        for j in &ctx.skel.vertices[vrange.clone()] {
-            for &SymbolicTerm { joint_id, .. } in &j.terms {
+        for v in &ctx.skel.vertices[vrange.clone()] {
+            for influence in &v.influences {
                 // Insert every joint which appears and all its ancestors.
-                all_joints.insert(joint_id);
-                let mut parents = ctx.skel.tree.neighbors_directed(joint_id, Direction::Incoming);
+                all_joints.insert(influence.joint);
+                let mut parents = ctx.skel.tree.neighbors_directed(influence.joint, Direction::Incoming);
                 while let Some(parent) = parents.next() {
                     all_joints.insert(parent);
                     parents = ctx.skel.tree.neighbors_directed(parent, Direction::Incoming)
@@ -404,7 +404,7 @@ fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             i = i, num_floats = 16 * all_joints.len(), num_joints = all_joints.len(),
             floats = FnFmt(|f| {
                 for &j in all_joints.iter() {
-                    let inv_bind = &ctx.skel.tree[j].inv_bind_matrix;
+                    let inv_bind = &ctx.skel.tree[j].rest_world_to_local;
                     write!(f, "{} ", Mat(inv_bind))?;
                 }
                 Ok(())
@@ -420,12 +420,12 @@ fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
         // `encode` and `decode`. There is likely not any loss of precision here
         // because weights are stored as 8-bit fixed point numbers in the Nitro
         // format and they aren't usually multiplied.
-        let encode = |x: f64| (x * 4096.0) as u32;
+        let encode = |x: f32| (x * 4096.0) as u32;
         let decode = |x: u32| x as f64 / 4096.0;
         all_weights.clear();
-        for j in &ctx.skel.vertices[vrange.clone()] {
-            for &SymbolicTerm { weight, .. } in &j.terms {
-                all_weights.insert(encode(weight));
+        for v in &ctx.skel.vertices[vrange.clone()] {
+            for influence in &v.influences {
+                all_weights.insert(encode(influence.weight));
             }
         }
 
@@ -465,17 +465,17 @@ fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             r##"        </vertex_weights>"##;
             i = i, num_verts = num_verts,
             vcount = FnFmt(|f| {
-                for j in &ctx.skel.vertices[vrange.clone()] {
-                    write!(f, "{} ", j.terms.len())?;
+                for v in &ctx.skel.vertices[vrange.clone()] {
+                    write!(f, "{} ", v.influences.len())?;
                 }
                 Ok(())
             }),
             v = FnFmt(|f| {
-                for j in &ctx.skel.vertices[vrange.clone()] {
-                    for &SymbolicTerm { weight, joint_id } in &j.terms {
+                for v in &ctx.skel.vertices[vrange.clone()] {
+                    for influence in &v.influences {
                         write!(f, "{} {} ",
-                            all_joints.get_index_from_value(&joint_id).unwrap(),
-                            all_weights.get_index_from_value(&encode(weight)).unwrap(),
+                            all_joints.get_index_from_value(&influence.joint).unwrap(),
+                            all_weights.get_index_from_value(&encode(influence.weight)).unwrap(),
                         )?;
                     }
                 }
@@ -519,8 +519,8 @@ fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
 
         for joint_id in ctx.skel.tree.node_indices() {
             let joint = &ctx.skel.tree[joint_id];
-            let object_id = match joint.transform {
-                Transform::Object(id) => id,
+            let object_id = match joint.local_to_parent {
+                Transform::SMatrix(SMatrix::Object { object_idx }) => object_idx,
                 _ => continue,
             };
 
@@ -715,10 +715,15 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
 
     /// Write the name for a joint that will appear in DCC programs.
     fn write_joint_name<W: Write>(w: &mut W, ctx: &Ctx, node: NodeIndex) -> fmt::Result {
-        match ctx.skel.tree[node].transform {
-            Transform::Root => write!(w, "__ROOT__"),
-            Transform::Object(id) => write!(w, "{}", ctx.model.objects[id as usize].name.print_safe()),
-            Transform::UninitializedSlot(id) => write!(w, "__UNINITIALIZED{}", id),
+        match ctx.skel.tree[node].local_to_parent {
+            Transform::Root =>
+                write!(w, "__ROOT__"),
+            Transform::SMatrix(SMatrix::Object { object_idx }) =>
+                write!(w, "{}", ctx.model.objects[object_idx as usize].name.print_safe()),
+            Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) =>
+                write!(w, "__INV_BIND{}", inv_bind_idx),
+            Transform::SMatrix(SMatrix::Uninitialized { stack_pos }) =>
+                write!(w, "__UNINITIALIZED{}", stack_pos),
         }
     }
 
@@ -732,10 +737,15 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             name = FnFmt(|f| write_joint_name(f, ctx, node)),
         )?;
 
-        let mat = match tree[node].transform {
-            Transform::Root => Matrix4::one(),
-            Transform::Object(id) => ctx.objects[id as usize],
-            Transform::UninitializedSlot(_) => Matrix4::one(),
+        let mat = match tree[node].local_to_parent {
+            Transform::Root =>
+                Matrix4::one(),
+            Transform::SMatrix(SMatrix::Object { object_idx }) =>
+                ctx.objects[object_idx as usize],
+            Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) =>
+                ctx.model.inv_binds[inv_bind_idx as usize],
+            Transform::SMatrix(SMatrix::Uninitialized { .. }) =>
+                Matrix4::one(),
         };
         write_indent(w, indent + 1)?;
         write_lines!(w, r#"<matrix sid="transform">{}</matrix>"#; Mat(&mat))?;

@@ -15,6 +15,7 @@ extern crate png as png_crate;
 extern crate regex;
 extern crate termcolor;
 extern crate atty;
+extern crate smallvec;
 
 #[macro_use]
 mod errors;
