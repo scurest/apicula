@@ -1,4 +1,9 @@
-//! Decodes formats for 3x3 matrices (usually rotations).
+//! Decodes formats for rotations.
+//!
+//! Rotations are always stored as a 3x3 matrix (probably for speed; the NDS
+//! probably wasn't fast enough to convert Euler angles or quaternions to
+//! matrices on the fly). This also means that a "rotation" matrix might not
+//! actually be a rotation (ie. orthogonal of determinant +1).
 
 use cgmath::{Matrix3, vec3};
 use util::bits::BitField;
