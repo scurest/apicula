@@ -52,7 +52,7 @@ impl ImageNamer {
             };
 
             // Direct color textures don't need a palette.
-            if texture.params.format == 7 {
+            if !texture.params.format().desc().requires_palette {
                 guess((texture_id, None));
                 continue;
             }

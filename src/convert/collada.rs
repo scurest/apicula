@@ -174,8 +174,8 @@ fn write_library_effects<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
                 r##"          </sampler2D>"##,
                 r##"        </newparam>"##;
                 image_name = name,
-                wrap_s = wrap(mat.params.repeat_s, mat.params.mirror_s),
-                wrap_t = wrap(mat.params.repeat_t, mat.params.mirror_t),
+                wrap_s = wrap(mat.params.repeat_s(), mat.params.mirror_s()),
+                wrap_t = wrap(mat.params.repeat_t(), mat.params.mirror_t()),
             )?;
         }
 

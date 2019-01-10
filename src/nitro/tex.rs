@@ -1,13 +1,13 @@
 use std::rc::Rc;
 use nitro::Name;
 use nitro::info_block;
-use util::bits::BitField;
 use errors::Result;
 use util::cur::Cur;
+use nds::TextureParams;
 
 pub struct Texture {
     pub name: Name,
-    pub params: TextureParameters,
+    pub params: TextureParams,
     pub tex_data: Rc<TexData>,
 }
 
@@ -68,7 +68,7 @@ pub fn read_tex(cur: Cur) -> Result<(Vec<Texture>, Vec<Palette>)> {
         info_block::read::<(u32, u32)>(cur + texture_off)?
         .map(|((params, _), name)| {
             debug!("texture: {:?}", name);
-            let params = TextureParameters::from_u32(params);
+            let params = TextureParams(params);
             trace!("params: {:?}", params);
             Texture { name, params, tex_data: Rc::clone(&tex_data) }
         })
@@ -85,39 +85,4 @@ pub fn read_tex(cur: Cur) -> Result<(Vec<Texture>, Vec<Palette>)> {
 
 
     Ok((textures, palettes))
-}
-
-#[derive(Debug)]
-pub struct TextureParameters {
-    pub offset: u32,
-    pub repeat_s: bool,
-    pub repeat_t: bool,
-    pub mirror_s: bool,
-    pub mirror_t: bool,
-    pub width: u32,
-    pub height: u32,
-    pub format: u8,
-    pub is_color0_transparent: bool,
-    pub texcoord_transform_mode: u8,
-}
-
-impl TextureParameters {
-    pub fn from_u32(x: u32) -> TextureParameters {
-        let offset = x.bits(0,16) << 3;
-        let repeat_s = x.bits(16,17) != 0;
-        let repeat_t = x.bits(17,18) != 0;
-        let mirror_s = x.bits(18,19) != 0;
-        let mirror_t = x.bits(19,20) != 0;
-        let width = 8 << x.bits(20,23);
-        let height = 8 << x.bits(23,26);
-        let format = x.bits(26,29) as u8;
-        let is_color0_transparent = x.bits(29,30) != 0;
-        let texcoord_transform_mode = x.bits(30,32) as u8;
-
-        TextureParameters {
-            offset, repeat_s, repeat_t, mirror_s, mirror_t,
-            width, height, format, is_color0_transparent,
-            texcoord_transform_mode,
-        }
-    }
 }

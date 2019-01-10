@@ -77,7 +77,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
         use png::write_rgba;
         let path = out_dir.join(&format!("{}.png", image_name));
-        match write_rgba(&path, &rgba[..], texture.params.width, texture.params.height) {
+        match write_rgba(&path, &rgba[..], texture.params.width(), texture.params.height()) {
             Ok(()) => { pngs_written += 1; }
             Err(e) => error!("failed to write {}: {}", path.to_string_lossy(), e),
         }

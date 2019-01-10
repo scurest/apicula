@@ -27,5 +27,4 @@ pub use self::container::Container;
 pub use self::model::Model;
 pub use self::tex::Texture;
 pub use self::tex::Palette;
-pub use self::tex::TextureParameters;
 pub use self::animation::Animation;

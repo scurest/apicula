@@ -2,7 +2,7 @@ use cgmath::{Matrix3, Matrix4, One, vec3, Vector3};
 use errors::Result;
 use nitro::info_block;
 use nitro::Name;
-use nitro::TextureParameters;
+use nds::TextureParams;
 use nitro::render_cmds::Op;
 use util::bits::BitField;
 use util::cur::Cur;
@@ -131,7 +131,7 @@ pub struct Material {
     pub name: Name,
     pub texture_name: Option<Name>,
     pub palette_name: Option<Name>,
-    pub params: TextureParameters,
+    pub params: TextureParams,
     pub width: u16,
     pub height: u16,
     pub cull_backface: bool,
@@ -202,7 +202,7 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
         end: Cur,
     });
 
-    let params = TextureParameters::from_u32(params);
+    let params = TextureParams(params);
 
     let cull_backface = polygon_attr.bits(6,7) == 0;
     let cull_frontface = polygon_attr.bits(7,8) == 0;

@@ -5,9 +5,9 @@ use util::cur::Cur;
 
 pub fn decode(texture: &Texture, palette: Option<&Palette>) -> Result<Vec<u8>>
 {
-    let w = texture.params.width as usize;
-    let h = texture.params.height as usize;
-    let format = texture.params.format;
+    let w = texture.params.width() as usize;
+    let h = texture.params.height() as usize;
+    let format = texture.params.format().0;
     let mut state = DecodeState {
         rgba: vec![0; 4 * w * h],
         idx: 0,
@@ -80,9 +80,9 @@ fn decode_format7(state: &mut DecodeState, texture: &Texture) {
     // Direct Color Texture
     // Holds actual 16-bit color values (no palette)
 
-    let offset = texture.params.offset as usize;
-    let width = texture.params.width as usize;
-    let height = texture.params.height as usize;
+    let offset = texture.params.offset() as usize;
+    let width = texture.params.width() as usize;
+    let height = texture.params.height() as usize;
 
     let data =
         Cur::from_buf_pos(&texture.tex_data.texture_data, offset);
@@ -101,16 +101,14 @@ fn decode_format7(state: &mut DecodeState, texture: &Texture) {
 
 
 fn decode_paletted(state: &mut DecodeState, texture: &Texture, palette: &Palette) {
-    let texture_off = texture.params.offset as usize;
-    let width = texture.params.width as usize;
-    let height = texture.params.height as usize;
-    let format = texture.params.format;
-    let color0_is_transparent = texture.params.is_color0_transparent;
+    let texture_off = texture.params.offset() as usize;
+    let width = texture.params.width();
+    let height = texture.params.height();
+    let format = texture.params.format().0;
+    let color0_is_transparent = texture.params.is_color0_transparent();
     let palette_off = palette.off as usize;
 
-    static BPPS: [u8; 7] = [0, 8, 2, 4, 8, 0, 8];
-    let bpp = BPPS[format as usize] as usize;
-    let size = width * height * bpp / 8; // number of bytes of texture data
+    let size = texture.params.format().byte_len((width, height));
 
     let data =
         Cur::from_buf_pos(&palette.tex_data.texture_data, texture_off);
@@ -195,9 +193,9 @@ fn decode_paletted(state: &mut DecodeState, texture: &Texture, palette: &Palette
 }
 
 fn decode_compressed(state: &mut DecodeState, texture: &Texture, palette: &Palette) {
-    let texture_off = texture.params.offset as usize;
-    let width = texture.params.width as usize;
-    let height = texture.params.height as usize;
+    let texture_off = texture.params.offset() as usize;
+    let width = texture.params.width() as usize;
+    let height = texture.params.height() as usize;
     let palette_off = palette.off as usize;
     let num_blocks_x = width / 4;
 

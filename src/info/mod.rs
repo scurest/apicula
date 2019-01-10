@@ -86,27 +86,15 @@ fn texture_info(db: &Database, texture_id: usize) {
     println!("  Name: {:?}", texture.name);
     println!("  Found In: {}",
         db.file_paths[db.textures_found_in[texture_id]].to_string_lossy());
-    println!("  Offset: {:#x}", texture.params.offset);
-    println!("  Repeat S: {}", texture.params.repeat_s);
-    println!("  Repeat T: {}", texture.params.repeat_t);
-    println!("  Mirror S: {}", texture.params.mirror_s);
-    println!("  Mirror T: {}", texture.params.mirror_t);
-    println!("  Width: {}", texture.params.width);
-    println!("  Height: {}", texture.params.height);
-    println!("  Format: {} ({})", texture.params.format,
-        match texture.params.format {
-            1 => "32-color, 8-level alpha",
-            2 => "4-color",
-            3 => "16-color",
-            4 => "256-color",
-            5 => "compressed",
-            6 => "8-color, 32-level alpha",
-            7 => "direct color",
-            _ => "??",
-        }
-    );
-    println!("  Color 0 Transparent?: {}", texture.params.is_color0_transparent);
-    println!("  Texcoord Transform Mode: {}", texture.params.texcoord_transform_mode);
+
+    let params = &texture.params;
+    println!("  Dimensions: {}x{}", params.width(), params.height());
+    println!("  Offset: {:#x}", params.offset());
+    println!("  Repeat (s,t): ({}, {})", params.repeat_s(), params.repeat_t());
+    println!("  Mirror (s,t): ({}, {})", params.mirror_s(), params.mirror_t());
+    println!("  Format: {} ({})", params.format().0, params.format().desc().name);
+    println!("  Color 0 Transparent?: {}", params.is_color0_transparent());
+    println!("  Texcoord Transform Mode: {}", params.texcoord_transform_mode());
     println!();
 }
 

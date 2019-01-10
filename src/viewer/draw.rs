@@ -116,8 +116,8 @@ impl DrawingData {
                         }
                     };
                     let params = &material.params;
-                    s.1.wrap_function.0 = wrap_fn(params.repeat_s, params.mirror_s);
-                    s.1.wrap_function.1 = wrap_fn(params.repeat_t, params.mirror_t);
+                    s.1.wrap_function.0 = wrap_fn(params.repeat_s(), params.mirror_s());
+                    s.1.wrap_function.1 = wrap_fn(params.repeat_t(), params.mirror_t());
 
                     s
                 };
@@ -234,7 +234,7 @@ fn build_textures(display: &glium::Display, db: &Database, model_id: usize)
 
                     let rgba = decode(texture, palette)?;
 
-                    let dim = (texture.params.width, texture.params.height);
+                    let dim = (texture.params.width(), texture.params.height());
                     let image = RawImage2d::from_raw_rgba_reversed(&rgba, dim);
                     Ok(Some(Texture2d::new(display, image)?))
                 }
