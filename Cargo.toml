@@ -2,7 +2,7 @@
 name = "apicula"
 version = "0.1.1-dev"
 authors = ["scurest <scurest@users.noreply.github.com>"]
-license = "CC0-1.0"
+license = "0BSD"
 build = "build.rs"
 
 [dependencies]

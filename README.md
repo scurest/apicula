@@ -99,4 +99,4 @@ If you can test in others (Maya, 3DS Max), that would be appreciated :)
 
 ## License
 
-CC0
+0BSD
