@@ -18,7 +18,6 @@ pub mod animation;
 pub mod container;
 pub mod name;
 pub mod render_cmds;
-pub mod decode_image;
 mod info_block;
 mod rotation;
 

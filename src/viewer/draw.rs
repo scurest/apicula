@@ -226,16 +226,16 @@ fn build_textures(display: &glium::Display, db: &Database, model_id: usize)
                 ImageDesc::NoImage => Ok(None),
                 ImageDesc::Missing => bail!("texture/palette missing"),
                 ImageDesc::Image { texture_id, palette_id } => {
-                    use nitro::decode_image::decode;
+                    use nds::decode_texture;
                     use glium::texture::RawImage2d;
 
                     let texture = &db.textures[texture_id];
                     let palette = palette_id.map(|id| &db.palettes[id]);
 
-                    let rgba = decode(texture, palette)?;
+                    let rgba = decode_texture(texture, palette)?;
 
-                    let dim = (texture.params.width(), texture.params.height());
-                    let image = RawImage2d::from_raw_rgba_reversed(&rgba, dim);
+                    let dim = texture.params.dim();
+                    let image = RawImage2d::from_raw_rgba_reversed(&rgba.0, dim);
                     Ok(Some(Texture2d::new(display, image)?))
                 }
             }

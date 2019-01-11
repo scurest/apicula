@@ -12,6 +12,7 @@ impl TextureParams {
     pub fn mirror_t(self) -> bool { self.0.bits(19,20) != 0 }
     pub fn width(self) -> u32 { 8 << self.0.bits(20,23) }
     pub fn height(self) -> u32 { 8 << self.0.bits(23,26) }
+    pub fn dim(self) -> (u32, u32) { (self.width(), self.height()) }
     pub fn format(self) -> TextureFormat { TextureFormat(self.0.bits(26,29) as u8) }
     pub fn is_color0_transparent(self) -> bool { self.0.bits(29,30) != 0 }
     pub fn texcoord_transform_mode(self) -> u8 { self.0.bits(30,32) as u8 }

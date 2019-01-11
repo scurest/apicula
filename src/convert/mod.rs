@@ -66,8 +66,8 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         let texture = &db.textures[texture_id];
         let palette = palette_id.map(|id| &db.palettes[id]);
 
-        use nitro::decode_image::decode;
-        let rgba = match decode(texture, palette) {
+        use nds::decode_texture;
+        let rgba = match decode_texture(texture, palette) {
             Ok(rgba) => rgba,
             Err(e) => {
                 error!("error generating image {}, error: {}", image_name, e);
@@ -77,7 +77,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
         use png::write_rgba;
         let path = out_dir.join(&format!("{}.png", image_name));
-        match write_rgba(&path, &rgba[..], texture.params.width(), texture.params.height()) {
+        match write_rgba(&path, &rgba.0[..], texture.params.width(), texture.params.height()) {
             Ok(()) => { pngs_written += 1; }
             Err(e) => error!("failed to write {}: {}", path.to_string_lossy(), e),
         }
