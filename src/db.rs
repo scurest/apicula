@@ -10,7 +10,6 @@ pub type ModelId = usize;
 pub type TextureId = usize;
 pub type PaletteId = usize;
 pub type AnimationId = usize;
-pub type MaterialId = usize;
 
 #[derive(Default)]
 pub struct Database {
@@ -27,23 +26,8 @@ pub struct Database {
     pub palettes_found_in: Vec<FileId>,
     pub animations_found_in: Vec<FileId>,
 
-    pub material_table: HashMap<(ModelId, MaterialId), ImageDesc>,
-
     pub textures_by_name: HashMap<Name, Vec<TextureId>>,
     pub palettes_by_name: HashMap<Name, Vec<PaletteId>>,
-
-    /// If this is true, the heuristic that an animation applies to a model only
-    /// if they have the same number of objects is disabled.
-    pub apply_any_animation: bool,
-}
-
-pub enum ImageDesc {
-    NoImage,
-    Image {
-        texture_id: TextureId,
-        palette_id: Option<PaletteId>,
-    },
-    Missing,
 }
 
 impl Database {
@@ -54,14 +38,9 @@ impl Database {
             .map(PathBuf::from)
             .collect();
 
-        let apply_any_animation =
-            matches
-            .is_present("apply_any_animation");
-
         use std::default::Default;
         let mut db: Database = Default::default();
         db.build(file_paths)?;
-        db.apply_any_animation = apply_any_animation;
         Ok(db)
     }
 
@@ -107,8 +86,6 @@ impl Database {
         }
 
         self.build_by_name_maps();
-        self.build_material_table();
-
         Ok(())
     }
 
@@ -149,112 +126,6 @@ impl Database {
                 .or_insert(vec![])
                 .push(id);
         }
-    }
-
-    fn build_material_table(&mut self) {
-        let mut missing = false;
-        let mut clash = false;
-
-        for (model_id, model) in self.models.iter().enumerate() {
-            let file_id = self.models_found_in[model_id];
-            for (material_id, material) in model.materials.iter().enumerate() {
-                let desc =
-                    if material.texture_name.is_none() {
-                        ImageDesc::NoImage
-                    } else {
-                        let texture_name = material.texture_name.as_ref().unwrap();
-
-                        let best_texture = self.find_best_texture(texture_name, file_id, &mut clash);
-                        let best_palette = material.palette_name
-                            .and_then(|ref name| self.find_best_palette(name, file_id, &mut clash));
-
-                        match best_texture {
-                            None => {
-                                missing = true;
-                                ImageDesc::Missing
-                            }
-                            Some(texture_id) => ImageDesc::Image {
-                                texture_id, palette_id: best_palette,
-                            }
-                        }
-                    };
-                self.material_table.insert((model_id, material_id), desc);
-            }
-        }
-
-        if missing {
-            warn!("couldn't find a texture/palette for some materials. Some textures \
-                may be missing in your model.");
-            info!("to fix this, try providing more files (textures may be stored in a \
-                separate .nsbtx file)");
-        }
-        if clash {
-            warn!("there were multiple textures/palettes with the same name. The \
-                one we picked might not be the right one. Some textures may be wrong \
-                in your model.");
-            info!("to fix this, try providing fewer files at once");
-        }
-    }
-
-    // The next two functions look for the best texture/palette of a given name.
-    // Ones in the same file as the model we're looking at are considered better
-    // than ones that aren't. The `clash` variable is set to true if there are
-    // multiple possible candidates that are as good as one another.
-
-    fn find_best_texture(&self, name: &Name, file_id: FileId, clash: &mut bool)
-    -> Option<TextureId> {
-        let candidates = self.textures_by_name.get(name)?;
-
-        if candidates.len() == 1 { return Some(candidates[0]); }
-
-        // Try to find one from the same file first.
-        let mut candidates_from_same_file = candidates.iter()
-            .filter(|&&id| self.textures_found_in[id] == file_id);
-        if let Some(&can) = candidates_from_same_file.next() {
-            if candidates_from_same_file.next().is_some() {
-                *clash = true;
-                warn!("multiple textures named {:?} in the same file", name);
-            }
-            return Some(can);
-        }
-
-        // Just give the first one
-        *clash = true;
-        warn!("multiple textures named {:?}; using the first one", name);
-        Some(candidates[0])
-    }
-
-    fn find_best_palette(&self, name: &Name, file_id: FileId, clash: &mut bool)
-    -> Option<PaletteId> {
-        let candidates = self.palettes_by_name.get(name)?;
-
-        if candidates.len() == 1 { return Some(candidates[0]); }
-
-        // Try to find one from the same file first.
-        let mut candidates_from_same_file = candidates.iter()
-            .filter(|&&id| self.palettes_found_in[id] == file_id);
-        if let Some(&can) = candidates_from_same_file.next() {
-            if candidates_from_same_file.next().is_some() {
-                *clash = true;
-                warn!("multiple palettes named {:?} in the same file", name);
-            }
-            return Some(can);
-        }
-
-        // Just give the first one
-        *clash = true;
-        warn!("multiple palettes named {:?}; using the first one", name);
-        Some(candidates[0])
-    }
-
-    /// Can we apply the given animation to the given model?
-    ///
-    /// The default heuristic is "yes" if have the same number of objects.
-    pub fn can_apply_anim(&self, model_id: ModelId, anim_id: AnimationId) -> bool {
-        if self.apply_any_animation { return true; }
-        let model_num_objs = self.models[model_id].objects.len();
-        let anim_num_objs = self.animations[anim_id].objects_curves.len();
-        model_num_objs == anim_num_objs
     }
 }
 

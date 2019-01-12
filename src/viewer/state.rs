@@ -1,4 +1,5 @@
 use db::Database;
+use connection::Connection;
 use std::ops::Range;
 use viewer::eye::Eye;
 
@@ -16,7 +17,8 @@ pub struct ViewState {
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct AnimState {
-    pub anim_id: usize,
+    /// Index of the animation ID in the ModelConnection's animation list.
+    pub anim_id_idx: usize,
     pub cur_frame: u16,
 }
 
@@ -44,39 +46,28 @@ impl ViewState {
         self.anim_state = None;
     }
 
-    pub fn advance_anim(&mut self, db: &Database, dir: Dir) {
-        let num_animations = db.animations.len();
-        let model_id = self.model_id;
+    pub fn advance_anim(&mut self, conn: &Connection, dir: Dir) {
+        let animations = &conn.models[self.model_id].animations;
 
-        // Represent anim_id as anim_id+1, freeing up 0 to represent "no animation".
-        let mut id = self.anim_state.as_ref()
-            .map(|anim_state| anim_state.anim_id + 1)
+        // Represent anim_id_idx as anim_id_idx+1, freeing up 0 to represent "no
+        // animation".
+        let idx = self.anim_state.as_ref()
+            .map(|anim_state| anim_state.anim_id_idx + 1)
             .unwrap_or(0);
-
-        // Check whether we can apply the animation to this model.
-        let is_good = |id: usize| {
-            // No animation -- can always apply.
-            if id == 0 { return true; }
-
-            db.can_apply_anim(model_id, id - 1)
-        };
-
-        loop {
-            id = advance(id, 0..num_animations + 1, dir);
-            if is_good(id) { break; }
-        }
-
+        let new_idx = advance(idx, 0..animations.len() + 1, dir);
         self.anim_state =
-            if id == 0 {
+            if new_idx == 0 {
                 None
             } else {
-                Some(AnimState { anim_id: id - 1, cur_frame: 0 })
+                Some(AnimState { anim_id_idx: new_idx - 1, cur_frame: 0 })
             };
     }
 
-    pub fn next_frame(&mut self, db: &Database) {
+    pub fn next_frame(&mut self, db: &Database, conn: &Connection) {
+        let model_id = self.model_id;
         self.anim_state.as_mut().map(|anim_state| {
-            let anim = &db.animations[anim_state.anim_id];
+            let anim_id = conn.models[model_id].animations[anim_state.anim_id_idx];
+            let anim = &db.animations[anim_id];
 
             anim_state.cur_frame += 1;
             if anim_state.cur_frame >= anim.num_frames {

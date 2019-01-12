@@ -22,15 +22,20 @@ use viewer::gl_context::GlContext;
 use viewer::mouse::{GrabState, MouseState};
 use viewer::speed::SpeedLevel;
 use viewer::state::{Dir, ViewState};
+use connection::{Connection, ConnectionOptions};
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let db = Database::from_arg_matches(matches)?;
     db.print_status();
-    run_viewer(db)?;
+
+    let conn_options = ConnectionOptions::from_arg_matches(matches);
+    let conn = Connection::build(&db, conn_options);
+
+    run_viewer(db, conn)?;
     Ok(())
 }
 
-fn run_viewer(db: Database) -> Result<()> {
+fn run_viewer(db: Database, conn: Connection) -> Result<()> {
     if db.models.is_empty() {
         println!("No models. Nothing to do.\n");
         return Ok(());
@@ -39,7 +44,7 @@ fn run_viewer(db: Database) -> Result<()> {
     print_controls();
 
     let mut events_loop = EventsLoop::new();
-    let mut ui = Ui::new(db, &events_loop)?;
+    let mut ui = Ui::new(db, conn, &events_loop)?;
 
     let mut cur_time = time::precise_time_s();
     let mut last_time;
@@ -116,9 +121,9 @@ fn run_viewer(db: Database) -> Result<()> {
 
                         // Change animation
                         (Pressed, K::O) =>
-                            ui.view_state.advance_anim(&ui.db, Dir::Prev),
+                            ui.view_state.advance_anim(&ui.conn, Dir::Prev),
                         (Pressed, K::P) =>
-                            ui.view_state.advance_anim(&ui.db, Dir::Next),
+                            ui.view_state.advance_anim(&ui.conn, Dir::Next),
 
                         _ => ()
                     }
@@ -204,7 +209,7 @@ fn run_viewer(db: Database) -> Result<()> {
             let mut time_since_last_frame = cur_time - *last_anim_time;
             if time_since_last_frame > frame_length {
                 while time_since_last_frame > frame_length {
-                    ui.view_state.next_frame(&ui.db);
+                    ui.view_state.next_frame(&ui.db, &ui.conn);
                     time_since_last_frame -= frame_length;
                 }
                 *last_anim_time = cur_time;
@@ -239,6 +244,7 @@ fn print_controls() {
 
 struct Ui {
     db: Database,
+    conn: Connection,
     ctx: GlContext,
     view_state: ViewState,
     drawing_data: DrawingData,
@@ -250,7 +256,7 @@ struct Ui {
 }
 
 impl Ui {
-    fn new(db: Database, events_loop: &EventsLoop) -> Result<Ui> {
+    fn new(db: Database, conn: Connection, events_loop: &EventsLoop) -> Result<Ui> {
         let window = glium::glutin::WindowBuilder::new()
             .with_dimensions(512, 384); // 2x DS resolution
         let context = glium::glutin::ContextBuilder::new()
@@ -272,7 +278,7 @@ impl Ui {
         };
 
         let drawing_data =
-            DrawingData::from_view_state(&ctx.display, &db, &view_state);
+            DrawingData::from_view_state(&ctx.display, &db, &conn, &view_state);
 
         let win_title = String::new();
         let mouse = MouseState::new();
@@ -282,6 +288,7 @@ impl Ui {
 
         Ok(Ui {
             db,
+            conn,
             ctx,
             view_state,
             drawing_data,
@@ -294,7 +301,7 @@ impl Ui {
     }
 
     fn draw_frame(&mut self) {
-        self.drawing_data.change_view_state(&self.ctx.display, &self.db, &self.view_state);
+        self.drawing_data.change_view_state(&self.ctx.display, &self.db, &self.conn, &self.view_state);
 
         let mut target = self.ctx.display.draw();
 
@@ -323,10 +330,12 @@ impl Ui {
             num_models = self.db.models.len(),
         ).unwrap();
         if let Some(ref anim_state) = self.view_state.anim_state {
-            let anim = &self.db.animations[anim_state.anim_id];
+            let anim_id = self.conn.models[self.view_state.model_id]
+                .animations[anim_state.anim_id_idx];
+            let anim = &self.db.animations[anim_id];
             write!(&mut self.win_title, "{anim_name}[{anim_num}/{num_anims}] ({cur_frame}/{num_frames}) === ",
                 anim_name = anim.name,
-                anim_num = anim_state.anim_id + 1,
+                anim_num = anim_id + 1,
                 num_anims = self.db.animations.len(),
                 cur_frame = anim_state.cur_frame + 1,
                 num_frames = anim.num_frames,

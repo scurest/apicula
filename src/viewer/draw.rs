@@ -6,6 +6,7 @@ use glium::texture::Texture2d;
 use viewer::gl_context::GlContext;
 use viewer::state::ViewState;
 use db::Database;
+use connection::Connection;
 
 
 /// GL data needed to render the scene.
@@ -34,12 +35,13 @@ impl DrawingData {
     pub fn from_view_state(
         display: &Display,
         db: &Database,
+        conn: &Connection,
         view_state: &ViewState,
     ) -> DrawingData {
         let gl_prims =
-            GLPrimitives::from_view_state(display, db, view_state);
+            GLPrimitives::from_view_state(display, db, conn, view_state);
         let textures =
-            build_textures(display, db, view_state.model_id);
+            build_textures(display, db, conn, view_state.model_id);
         DrawingData { gl_prims, textures, view_state: view_state.clone() }
     }
 
@@ -53,12 +55,13 @@ impl DrawingData {
         &mut self,
         display: &Display,
         db: &Database,
+        conn: &Connection,
         new_view_state: &ViewState,
     ) {
         let model_changed = self.view_state.model_id != new_view_state.model_id;
         if model_changed {
             // Regen everything from scratch
-            *self = DrawingData::from_view_state(display, db, new_view_state);
+            *self = DrawingData::from_view_state(display, db, conn, new_view_state);
             return;
         }
 
@@ -66,7 +69,7 @@ impl DrawingData {
         if anim_changed {
             // We can reuse the textures.
             self.gl_prims =
-                GLPrimitives::from_view_state(display, db, new_view_state);
+                GLPrimitives::from_view_state(display, db, conn, new_view_state);
             self.view_state = new_view_state.clone();
             return;
         }
@@ -169,6 +172,7 @@ impl GLPrimitives {
     fn from_view_state(
         display: &glium::Display,
         db: &Database,
+        conn: &Connection,
         view_state: &ViewState,
     ) -> Result<GLPrimitives>
     {
@@ -178,7 +182,9 @@ impl GLPrimitives {
             if let Some(ref anim_state) = view_state.anim_state {
                 // Get the object matrices by sampling the curves in the
                 // animation, padding with the identity is there aren't enough.
-                let anim = &db.animations[anim_state.anim_id];
+                let anim_id = conn.models[view_state.model_id]
+                    .animations[anim_state.anim_id_idx];
+                let anim = &db.animations[anim_id];
                 (0..model.objects.len())
                     .map(|i| {
                         use cgmath::One;
@@ -212,33 +218,29 @@ impl GLPrimitives {
 }
 
 
-fn build_textures(display: &glium::Display, db: &Database, model_id: usize)
+fn build_textures(display: &glium::Display, db: &Database, conn: &Connection, model_id: usize)
 -> Vec<Result<Option<Texture2d>>> {
     let num_materials = db.models[model_id].materials.len();
     (0..num_materials)
-        .map(|material_id| {
-            use db::ImageDesc;
+        .map(|material_id| -> Result<Option<Texture2d>> {
+            let maybe_image_id = conn.models[model_id].materials[material_id].image_id()?;
 
-            // The right texture/palette were already computed when the DB was
-            // built. Just look them up in the table.
+            let (texture_id, palette_id) = match maybe_image_id {
+                Some(image_id) => image_id,
+                None => return Ok(None),
+            };
 
-            match db.material_table[&(model_id, material_id)] {
-                ImageDesc::NoImage => Ok(None),
-                ImageDesc::Missing => bail!("texture/palette missing"),
-                ImageDesc::Image { texture_id, palette_id } => {
-                    use nds::decode_texture;
-                    use glium::texture::RawImage2d;
+            use nds::decode_texture;
+            use glium::texture::RawImage2d;
 
-                    let texture = &db.textures[texture_id];
-                    let palette = palette_id.map(|id| &db.palettes[id]);
+            let texture = &db.textures[texture_id];
+            let palette = palette_id.map(|id| &db.palettes[id]);
 
-                    let rgba = decode_texture(texture, palette)?;
+            let rgba = decode_texture(texture, palette)?;
 
-                    let dim = texture.params.dim();
-                    let image = RawImage2d::from_raw_rgba_reversed(&rgba.0, dim);
-                    Ok(Some(Texture2d::new(display, image)?))
-                }
-            }
+            let dim = texture.params.dim();
+            let image = RawImage2d::from_raw_rgba_reversed(&rgba.0, dim);
+            Ok(Some(Texture2d::new(display, image)?))
         })
         .collect()
 }
