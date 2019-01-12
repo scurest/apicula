@@ -5,13 +5,10 @@
 //! (as opposed to the raw mesh data which is just a chunk of NDS-specific GPU
 //! commands).
 //!
-//! This is then further  consumed by both the viewer and the COLLADA writer.
-
-mod index_builder;
+//! This is then further consumed by both the viewer and the COLLADA writer.
 
 use cgmath::{Matrix4, Point2, Transform, vec4, Zero};
 use errors::Result;
-use primitives::index_builder::IndexBuilder;
 use nitro::Model;
 use nitro::render_cmds::SkinTerm;
 use std::default::Default;
@@ -115,11 +112,15 @@ struct Builder<'a, 'b> {
     cur_texture_dim: (u32, u32),
     cur_material: u8,
     vertices: Vec<Vertex>,
-    ind_builder: IndexBuilder,
+    indices: Vec<u16>,
     draw_calls: Vec<DrawCall>,
+
+    first_vertex_in_prim: u16,
+    prim_type: u32,
 
     cur_draw_call: DrawCall,
     next_vertex: Vertex,
+
 }
 
 impl<'a, 'b> Builder<'a, 'b> {
@@ -129,7 +130,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             objects,
             gpu: GpuState::new(),
             vertices: vec![],
-            ind_builder: IndexBuilder::new(),
+            indices: vec![],
             draw_calls: vec![],
             cur_material: 0,
             cur_draw_call: DrawCall {
@@ -139,6 +140,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                 mesh_id: 0,
             },
             cur_texture_dim: (1,1),
+            prim_type: 0,
+            first_vertex_in_prim: 0,
             next_vertex: Default::default(),
         }
     }
@@ -146,17 +149,20 @@ impl<'a, 'b> Builder<'a, 'b> {
     fn begin_draw_call(&mut self, mesh_id: u8, mat_id: u8) {
         let len = self.vertices.len() as u16;
         self.cur_draw_call.vertex_range = len .. len;
-        let len = self.ind_builder.indices.len();
+        let len = self.indices.len();
         self.cur_draw_call.index_range = len .. len;
         self.cur_draw_call.mat_id = mat_id;
         self.cur_draw_call.mesh_id = mesh_id;
+
         self.next_vertex = Default::default();
     }
 
     fn end_draw_call(&mut self) {
+        self.end_prim();
+
         let len = self.vertices.len() as u16;
         self.cur_draw_call.vertex_range.end = len;
-        let len = self.ind_builder.indices.len();
+        let len = self.indices.len();
         self.cur_draw_call.index_range.end = len;
 
         self.draw_calls.push(self.cur_draw_call.clone());
@@ -164,7 +170,7 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     fn done(self) -> Primitives {
         let vertices = self.vertices;
-        let indices = self.ind_builder.indices;
+        let indices = self.indices;
         let draw_calls = self.draw_calls;
         Primitives { vertices, indices, draw_calls }
     }
@@ -214,6 +220,87 @@ impl<'a, 'b> Builder<'a, 'b> {
         run_gpu_cmds(self, &self.model.meshes[mesh_idx as usize].gpu_commands);
         self.end_draw_call();
     }
+
+    fn begin_prim(&mut self, prim_type: u32) {
+        self.end_prim();
+        self.first_vertex_in_prim = self.vertices.len() as u16;
+        self.prim_type = prim_type;
+    }
+
+    fn end_prim(&mut self) {
+        let start = self.first_vertex_in_prim;
+        let end = self.vertices.len() as u16;
+
+        match self.prim_type {
+            0 => {
+                // Separate triangles
+                //    0      5
+                //   / \    / \
+                //  1---2  3---4
+                let mut i = start;
+                while i + 2 < end {
+                    self.tri(i, i+1, i+2);
+                    i += 3;
+                }
+            }
+
+            1 => {
+                // Separate quads
+                //  0---3  6---5
+                //  |   |  |   |
+                //  1---2  7---4
+                let mut i = start;
+                while i + 3 < end {
+                    self.quad(i, i+1, i+2, i+3);
+                    i += 4;
+                }
+            }
+
+            2 => {
+                // Triangle strip
+                //  0---2---4
+                //   \ / \ / \
+                //    1---3---5
+                let mut i = start;
+                let mut odd = false;
+                while i + 2 < end {
+                    match odd {
+                        false => self.tri(i, i+1, i+2),
+                        true => self.tri(i, i+2, i+1),
+                    };
+                    i += 1;
+                    odd = !odd;
+                }
+            }
+
+            3 => {
+                // Quad strip
+                //  0---2---4
+                //  |   |   |
+                //  1---3---5
+                let mut i = start;
+                while i + 3 < end {
+                    self.quad(i, i+1, i+3, i+2);
+                    i += 2;
+                }
+            }
+
+            _ => unreachable!(),
+        }
+
+        self.first_vertex_in_prim = self.vertices.len() as u16;
+    }
+
+    fn tri(&mut self, i0: u16, i1: u16, i2: u16) {
+        self.indices.extend_from_slice(&[i0, i1, i2]);
+    }
+
+    fn quad(&mut self, i0: u16, i1: u16, i2: u16, i3: u16) {
+        // 0--3   0  0--3
+        // |  | = |'. '.|
+        // 1--2   1--2  2
+        self.indices.extend_from_slice(&[i0, i1, i2, i0, i2, i3])
+    }
 }
 
 fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
@@ -228,11 +315,8 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
             GpuCmd::Scale { scale: (sx, sy, sz) } => {
                 b.gpu.mul_matrix(&Matrix4::from_nonuniform_scale(sx, sy, sz))
             }
-            GpuCmd::Begin { prim_type } => b.ind_builder.begin(prim_type),
-            GpuCmd::End => {
-                b.ind_builder.end();
-                b.cur_draw_call.index_range.end = b.ind_builder.indices.len();
-            }
+            GpuCmd::Begin { prim_type } => b.begin_prim(prim_type),
+            GpuCmd::End => b.end_prim(),
             GpuCmd::TexCoord { texcoord } => {
                 // Transform into OpenGL-type [0,1]x[0,1] texture space.
                 let texcoord = Point2::new(
@@ -245,8 +329,6 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
             GpuCmd::Color { color } => b.next_vertex.color = [color.x, color.y, color.z],
             GpuCmd::Normal { .. } => (), // unimplemented
             GpuCmd::Vertex { position } => {
-                b.ind_builder.vertex();
-
                 let p = b.gpu.cur_matrix.transform_point(position);
                 b.next_vertex.position = [p.x as f32, p.y as f32, p.z as f32];
                 b.vertices.push(b.next_vertex);
