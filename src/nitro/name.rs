@@ -41,13 +41,35 @@ impl fmt::Display for Name {
 
 impl fmt::Debug for Name {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_char('"')?;
-        for &b in trim_trailing_nuls(&self.0[..]) {
-            for c in (b as char).escape_default() {
-                f.write_char(c)?;
+        let trimmed = trim_trailing_nuls(&self.0);
+
+        // Print "normal" strings without quotes or escaping.
+
+        let normal =
+            !trimmed.is_empty() &&
+            trimmed.iter().all(|&b| {
+                let is_letter_or_digit =
+                    (b >= b'a' && b <= b'z') ||
+                    (b >= b'A' && b <= b'Z') ||
+                    (b >= b'0' && b <= b'9') ||
+                    b == b'_' || b == b'-';
+                is_letter_or_digit
+            });
+
+        if normal {
+            for &b in trimmed {
+                f.write_char(b as char)?;
             }
+        } else {
+            f.write_char('"')?;
+            for &b in trim_trailing_nuls(&self.0[..]) {
+                for c in (b as char).escape_default() {
+                    f.write_char(c)?;
+                }
+            }
+            f.write_char('"')?;
         }
-        f.write_char('"')
+        Ok(())
     }
 }
 

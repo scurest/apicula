@@ -91,12 +91,19 @@ fn model_info(db: &Database, conn: &Connection, model_id: usize) {
             }
             println!();
         }
-        println!("      Culling Mode: {}",
+
+        let params = material.params;
+        println!("      Dimensions: {}x{}", material.width, material.height);
+        println!("      Repeat (s,t): ({}, {})", params.repeat_s(), params.repeat_t());
+        println!("      Mirror (s,t): ({}, {})", params.mirror_s(), params.mirror_t());
+        println!("      Texcoord Transform Mode: {}", params.texcoord_transform_mode());
+
+        println!("      Cull: {}",
             match (material.cull_backface, material.cull_frontface) {
-                (true, true) => "Cull All",
-                (true, false) => "Cull Backfacing",
-                (false, true) => "Cull Frontfacing",
-                (false, false) => "No Culling",
+                (true, true) => "All (y tho?)",
+                (true, false) => "Backfacing",
+                (false, true) => "Frontfacing",
+                (false, false) => "None",
             }
         );
     }
@@ -111,14 +118,11 @@ fn texture_info(db: &Database, texture_id: usize) {
     println!("  Found In: {}",
         db.file_paths[db.textures_found_in[texture_id]].to_string_lossy());
 
-    let params = &texture.params;
-    println!("  Dimensions: {}x{}", params.width(), params.height());
+    let params = texture.params;
     println!("  Offset: {:#x}", params.offset());
-    println!("  Repeat (s,t): ({}, {})", params.repeat_s(), params.repeat_t());
-    println!("  Mirror (s,t): ({}, {})", params.mirror_s(), params.mirror_t());
+    println!("  Dimensions: {}x{}", params.width(), params.height());
     println!("  Format: {} ({})", params.format().0, params.format().desc().name);
     println!("  Color 0 Transparent?: {}", params.is_color0_transparent());
-    println!("  Texcoord Transform Mode: {}", params.texcoord_transform_mode());
     println!();
 }
 
