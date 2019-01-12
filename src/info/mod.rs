@@ -1,14 +1,18 @@
 use clap::ArgMatches;
 use errors::Result;
 use db::Database;
+use connection::{Connection, ConnectionOptions, MaterialConnection, Match};
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let db = Database::from_arg_matches(matches)?;
 
+    let conn_options = ConnectionOptions::from_arg_matches(matches);
+    let conn = Connection::build(&db, conn_options);
+
     db.print_status();
     println!();
     for model_id in 0..db.models.len() {
-        model_info(&db, model_id);
+        model_info(&db, &conn, model_id);
     }
     println!();
     for texture_id in 0..db.textures.len() {
@@ -27,7 +31,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 }
 
 
-fn model_info(db: &Database, model_id: usize) {
+fn model_info(db: &Database, conn: &Connection, model_id: usize) {
     let model = &db.models[model_id];
     println!("Model {}:", model_id);
     println!("  Name: {:?}", model.name);
@@ -49,23 +53,43 @@ fn model_info(db: &Database, model_id: usize) {
     for (i, material) in model.materials.iter().enumerate() {
         println!("    Material {}:", i);
         if let Some(name) = material.texture_name {
-            println!("      Texture: {:?}", name);
-        }
-        if let Some(name) = material.palette_name {
-            println!("      Palette: {:?}", name);
-        }
-        use db::ImageDesc;
-        match db.material_table[&(model_id, i)] {
-            ImageDesc::NoImage => (),
-            ImageDesc::Missing => {
-                println!("      Texture/Palette Not Found");
-            }
-            ImageDesc::Image { texture_id, palette_id } => {
-                println!("      Using Texture Id: {}", texture_id);
-                if let Some(id) = palette_id {
-                    println!("      Using Palette Id: {}", id);
+            print!("      Texture: {:?} ", name);
+
+            match conn.models[model_id].materials[i].texture() {
+                None => print!("(not found)"),
+                Some(Match { id, best }) => {
+                    print!("(matched texture {}", id);
+                    if !best {
+                        print!(", but tentatively");
+                    }
+                    print!(")")
                 }
             }
+            println!();
+        }
+        if let Some(name) = material.palette_name {
+            print!("      Palette: {:?} ", name);
+
+            match conn.models[model_id].materials[i] {
+                MaterialConnection::NoTexture =>
+                    print!("(palette but no texture!?)"),
+                MaterialConnection::TextureMissing { .. } =>
+                    print!("(skipped; texture missing)"),
+                MaterialConnection::TextureOkNoPalette { .. } =>
+                    unreachable!(),
+                MaterialConnection::TextureOkPaletteMissing { .. } =>
+                    print!("(not found)"),
+                MaterialConnection::TextureOkPaletteOk {
+                    palette: Match { id, best }, ..
+                } => {
+                    print!("(matched palette {}", id);
+                    if !best {
+                        print!(", but tentatively");
+                    }
+                    print!(")");
+                }
+            }
+            println!();
         }
         println!("      Culling Mode: {}",
             match (material.cull_backface, material.cull_frontface) {

@@ -33,6 +33,7 @@ mod info;
 mod primitives;
 mod skeleton;
 mod logger;
+mod connection;
 
 use errors::Result;
 
