@@ -8,6 +8,7 @@
 
 use clap::ArgMatches;
 use db::{Database, AnimationId, TextureId, PaletteId, ModelId};
+use errors::Result;
 
 /// A Connection records interrelationships between Nitro resources, namely how
 /// all the other resources relate to the models.
@@ -58,6 +59,24 @@ impl MaterialConnection {
             MaterialConnection::TextureOkPaletteMissing { texture } |
             MaterialConnection::TextureOkPaletteOk { texture, .. } =>
                 Some(texture)
+        }
+    }
+
+    /// Produces None if there was no texture, the texture/palette if there was
+    /// and everything resolved sucessfully, or an Err if there was any
+    /// resolving error.
+    pub fn image_id(&self) -> Result<Option<(TextureId, Option<PaletteId>)>> {
+        match *self {
+            MaterialConnection::NoTexture =>
+                Ok(None),
+            MaterialConnection::TextureMissing =>
+                bail!("texture missing"),
+            MaterialConnection::TextureOkNoPalette { texture } =>
+                Ok(Some((texture.id, None))),
+            MaterialConnection::TextureOkPaletteMissing { .. } =>
+                bail!("palette missing"),
+            MaterialConnection::TextureOkPaletteOk { texture, palette } =>
+                Ok(Some((texture.id, Some(palette.id)))),
         }
     }
 }

@@ -11,6 +11,7 @@ use petgraph::graph::NodeIndex;
 use std::fmt::{self, Write};
 use time;
 use util::ins_set::InsOrderSet;
+use connection::Connection;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
@@ -18,6 +19,7 @@ struct Ctx<'a> {
     model_id: ModelId,
     model: &'a Model,
     db: &'a Database,
+    conn: &'a Connection,
     image_namer: &'a ImageNamer,
     objects: &'a [Matrix4<f64>],
     prims: &'a Primitives,
@@ -27,6 +29,7 @@ struct Ctx<'a> {
 pub fn write<W: Write>(
     w: &mut W,
     db: &Database,
+    conn: &Connection,
     image_namer: &ImageNamer,
     model_id: ModelId,
 ) -> Result<()> {
@@ -41,7 +44,7 @@ pub fn write<W: Write>(
     let prims = &Primitives::build(model, objects)?;
     let skel = &Skeleton::build(model, objects);
 
-    let ctx = Ctx { model_id, model, db, image_namer, objects, prims, skel };
+    let ctx = Ctx { model_id, model, db, conn, image_namer, objects, prims, skel };
 
     write_lines!(w,
         r##"<?xml version="1.0" encoding="utf-8"?>"##,
@@ -82,10 +85,8 @@ fn write_library_images<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
     // Find the names for all the images this model uses
     let image_names = (0..ctx.model.materials.len())
         .filter_map(|material_id| {
-            use db::ImageDesc;
-            match ctx.db.material_table[&(ctx.model_id, material_id)] {
-                ImageDesc::Image { texture_id, palette_id } =>
-                    Some((texture_id, palette_id)),
+            match ctx.conn.models[ctx.model_id].materials[material_id].image_id() {
+                Ok(Some(image_id)) => Some(image_id),
                 _ => None,
             }
         })
@@ -134,13 +135,11 @@ fn write_library_effects<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
         r##"  <library_effects>"##;
     )?;
     for (material_id, mat) in ctx.model.materials.iter().enumerate() {
-        use db::ImageDesc;
-        let image_spec = match ctx.db.material_table[&(ctx.model_id, material_id)] {
-            ImageDesc::Image { texture_id, palette_id } =>
-                Some((texture_id, palette_id)),
+        let mat_conn = &ctx.conn.models[ctx.model_id].materials[material_id];
+        let image_name = match mat_conn.image_id() {
+            Ok(Some(image_id)) => ctx.image_namer.names.get(&image_id),
             _ => None,
         };
-        let image_name = image_spec.and_then(|spec| ctx.image_namer.names.get(&spec));
 
         write_lines!(w,
             r##"    <effect id="effect{i}" name="{name}">"##,
@@ -497,23 +496,13 @@ fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
 }
 
 fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    // COLLADA is dumb and doesn't allow an empty <library_animations>
-    // so we emit the open tag lazily if we find any. This flag remembers
-    // if we've emitted it yet.
-    let mut start_tag_emitted = false;
+    let anims = &ctx.conn.models[ctx.model_id].animations;
+    if anims.is_empty() { return Ok(()); }
 
-    for anim_id in 0..ctx.db.animations.len() {
-        if !ctx.db.can_apply_anim(ctx.model_id, anim_id) {
-            continue;
-        }
-
-        if !start_tag_emitted {
-            write_lines!(w,
-                r##"  <library_animations>"##;
-            )?;
-            start_tag_emitted = true;
-        }
-
+    write_lines!(w,
+        r##"  <library_animations>"##;
+    )?;
+    for &anim_id in anims {
         let anim = &ctx.db.animations[anim_id];
         let num_frames = anim.num_frames;
 
@@ -605,33 +594,22 @@ fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             )?;
         }
     }
-
-    if start_tag_emitted {
-        write_lines!(w,
-            r##"  </library_animations>"##;
-        )?;
-    }
+    write_lines!(w,
+        r##"  </library_animations>"##;
+    )?;
 
     Ok(())
 }
 
 
 fn write_library_animation_clips<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    // Same as above.
-    let mut start_tag_emitted = false;
+    let anims = &ctx.conn.models[ctx.model_id].animations;
+    if anims.is_empty() { return Ok(()); }
 
-    for anim_id in 0..ctx.db.animations.len() {
-        if !ctx.db.can_apply_anim(ctx.model_id, anim_id) {
-            continue;
-        }
-
-        if !start_tag_emitted {
-            write_lines!(w,
-                r##"  <library_animation_clips>"##;
-            )?;
-            start_tag_emitted = true;
-        }
-
+    write_lines!(w,
+        r##"  <library_animation_clips>"##;
+    )?;
+    for &anim_id in anims {
         let anim = &ctx.db.animations[anim_id];
         check!(anim.num_frames != 0)?;
         let end_time = (anim.num_frames - 1) as f64 * FRAME_LENGTH;
@@ -650,12 +628,9 @@ fn write_library_animation_clips<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             r##"    </animation_clip>"##;
         )?;
     }
-
-    if start_tag_emitted {
-        write_lines!(w,
-            r##"  </library_animation_clips>"##;
-        )?;
-    }
+    write_lines!(w,
+        r##"  </library_animation_clips>"##;
+    )?;
 
     Ok(())
 }

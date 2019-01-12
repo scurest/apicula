@@ -2,6 +2,7 @@ use db::{Database, TextureId, PaletteId};
 use nitro::Name;
 use std::collections::HashMap;
 use util::namers::UniqueNamer;
+use connection::Connection;
 
 pub struct ImageNamer {
     pub namer: UniqueNamer,
@@ -9,25 +10,25 @@ pub struct ImageNamer {
 }
 
 impl ImageNamer {
-    pub fn build(db: &Database) -> ImageNamer {
+    pub fn build(db: &Database, conn: &Connection) -> ImageNamer {
         let mut image_namer = ImageNamer {
             namer: UniqueNamer::new(),
             names: HashMap::new(),
         };
 
-        for image_desc in db.material_table.values() {
-            use db::ImageDesc;
-            let (texture_id, palette_id) = match *image_desc {
-                ImageDesc::Image { texture_id, palette_id } =>
-                    (texture_id, palette_id),
-                _ => continue,
-            };
-
-            let namer = &mut image_namer.namer;
-            image_namer.names.entry((texture_id, palette_id)).or_insert_with(|| {
-                let name = format!("{}", db.textures[texture_id].name.print_safe());
-                namer.get_fresh_name(name)
-            });
+        for mdl_conn in &conn.models {
+            for mat_conn in &mdl_conn.materials {
+                match mat_conn.image_id() {
+                    Ok(Some(image_id)) => {
+                        let texture_name = db.textures[image_id.0].name;
+                        let namer = &mut image_namer.namer;
+                        image_namer.names.entry(image_id).or_insert_with(|| {
+                            namer.get_fresh_name(texture_name.print_safe().to_string())
+                        });
+                    }
+                    _ => continue,
+                }
+            }
         }
 
         image_namer

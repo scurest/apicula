@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use util::namers::UniqueNamer;
 use db::Database;
 use convert::image_namer::ImageNamer;
+use connection::{Connection, ConnectionOptions};
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let out_dir = PathBuf::from(matches.value_of("OUTPUT").unwrap());
@@ -26,7 +27,10 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     db.print_status();
 
-    let mut image_namer = ImageNamer::build(&db);
+    let conn_options = ConnectionOptions::from_arg_matches(matches);
+    let conn = Connection::build(&db, conn_options);
+
+    let mut image_namer = ImageNamer::build(&db, &conn);
 
     let mut daes_written = 0;
     let mut pngs_written = 0;
@@ -40,7 +44,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     for (model_id, model) in db.models.iter().enumerate() {
         s.clear();
 
-        match collada::write(&mut s, &db, &image_namer, model_id) {
+        match collada::write(&mut s, &db, &conn, &image_namer, model_id) {
             Ok(()) => (),
             Err(e) => {
                 error!("error building COLLADA for model {}: {}", model_id, e);
