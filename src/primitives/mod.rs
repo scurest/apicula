@@ -17,7 +17,18 @@ use std::ops::Range;
 pub struct Primitives {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
+    pub poly_type: PolyType,
     pub draw_calls: Vec<DrawCall>,
+}
+
+/// How to interpret the data in the indices buffer.
+pub enum PolyType {
+    /// Every three elements define a triangle.
+    Tris,
+    /// Every four elements define a polygon. If the fourth element is 0xffff,
+    /// it is a triangle given by the first three elements. Otherwise the four
+    /// elements define a quad.
+    TrisAndQuads,
 }
 
 /// Info about the result of a draw call, ie. the result of drawing a mesh (a set
@@ -59,8 +70,8 @@ impl Default for Vertex {
 implement_vertex!(Vertex, position, texcoord, color);
 
 impl Primitives {
-    pub fn build(model: &Model, objects: &[Matrix4<f64>]) -> Result<Primitives> {
-        let mut b = Builder::new(model, objects);
+    pub fn build(model: &Model, poly_type: PolyType, objects: &[Matrix4<f64>]) -> Result<Primitives> {
+        let mut b = Builder::new(model, poly_type, objects);
         use nitro::render_cmds::Op;
         for op in &model.render_ops {
             match *op {
@@ -107,6 +118,7 @@ impl GpuState {
 struct Builder<'a, 'b> {
     model: &'a Model,
     objects: &'b [Matrix4<f64>],
+    poly_type: PolyType,
 
     gpu: GpuState,
     cur_texture_dim: (u32, u32),
@@ -124,10 +136,11 @@ struct Builder<'a, 'b> {
 }
 
 impl<'a, 'b> Builder<'a, 'b> {
-    fn new(model: &'a Model, objects: &'b [Matrix4<f64>]) -> Builder<'a, 'b> {
+    fn new(model: &'a Model, poly_type: PolyType, objects: &'b [Matrix4<f64>]) -> Builder<'a, 'b> {
         Builder {
             model,
             objects,
+            poly_type,
             gpu: GpuState::new(),
             vertices: vec![],
             indices: vec![],
@@ -171,8 +184,9 @@ impl<'a, 'b> Builder<'a, 'b> {
     fn done(self) -> Primitives {
         let vertices = self.vertices;
         let indices = self.indices;
+        let poly_type = self.poly_type;
         let draw_calls = self.draw_calls;
-        Primitives { vertices, indices, draw_calls }
+        Primitives { vertices, indices, poly_type, draw_calls }
     }
 
     fn load_matrix(&mut self, stack_pos: u8) {
@@ -292,14 +306,25 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     fn tri(&mut self, i0: u16, i1: u16, i2: u16) {
-        self.indices.extend_from_slice(&[i0, i1, i2]);
+        match self.poly_type {
+            PolyType::Tris =>
+                self.indices.extend_from_slice(&[i0, i1, i2]),
+            PolyType::TrisAndQuads =>
+                self.indices.extend_from_slice(&[i0, i1, i2, 0xffff])
+        }
     }
 
     fn quad(&mut self, i0: u16, i1: u16, i2: u16, i3: u16) {
-        // 0--3   0  0--3
-        // |  | = |'. '.|
-        // 1--2   1--2  2
-        self.indices.extend_from_slice(&[i0, i1, i2, i0, i2, i3])
+        match self.poly_type {
+            PolyType::Tris => {
+                // 0--3   0  0--3
+                // |  | = |'. '.|
+                // 1--2   1--2  2
+                self.indices.extend_from_slice(&[i0, i1, i2, i0, i2, i3])
+            }
+            PolyType::TrisAndQuads =>
+                self.indices.extend_from_slice(&[i0, i1, i2, i3]),
+        }
     }
 }
 

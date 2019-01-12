@@ -1,6 +1,6 @@
 use cgmath::Matrix4;
 use errors::Result;
-use primitives::{Primitives, Vertex};
+use primitives::{self, Primitives, Vertex};
 use glium::{self, VertexBuffer, IndexBuffer, Display, Frame, Surface};
 use glium::texture::Texture2d;
 use viewer::gl_context::GlContext;
@@ -200,7 +200,7 @@ impl GLPrimitives {
                     .collect()
             };
 
-        let primitives = Primitives::build(model, &objects[..])?;
+        let primitives = Primitives::build(model, primitives::PolyType::Tris, &objects[..])?;
 
         let vertex_buffer =
             glium::VertexBuffer::new(display, &primitives.vertices)?;

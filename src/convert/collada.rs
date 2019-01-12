@@ -4,7 +4,7 @@ use convert::image_namer::ImageNamer;
 use db::{Database, ModelId};
 use errors::Result;
 use skeleton::{Skeleton, Transform, SMatrix};
-use primitives::Primitives;
+use primitives::{self, Primitives};
 use nitro::Model;
 use petgraph::{Direction};
 use petgraph::graph::NodeIndex;
@@ -41,7 +41,7 @@ pub fn write<W: Write>(
     let objects = &model.objects.iter()
         .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
-    let prims = &Primitives::build(model, objects)?;
+    let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, objects)?;
     let skel = &Skeleton::build(model, objects);
 
     let ctx = Ctx { model_id, model, db, conn, image_namer, objects, prims, skel };
@@ -306,16 +306,31 @@ fn write_library_geometries<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             r#"        </vertices>"#;
         )?;
 
-        let num_tris = (call.index_range.end - call.index_range.start) / 3;
+        let num_polys = (call.index_range.end - call.index_range.start) / 4;
         let start_index = call.vertex_range.start;
         write_lines!(w,
-            r##"        <triangles material="material{mat_id}" count="{num_tris}">"##,
+            r##"        <polylist material="material{mat_id}" count="{num_polys}">"##,
             r##"          <input semantic="VERTEX" source="#geometry{i}-vertices" offset="0"/>"##,
+            r##"          <vcount>{vcounts}</vcount>",
             r##"          <p>{indices}</p>"##,
-            r##"        </triangles>"##;
-            i = i, mat_id = call.mat_id, num_tris = num_tris,
+            r##"        </polylist>"##;
+            i = i, mat_id = call.mat_id, num_polys = num_polys,
+            vcounts = FnFmt(|f| {
+                let mut i = call.index_range.start;
+                while i < call.index_range.end {
+                    if indices[i + 3] == 0xffff {
+                        write!(f, "3 ")?;
+                    } else {
+                        write!(f, "4 ")?;
+                    }
+                    i += 4;
+                }
+                Ok(())
+            }),
             indices = FnFmt(|f| {
-                for index in &indices[call.index_range.clone()] {
+                for &index in &indices[call.index_range.clone()] {
+                    if index == 0xffff { continue; }
+
                     // The indices in geom are counting from the first vertex
                     // in the whole model, but we want them relative to the
                     // start of just this <mesh>.
