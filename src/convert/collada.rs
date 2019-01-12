@@ -211,113 +211,107 @@ fn write_library_effects<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
 }
 
 fn write_library_geometries<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
+    let verts = &ctx.prims.vertices;
+
     write_lines!(w,
-        r##"  <library_geometries>"##;
+        r##"  <library_geometries>"##,
+        r##"    <geometry id="geometry" name="{model_name}">"##,
+        r##"      <mesh>"##;
+        model_name = ctx.model.name.print_safe(),
     )?;
 
-    for (i, call) in ctx.prims.draw_calls.iter().enumerate() {
-        let mesh = &ctx.model.meshes[call.mesh_id as usize];
-        let vert_range = call.vertex_range.start as usize .. call.vertex_range.end as usize;
-        let verts = &ctx.prims.vertices[vert_range];
-        let indices = &ctx.prims.indices;
+    write_lines!(w,
+        r##"        <source id="positions">"##,
+        r##"          <float_array id="positions-array" count="{num_floats}">{floats}</float_array>"##,
+        r##"          <technique_common>"##,
+        r##"            <accessor source="#positions-array" count="{num_verts}" stride="3">"##,
+        r##"              <param name="X" type="float"/>"##,
+        r##"              <param name="Y" type="float"/>"##,
+        r##"              <param name="Z" type="float"/>"##,
+        r##"            </accessor>"##,
+        r##"          </technique_common>"##,
+        r##"        </source>"##;
+        num_floats = 3 * verts.len(), num_verts = verts.len(),
+        floats = FnFmt(|f| {
+            for v in verts {
+                let pos = &v.position;
+                write!(f, "{} {} {} ", pos[0], pos[1], pos[2])?;
+            }
+            Ok(())
+        }),
+    )?;
 
-        write_lines!(w,
-            r##"    <geometry id="geometry{i}" name="{name}">"##,
-            r##"      <mesh>"##;
-            i = i, name = mesh.name.print_safe(),
-        )?;
+    write_lines!(w,
+        r##"        <source id="texcoords">"##,
+        r##"          <float_array id="texcoords-array" count="{num_floats}">{floats}</float_array>"##,
+        r##"          <technique_common>"##,
+        r##"            <accessor source="#texcoords-array" count="{num_verts}" stride="2">"##,
+        r##"              <param name="S" type="float"/>"##,
+        r##"              <param name="T" type="float"/>"##,
+        r##"            </accessor>"##,
+        r##"          </technique_common>"##,
+        r##"        </source>"##;
+        num_floats = 2 * verts.len(), num_verts = verts.len(),
+        floats = FnFmt(|f| {
+            for v in verts {
+                let texcoord = &v.texcoord;
+                write!(f, "{} {} ", texcoord[0], texcoord[1])?;
+            }
+            Ok(())
+        }),
+    )?;
 
+    // Omit the colors if they are all white
+    let omit_colors = verts.iter().all(|v| v.color == [1.0, 1.0, 1.0]);
+    if !omit_colors {
         write_lines!(w,
-            r##"        <source id="geometry{i}-positions">"##,
-            r##"          <float_array id="geometry{i}-positions-array" count="{num_floats}">{floats}</float_array>"##,
+            r##"        <source id="colors">"##,
+            r##"          <float_array id="colors-array" count="{num_floats}">{floats}</float_array>"##,
             r##"          <technique_common>"##,
-            r##"            <accessor source="#geometry{i}-positions-array" count="{num_verts}" stride="3">"##,
-            r##"              <param name="X" type="float"/>"##,
-            r##"              <param name="Y" type="float"/>"##,
-            r##"              <param name="Z" type="float"/>"##,
+            r##"            <accessor source="#colors-array" count="{num_verts}" stride="3">"##,
+            r##"              <param name="R" type="float"/>"##,
+            r##"              <param name="G" type="float"/>"##,
+            r##"              <param name="B" type="float"/>"##,
             r##"            </accessor>"##,
             r##"          </technique_common>"##,
             r##"        </source>"##;
-            i = i, num_floats = 3 * verts.len(), num_verts = verts.len(),
+            num_floats = 3 * verts.len(), num_verts = verts.len(),
             floats = FnFmt(|f| {
-                for x in verts.iter().flat_map(|v| v.position.iter()) {
-                    write!(f, "{} ", x)?;
+                for v in verts {
+                    let color = &v.color;
+                    write!(f, "{} {} {} ", color[0], color[1], color[2])?;
                 }
                 Ok(())
             }),
         )?;
+    }
 
+    write_lines!(w,
+        r##"        <vertices id="vertices">"##,
+        r##"          <input semantic="POSITION" source="#positions"/>"##,
+        r##"          <input semantic="TEXCOORD" source="#texcoords"/>"##;
+    )?;
+    if !omit_colors {
         write_lines!(w,
-            r##"        <source id="geometry{i}-texcoords">"##,
-            r##"          <float_array id="geometry{i}-texcoords-array" count="{num_floats}">{floats}</float_array>"##,
-            r##"          <technique_common>"##,
-            r##"            <accessor source="#geometry{i}-texcoords-array" count="{num_verts}" stride="2">"##,
-            r##"              <param name="S" type="float"/>"##,
-            r##"              <param name="T" type="float"/>"##,
-            r##"            </accessor>"##,
-            r##"          </technique_common>"##,
-            r##"        </source>"##;
-            i = i, num_floats = 2 * verts.len(), num_verts = verts.len(),
-            floats = FnFmt(|f| {
-                for x in verts.iter().flat_map(|v| v.texcoord.iter()) {
-                    write!(f, "{} ", x)?;
-                }
-                Ok(())
-            }),
+            r##"          <input semantic="COLOR" source="#colors"/>"##;
         )?;
+    }
+    write_lines!(w,
+        r#"        </vertices>"#;
+    )?;
 
-        // Omit the colors if they are all white
-        let omit_colors = verts.iter().all(|v| v.color == [1.0, 1.0, 1.0]);
-        if !omit_colors {
-            write_lines!(w,
-                r##"        <source id="geometry{i}-colors">"##,
-                r##"          <float_array id="geometry{i}-colors-array" count="{num_floats}">{floats}</float_array>"##,
-                r##"          <technique_common>"##,
-                r##"            <accessor source="#geometry{i}-colors-array" count="{num_verts}" stride="3">"##,
-                r##"              <param name="R" type="float"/>"##,
-                r##"              <param name="G" type="float"/>"##,
-                r##"              <param name="B" type="float"/>"##,
-                r##"            </accessor>"##,
-                r##"          </technique_common>"##,
-                r##"        </source>"##;
-                i = i, num_floats = 3 * verts.len(), num_verts = verts.len(),
-                floats = FnFmt(|f| {
-                    for x in verts.iter().flat_map(|v| v.color.iter()) {
-                        write!(f, "{} ", x)?;
-                    }
-                    Ok(())
-                }),
-            )?;
-        }
-
-        write_lines!(w,
-            r##"        <vertices id="geometry{i}-vertices">"##,
-            r##"          <input semantic="POSITION" source="#geometry{i}-positions"/>"##,
-            r##"          <input semantic="TEXCOORD" source="#geometry{i}-texcoords"/>"##;
-            i = i,
-        )?;
-        if !omit_colors {
-            write_lines!(w,
-                r##"          <input semantic="COLOR" source="#geometry{i}-colors"/>"##;
-                i = i,
-            )?;
-        }
-        write_lines!(w,
-            r#"        </vertices>"#;
-        )?;
-
-        let num_polys = (call.index_range.end - call.index_range.start) / 4;
-        let start_index = call.vertex_range.start;
+    for call in &ctx.prims.draw_calls {
+        let indices = &ctx.prims.indices[call.index_range.clone()];
         write_lines!(w,
             r##"        <polylist material="material{mat_id}" count="{num_polys}">"##,
-            r##"          <input semantic="VERTEX" source="#geometry{i}-vertices" offset="0"/>"##,
-            r##"          <vcount>{vcounts}</vcount>",
+            r##"          <input semantic="VERTEX" source="#vertices" offset="0"/>"##,
+            r##"          <vcount>{vcounts}</vcount>"##,
             r##"          <p>{indices}</p>"##,
             r##"        </polylist>"##;
-            i = i, mat_id = call.mat_id, num_polys = num_polys,
+            mat_id = call.mat_id, num_polys = indices.len() / 4,
             vcounts = FnFmt(|f| {
-                let mut i = call.index_range.start;
-                while i < call.index_range.end {
+                let mut i = 0;
+                while i < indices.len() {
                     if indices[i + 3] == 0xffff {
                         write!(f, "3 ")?;
                     } else {
@@ -328,26 +322,19 @@ fn write_library_geometries<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
                 Ok(())
             }),
             indices = FnFmt(|f| {
-                for &index in &indices[call.index_range.clone()] {
+                for &index in indices {
                     if index == 0xffff { continue; }
-
-                    // The indices in geom are counting from the first vertex
-                    // in the whole model, but we want them relative to the
-                    // start of just this <mesh>.
-                    let index = index - start_index;
                     write!(f, "{} ", index)?;
                 }
                 Ok(())
             }),
         )?;
 
-        write_lines!(w,
-            r##"      </mesh>"##,
-            r##"    </geometry>"##;
-        )?;
     }
 
     write_lines!(w,
+        r##"      </mesh>"##,
+        r##"    </geometry>"##,
         r##"  </library_geometries>"##;
     )?;
 
@@ -359,151 +346,118 @@ fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
         r##"  <library_controllers>"##;
     )?;
 
-    let mut all_joints = InsOrderSet::new();
-    let mut all_weights = InsOrderSet::new();
-
-    for (i, call) in ctx.prims.draw_calls.iter().enumerate() {
-        write_lines!(w,
-            r##"    <controller id="controller{i}">"##,
-            r##"      <skin source="#geometry{i}">"##;
-            i = i,
-        )?;
-
-        let vrange = call.vertex_range.start as usize..call.vertex_range.end as usize;
-
-        // We have one or more joints which each vertex is attached to. We don't
-        // provide them directly: we need to place all the joints we're going to
-        // use for this draw call into a list and reference them by index later on.
-        // This is what `IncOrderSet` is for.
-        all_joints.clear();
-        for v in &ctx.skel.vertices[vrange.clone()] {
-            for influence in &v.influences {
-                // Insert every joint which appears and all its ancestors.
-                all_joints.insert(influence.joint);
-                let mut parents = ctx.skel.tree.neighbors_directed(influence.joint, Direction::Incoming);
-                while let Some(parent) = parents.next() {
-                    all_joints.insert(parent);
-                    parents = ctx.skel.tree.neighbors_directed(parent, Direction::Incoming)
-                }
-            }
-        }
-
-        write_lines!(w,
-            r##"        <source id="controller{i}-joints">"##,
-            r##"          <Name_array id="controller{i}-joints-array" count="{num_joints}">{joints}</Name_array>"##,
-            r##"          <technique_common>"##,
-            r##"            <accessor source="#controller{i}-joints-array" count="{num_joints}">"##,
-            r##"              <param name="JOINT" type="Name"/>"##,
-            r##"            </accessor>"##,
-            r##"          </technique_common>"##,
-            r##"        </source>"##;
-            i = i, num_joints = all_joints.len(),
-            joints = FnFmt(|f| {
-                for &j in all_joints.iter() {
-                    write!(f, "joint{} ", j.index())?;
-                }
-                Ok(())
-            }),
-        )?;
-
-        write_lines!(w,
-            r##"        <source id="controller{i}-bind_poses">"##,
-            r##"          <float_array id="controller{i}-bind_poses-array" count="{num_floats}">{floats}</float_array>"##,
-            r##"          <technique_common>"##,
-            r##"            <accessor source="#controller{i}-bind_poses-array" count="{num_joints}" stride="16">"##,
-            r##"              <param name="TRANSFORM" type="float4x4"/>"##,
-            r##"            </accessor>"##,
-            r##"          </technique_common>"##,
-            r##"        </source>"##;
-            i = i, num_floats = 16 * all_joints.len(), num_joints = all_joints.len(),
-            floats = FnFmt(|f| {
-                for &j in all_joints.iter() {
-                    let inv_bind = &ctx.skel.tree[j].rest_world_to_local;
-                    write!(f, "{} ", Mat(inv_bind))?;
-                }
-                Ok(())
-            }),
-        )?;
-
-        // We also have a weight for each joint attached to a vertex. Again, we
-        // need indices into a list, so do the same thing we did above for the
-        // joints.
-        //
-        // One more thing: we can't use floats in the set because of their weird
-        // equality, so we represent f64s as u32s in a fixed point format with
-        // `encode` and `decode`. There is likely not any loss of precision here
-        // because weights are stored as 8-bit fixed point numbers in the Nitro
-        // format and they aren't usually multiplied.
-        let encode = |x: f32| (x * 4096.0) as u32;
-        let decode = |x: u32| x as f64 / 4096.0;
-        all_weights.clear();
-        for v in &ctx.skel.vertices[vrange.clone()] {
-            for influence in &v.influences {
-                all_weights.insert(encode(influence.weight));
-            }
-        }
-
-        write_lines!(w,
-            r##"        <source id="controller{i}-weights">"##,
-            r##"          <float_array id="controller{i}-weights-array" count="{num_weights}">{weights}</float_array>"##,
-            r##"          <technique_common>"##,
-            r##"            <accessor source="#controller{i}-weights-array" count="{num_weights}">"##,
-            r##"              <param name="WEIGHT" type="float"/>"##,
-            r##"            </accessor>"##,
-            r##"          </technique_common>"##,
-            r##"        </source>"##;
-            i = i, num_weights = all_weights.len(),
-            weights = FnFmt(|f| {
-                for &weight in all_weights.iter() {
-                    write!(f, "{} ", decode(weight))?;
-                }
-                Ok(())
-            })
-        )?;
-
-        write_lines!(w,
-            r##"        <joints>"##,
-            r##"          <input semantic="JOINT" source="#controller{i}-joints"/>"##,
-            r##"          <input semantic="INV_BIND_MATRIX" source="#controller{i}-bind_poses"/>"##,
-            r##"        </joints>"##;
-            i = i,
-        )?;
-
-        let num_verts = vrange.end - vrange.start;
-        write_lines!(w,
-            r##"        <vertex_weights count="{num_verts}">"##,
-            r##"          <input semantic="JOINT" source="#controller{i}-joints" offset="0"/>"##,
-            r##"          <input semantic="WEIGHT" source="#controller{i}-weights" offset="1"/>"##,
-            r##"          <vcount>{vcount}</vcount>"##,
-            r##"          <v>{v}</v>"##,
-            r##"        </vertex_weights>"##;
-            i = i, num_verts = num_verts,
-            vcount = FnFmt(|f| {
-                for v in &ctx.skel.vertices[vrange.clone()] {
-                    write!(f, "{} ", v.influences.len())?;
-                }
-                Ok(())
-            }),
-            v = FnFmt(|f| {
-                for v in &ctx.skel.vertices[vrange.clone()] {
-                    for influence in &v.influences {
-                        write!(f, "{} {} ",
-                            all_joints.get_index_from_value(&influence.joint).unwrap(),
-                            all_weights.get_index_from_value(&encode(influence.weight)).unwrap(),
-                        )?;
-                    }
-                }
-                Ok(())
-            }),
-        )?;
-
-        write_lines!(w,
-            r##"      </skin>"##,
-            r##"    </controller>"##;
-        )?;
-    }
+    let num_joints = ctx.skel.tree.node_count();
 
     write_lines!(w,
+        r##"    <controller id="controller">"##,
+        r##"      <skin source="#geometry">"##;
+    )?;
+    write_lines!(w,
+        r##"        <source id="controller-joints">"##,
+        r##"          <Name_array id="controller-joints-array" count="{num_joints}">{joints}</Name_array>"##,
+        r##"          <technique_common>"##,
+        r##"            <accessor source="#controller-joints-array" count="{num_joints}">"##,
+        r##"              <param name="JOINT" type="Name"/>"##,
+        r##"            </accessor>"##,
+        r##"          </technique_common>"##,
+        r##"        </source>"##;
+        num_joints = num_joints,
+        joints = FnFmt(|f| {
+            for j in ctx.skel.tree.node_indices() {
+                write!(f, "joint{} ", j.index())?;
+            }
+            Ok(())
+        }),
+    )?;
+
+    write_lines!(w,
+        r##"        <source id="controller-bind_poses">"##,
+        r##"          <float_array id="controller-bind_poses-array" count="{num_floats}">{floats}</float_array>"##,
+        r##"          <technique_common>"##,
+        r##"            <accessor source="#controller-bind_poses-array" count="{num_joints}" stride="16">"##,
+        r##"              <param name="TRANSFORM" type="float4x4"/>"##,
+        r##"            </accessor>"##,
+        r##"          </technique_common>"##,
+        r##"        </source>"##;
+        num_floats = 16 * num_joints, num_joints = num_joints,
+        floats = FnFmt(|f| {
+            for j in ctx.skel.tree.node_indices() {
+                let inv_bind = &ctx.skel.tree[j].rest_world_to_local;
+                write!(f, "{} ", Mat(inv_bind))?;
+            }
+            Ok(())
+        }),
+    )?;
+
+    // We gives weights by first giving a list of all weights we're going to
+    // use and then giving indices into the list with the vertices, so we start
+    // by gathering all weights into a list. Since weights are floats, we can't
+    // insert them into a HashMap directly, so we first encode them as a
+    // fixed-point number. Remember to decode them when they come out!
+    let mut all_weights = InsOrderSet::new();
+    let encode = |x: f32| (x * 4096.0) as u32;
+    let decode = |x: u32| x as f64 / 4096.0;
+    all_weights.clear();
+    for v in &ctx.skel.vertices {
+        for influence in &v.influences {
+            all_weights.insert(encode(influence.weight));
+        }
+    }
+    write_lines!(w,
+        r##"        <source id="controller-weights">"##,
+        r##"          <float_array id="controller-weights-array" count="{num_weights}">{weights}</float_array>"##,
+        r##"          <technique_common>"##,
+        r##"            <accessor source="#controller-weights-array" count="{num_weights}">"##,
+        r##"              <param name="WEIGHT" type="float"/>"##,
+        r##"            </accessor>"##,
+        r##"          </technique_common>"##,
+        r##"        </source>"##;
+        num_weights = all_weights.len(),
+        weights = FnFmt(|f| {
+            for &weight in all_weights.iter() {
+                write!(f, "{} ", decode(weight))?;
+            }
+            Ok(())
+        })
+    )?;
+
+    write_lines!(w,
+        r##"        <joints>"##,
+        r##"          <input semantic="JOINT" source="#controller-joints"/>"##,
+        r##"          <input semantic="INV_BIND_MATRIX" source="#controller-bind_poses"/>"##,
+        r##"        </joints>"##;
+    )?;
+
+    write_lines!(w,
+        r##"        <vertex_weights count="{num_verts}">"##,
+        r##"          <input semantic="JOINT" source="#controller-joints" offset="0"/>"##,
+        r##"          <input semantic="WEIGHT" source="#controller-weights" offset="1"/>"##,
+        r##"          <vcount>{vcount}</vcount>"##,
+        r##"          <v>{v}</v>"##,
+        r##"        </vertex_weights>"##;
+        num_verts = ctx.skel.vertices.len(),
+        vcount = FnFmt(|f| {
+            for v in &ctx.skel.vertices {
+                write!(f, "{} ", v.influences.len())?;
+            }
+            Ok(())
+        }),
+        v = FnFmt(|f| {
+            for v in &ctx.skel.vertices {
+                for influence in &v.influences {
+                    write!(f, "{} {} ",
+                        influence.joint.index(),
+                        all_weights.get_index_from_value(&encode(influence.weight)).unwrap(),
+                    )?;
+                }
+            }
+            Ok(())
+        }),
+    )?;
+
+    write_lines!(w,
+        r##"      </skin>"##,
+        r##"    </controller>"##,
         r##"  </library_controllers>"##;
     )?;
 
@@ -659,31 +613,31 @@ fn write_library_visual_scenes<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
 
     write_joint_hierarchy(w, ctx)?;
 
-    for (i, call) in ctx.prims.draw_calls.iter().enumerate() {
-        let mesh = &ctx.model.meshes[call.mesh_id as usize];
+    write_lines!(w,
+        r##"      <node id="node" name="{model_name}" type="NODE">"##,
+        r##"        <instance_controller url="#controller">"##,
+        r##"          <skeleton>#joint{root_id}</skeleton>"##,
+        r##"          <bind_material>"##,
+        r##"            <technique_common>"##;
+        model_name = ctx.model.name.print_safe(),
+        root_id = ctx.skel.root.index(),
+    )?;
+
+    for i in 0..ctx.model.materials.len() {
         write_lines!(w,
-            r##"      <node id="node{i}" name="{mesh_name}" type="NODE">"##,
-            r##"        <instance_controller url="#controller{i}">"##,
-            r##"          <skeleton>#joint{root_id}</skeleton>"##,
-            r##"          <bind_material>"##,
-            r##"            <technique_common>"##,
-            r##"              <instance_material symbol="material{mat_id}" target="#material{mat_id}">"##;
-            i = i, mesh_name = mesh.name.print_safe(),
-            root_id = ctx.skel.root.index(), mat_id = call.mat_id,
-        )?;
-        if ctx.model.materials[call.mat_id as usize].texture_name.is_some() {
-            write_lines!(w,
-                r##"                <bind_vertex_input semantic="tc" input_semantic="TEXCOORD"/>"##;
-            )?;
-        }
-        write_lines!(w,
-            r##"              </instance_material>"##,
-            r##"            </technique_common>"##,
-            r##"          </bind_material>"##,
-            r##"        </instance_controller>"##,
-            r##"      </node>"##;
+            r##"              <instance_material symbol="material{i}" target="#material{i}">"##,
+            r##"                <bind_vertex_input semantic="tc" input_semantic="TEXCOORD"/>"##,
+            r##"              </instance_material>"##;
+            i = i,
         )?;
     }
+
+    write_lines!(w,
+        r##"            </technique_common>"##,
+        r##"          </bind_material>"##,
+        r##"        </instance_controller>"##,
+        r##"      </node>"##;
+    )?;
 
     write_lines!(w,
         r##"    </visual_scene>"##,
