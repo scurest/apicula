@@ -231,26 +231,28 @@ fn library_geometries(xml: &mut Xml, ctx: &Ctx) {
     );
 
     // Texcoords
-    xml!(xml;
-        <source id=["texcoords"]>;
-            <float_array id=["texcoords-array"] count=[(2 * verts.len())]>
-            for v in (verts) {
-                (v.texcoord[0])" "(v.texcoord[1])" "
-            }
-            </float_array>;
-            <technique_common>;
-                <accessor source=["#texcoords-array"] count=[(verts.len())] stride=["2"]>;
-                    <param name=["S"] type=["float"]/>;
-                    <param name=["T"] type=["float"]/>;
-                /accessor>;
-            /technique_common>;
-        /source>;
-    );
+    let has_texcoords = ctx.prims.draw_calls.iter().any(|call| call.used_texcoords);
+    if has_texcoords {
+        xml!(xml;
+            <source id=["texcoords"]>;
+                <float_array id=["texcoords-array"] count=[(2 * verts.len())]>
+                for v in (verts) {
+                    (v.texcoord[0])" "(v.texcoord[1])" "
+                }
+                </float_array>;
+                <technique_common>;
+                    <accessor source=["#texcoords-array"] count=[(verts.len())] stride=["2"]>;
+                        <param name=["S"] type=["float"]/>;
+                        <param name=["T"] type=["float"]/>;
+                    /accessor>;
+                /technique_common>;
+            /source>;
+        );
+    }
 
     // Vertex colors
-    // Omit if they are all white
-    let omit_colors = verts.iter().all(|v| v.color == [1.0, 1.0, 1.0]);
-    if !omit_colors {
+    let has_colors = ctx.prims.draw_calls.iter().any(|call| call.used_vertex_color);
+    if has_colors {
         xml!(xml;
             <source id=["colors"]>;
                 <float_array id=["colors-array"] count=[(3 * verts.len())]>
@@ -269,12 +271,38 @@ fn library_geometries(xml: &mut Xml, ctx: &Ctx) {
         );
     }
 
+    // Normals
+    let has_normals = ctx.prims.draw_calls.iter().any(|call| call.used_normals);
+    if has_normals {
+        xml!(xml;
+            <source id=["normals"]>;
+                <float_array id=["normals-array"] count=[(3 * verts.len())]>
+                for v in (verts) {
+                    (v.normal[0])" "(v.normal[1])" "(v.normal[2])" "
+                }
+                </float_array>;
+                <technique_common>;
+                    <accessor source=["normals-array"] count=[(verts.len())] stride=["3"]>;
+                        <param name=["X"] type=["float"]/>;
+                        <param name=["Y"] type=["float"]/>;
+                        <param name=["Z"] type=["float"]/>;
+                    /accessor>;
+                /technique_common>;
+            /source>;
+        );
+    }
+
     xml!(xml;
         <vertices id=["vertices"]>;
             <input semantic=["POSITION"] source=["#positions"]/>;
+            if (has_texcoords) {
             <input semantic=["TEXCOORD"] source=["#texcoords"]/>;
-            if (!omit_colors) {
+            }
+            if (has_colors) {
             <input semantic=["COLOR"] source=["#colors"]/>;
+            }
+            if (has_normals) {
+            <input semantic=["NORMAL"] source=["#normals"]/>;
             }
         /vertices>;
     );

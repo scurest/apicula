@@ -47,6 +47,12 @@ pub struct DrawCall {
     pub mat_id: u8,
     /// The index of the mesh that was drawn.
     pub mesh_id: u8,
+    /// Whether texcoords were set during this call.
+    pub used_texcoords: bool,
+    /// Whether vertex colors were set during this call.
+    pub used_vertex_color: bool,
+    /// Whether normals were set during this call.
+    pub used_normals: bool,
 }
 
 #[derive(Copy, Clone)]
@@ -54,6 +60,7 @@ pub struct Vertex {
     pub position: [f32; 3],
     pub texcoord: [f32; 2],
     pub color: [f32; 3],
+    pub normal: [f32; 3],
 }
 
 impl Default for Vertex {
@@ -62,12 +69,13 @@ impl Default for Vertex {
             position: [0.0, 0.0, 0.0],
             texcoord: [0.0, 0.0],
             color: [1.0, 1.0, 1.0],
+            normal: [0.0, 0.0, 0.0],
         }
     }
 }
 
 // For glium
-implement_vertex!(Vertex, position, texcoord, color);
+implement_vertex!(Vertex, position, texcoord, color, normal);
 
 impl Primitives {
     pub fn build(model: &Model, poly_type: PolyType, objects: &[Matrix4<f64>]) -> Result<Primitives> {
@@ -151,6 +159,9 @@ impl<'a, 'b> Builder<'a, 'b> {
                 index_range: 0..0,
                 mat_id: 0,
                 mesh_id: 0,
+                used_texcoords: false,
+                used_vertex_color: false,
+                used_normals: false,
             },
             cur_texture_dim: (1,1),
             prim_type: 0,
@@ -160,12 +171,18 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     fn begin_draw_call(&mut self, mesh_id: u8, mat_id: u8) {
-        let len = self.vertices.len() as u16;
-        self.cur_draw_call.vertex_range = len .. len;
-        let len = self.indices.len();
-        self.cur_draw_call.index_range = len .. len;
-        self.cur_draw_call.mat_id = mat_id;
-        self.cur_draw_call.mesh_id = mesh_id;
+        let vert_len = self.vertices.len() as u16;
+        let ind_len = self.indices.len();
+
+        self.cur_draw_call = DrawCall {
+            vertex_range: vert_len..vert_len,
+            index_range: ind_len..ind_len,
+            mat_id,
+            mesh_id,
+            used_texcoords: false,
+            used_vertex_color: false,
+            used_normals: false,
+        };
 
         self.next_vertex = Default::default();
     }
@@ -343,6 +360,8 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
             GpuCmd::Begin { prim_type } => b.begin_prim(prim_type),
             GpuCmd::End => b.end_prim(),
             GpuCmd::TexCoord { texcoord } => {
+                b.cur_draw_call.used_texcoords = true;
+
                 // Transform into OpenGL-type [0,1]x[0,1] texture space.
                 let texcoord = Point2::new(
                     texcoord.x / b.cur_texture_dim.0 as f64,
@@ -351,8 +370,14 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
                 let texcoord = b.gpu.texture_matrix * vec4(texcoord.x, texcoord.y, 0.0, 0.0);
                 b.next_vertex.texcoord = [texcoord.x as f32, texcoord.y as f32];
             }
-            GpuCmd::Color { color } => b.next_vertex.color = [color.x, color.y, color.z],
-            GpuCmd::Normal { .. } => (), // unimplemented
+            GpuCmd::Color { color } => {
+                b.cur_draw_call.used_vertex_color = true;
+                b.next_vertex.color = [color.x, color.y, color.z];
+            }
+            GpuCmd::Normal { normal } => {
+                b.cur_draw_call.used_normals = true;
+                b.next_vertex.normal = [normal.x as f32, normal.y as f32, normal.z as f32];
+            }
             GpuCmd::Vertex { position } => {
                 let p = b.gpu.cur_matrix.transform_point(position);
                 b.next_vertex.position = [p.x as f32, p.y as f32, p.z as f32];
