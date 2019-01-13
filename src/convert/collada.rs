@@ -1,17 +1,15 @@
 use cgmath::{Matrix4, One};
-use convert::format::{FnFmt, Mat};
 use convert::image_namer::ImageNamer;
 use db::{Database, ModelId};
-use errors::Result;
 use skeleton::{Skeleton, Transform, SMatrix};
 use primitives::{self, Primitives};
 use nitro::Model;
 use petgraph::{Direction};
 use petgraph::graph::NodeIndex;
-use std::fmt::{self, Write};
 use time;
 use util::ins_set::InsOrderSet;
 use connection::Connection;
+use super::xml::Xml;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
@@ -26,13 +24,12 @@ struct Ctx<'a> {
     skel: &'a Skeleton,
 }
 
-pub fn write<W: Write>(
-    w: &mut W,
+pub fn write(
     db: &Database,
     conn: &Connection,
     image_namer: &ImageNamer,
     model_id: ModelId,
-) -> Result<()> {
+) -> String {
     let model = &db.models[model_id];
 
     // We need invertible matrices since we're obliged to give values for
@@ -41,47 +38,48 @@ pub fn write<W: Write>(
     let objects = &model.objects.iter()
         .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
-    let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, objects)?;
+    let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, objects)
+        .unwrap(); // FIXME
     let skel = &Skeleton::build(model, objects);
 
     let ctx = Ctx { model_id, model, db, conn, image_namer, objects, prims, skel };
 
-    write_lines!(w,
-        r##"<?xml version="1.0" encoding="utf-8"?>"##,
-        r##"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">"##;
-    )?;
-    write_asset(w)?;
-    write_library_images(w, &ctx)?;
-    write_library_materials(w, &ctx)?;
-    write_library_effects(w, &ctx)?;
-    write_library_geometries(w, &ctx)?;
-    write_library_controllers(w, &ctx)?;
-    write_library_animations(w, &ctx)?;
-    write_library_animation_clips(w, &ctx)?;
-    write_library_visual_scenes(w, &ctx)?;
-    write_scene(w)?;
-    write_lines!(w,
-        r##"</COLLADA>"##;
-    )?;
-    Ok(())
+    let mut xml = Xml::with_capacity(1024 * 1024); // 1MiB
+
+    xml!(xml;
+        (r#"<?xml version="1.0" encoding="utf-8"?>"#);
+        <COLLADA xmlns=["http://www.collada.org/2005/11/COLLADASchema"] version=["1.4.1"]>;
+    );
+    asset(&mut xml, &ctx);
+    library_images(&mut xml, &ctx);
+    library_materials(&mut xml, &ctx);
+    library_effects(&mut xml, &ctx);
+    library_geometries(&mut xml, &ctx);
+    library_controllers(&mut xml, &ctx);
+    library_animations(&mut xml, &ctx);
+    library_animation_clips(&mut xml, &ctx);
+    library_visual_scenes(&mut xml, &ctx);
+    scene(&mut xml, &ctx);
+    xml!(xml;
+        /COLLADA>;
+    );
+
+    xml.string()
 }
 
-fn write_asset<W: Write>(w: &mut W) -> Result<()> {
+fn asset(xml: &mut Xml, _ctx: &Ctx) {
     let now = time::now_utc();
-    let iso8601_datetime = time::strftime("%FT%TZ", &now)?;
-    write_lines!(w,
-        r##"  <asset>"##,
-        r##"    <created>{time}</created>"##,
-        r##"    <modified>{time}</modified>"##,
-        r##"  </asset>"##;
-        time = iso8601_datetime,
-    )?;
-    Ok(())
+    let iso8601_datetime = time::strftime("%FT%TZ", &now).unwrap();
+    xml!(xml;
+        <asset>;
+            <created>(iso8601_datetime)</created>;
+            <modified>(iso8601_datetime)</modified>;
+        /asset>;
+    );
 }
 
-fn write_library_images<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
+fn library_images(xml: &mut Xml, ctx: &Ctx) {
     use std::collections::HashSet;
-
     // Find the names for all the images this model uses
     let image_names = (0..ctx.model.materials.len())
         .filter_map(|material_id| {
@@ -93,47 +91,33 @@ fn write_library_images<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
         .filter_map(|ids| ctx.image_namer.names.get(&ids))
         .collect::<HashSet<_>>();
 
-    write_lines!(w,
-        r##"  <library_images>"##;
-    )?;
-
-    for name in image_names {
-        write_lines!(w,
-            r##"    <image id="image-{name}">"##,
-            r##"      <init_from>{name}.png</init_from>"##,
-            r##"    </image>"##;
-            name = name,
-        )?;
-    }
-    write_lines!(w,
-        r##"  </library_images>"##;
-    )?;
-    Ok(())
+    xml!(xml;
+        <library_images>;
+        for name in (image_names) {
+            <image id=["image-"(name)]>;
+                <init_from>(name)".png"</init_from>;
+            /image>;
+        }
+        /library_images>;
+    );
 }
 
-fn write_library_materials<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    write_lines!(w,
-        r##"  <library_materials>"##;
-    )?;
-    for (i, mat) in ctx.model.materials.iter().enumerate() {
-        write_lines!(w,
-            r##"    <material id="material{i}" name="{name}">"##,
-            r##"      <instance_effect url="#effect{i}"/>"##,
-            r##"    </material>"##;
-            i = i,
-            name = mat.name.print_safe(),
-        )?;
-    }
-    write_lines!(w,
-        r##"  </library_materials>"##;
-    )?;
-    Ok(())
+fn library_materials(xml: &mut Xml, ctx: &Ctx) {
+    xml!(xml;
+        <library_materials>;
+        for (i, mat) in (ctx.model.materials.iter().enumerate()) {
+            <material id=["material"(i)] name=[(mat.name.print_safe())]>;
+                <instance_effect url=["#effect"(i)]/>;
+            /material>;
+        }
+        /library_materials>;
+    );
 }
 
-fn write_library_effects<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    write_lines!(w,
-        r##"  <library_effects>"##;
-    )?;
+fn library_effects(xml: &mut Xml, ctx: &Ctx) {
+    xml!(xml;
+        <library_effects>;
+    );
     for (material_id, mat) in ctx.model.materials.iter().enumerate() {
         let mat_conn = &ctx.conn.models[ctx.model_id].materials[material_id];
         let image_name = match mat_conn.image_id() {
@@ -141,11 +125,10 @@ fn write_library_effects<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             _ => None,
         };
 
-        write_lines!(w,
-            r##"    <effect id="effect{i}" name="{name}">"##,
-            r##"      <profile_COMMON>"##;
-            i = material_id, name = mat.name.print_safe(),
-        )?;
+        xml!(xml;
+            <effect id=["effect"(material_id)] name=[(mat.name.print_safe())]>;
+                <profile_COMMON>;
+        );
 
         if let Some(name) = image_name {
             let wrap = |repeat, mirror| {
@@ -155,239 +138,206 @@ fn write_library_effects<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
                     (true, true) => "MIRROR",
                 }
             };
-            write_lines!(w,
-                r##"        <newparam sid="Image-surface">"##,
-                r##"          <surface type="2D">"##,
-                r##"            <init_from>image-{image_name}</init_from>"##,
-                r##"            <format>A8R8G8B8</format>"##,
-                r##"          </surface>"##,
-                r##"        </newparam>"##,
-                r##"        <newparam sid="Image-sampler">"##,
-                r##"          <sampler2D>"##,
-                r##"            <source>Image-surface</source>"##,
-                r##"            <wrap_s>{wrap_s}</wrap_s>"##,
-                r##"            <wrap_t>{wrap_t}</wrap_t>"##,
-                r##"            <minfilter>NEAREST</minfilter>"##,
-                r##"            <magfilter>NEAREST</magfilter>"##,
-                r##"            <mipfilter>NEAREST</mipfilter>"##,
-                r##"          </sampler2D>"##,
-                r##"        </newparam>"##;
-                image_name = name,
-                wrap_s = wrap(mat.params.repeat_s(), mat.params.mirror_s()),
-                wrap_t = wrap(mat.params.repeat_t(), mat.params.mirror_t()),
-            )?;
+            xml!(xml;
+                <newparam sid=["Image-surface"]>;
+                    <surface type=["2D"]>;
+                        <init_from>"image-"(name)</init_from>;
+                        <format>"A8R8G8B8"</format>;
+                    /surface>;
+                /newparam>;
+                <newparam sid=["Image-sampler"]>;
+                    <sampler2D>;
+                        <source>"Image-surface"</source>;
+                        <wrap_s>(wrap(mat.params.repeat_s(), mat.params.mirror_s()))</wrap_s>;
+                        <wrap_t>(wrap(mat.params.repeat_t(), mat.params.mirror_t()))</wrap_t>;
+                        <minfilter>"NEAREST"</minfilter>;
+                        <magfilter>"NEAREST"</magfilter>;
+                        <mipfilter>"NEAREST"</mipfilter>;
+                    /sampler2D>;
+                /newparam>;
+            );
         }
 
-        write_lines!(w,
-            r##"        <technique sid="common">"##,
-            r##"          <phong>"##,
-            r##"            <diffuse>"##,
-            r##"              {diffuse}"##,
-            r##"            </diffuse>"##,
-            r##"            <transparent>"##,
-            r##"              {transparent}"##,
-            r##"            </transparent>"##,
-            r##"          </phong>"##,
-            r##"        </technique>"##;
-            diffuse = match image_name {
-                Some(_) => r#"<texture texture="Image-sampler" texcoord="tc"/>"#,
-                None => r#"<color>1 1 1 1</color>"#,
-            },
-            transparent = match image_name {
-                Some(_) => r#"<texture texture="Image-sampler" texcoord="tc"/>"#,
-                None => r#"<color>0 0 0 1</color>"#,
-            },
-        )?;
+        xml!(xml;
+            <technique sid=["common"]>
+                <phong>
+                    <diffuse>
+                    if (image_name.is_some()) {
+                        <texture texture=["Image-sampler"] texcoord=["tc"]/>;
+                    } else {
+                        <color>"1 1 1 1"</color>;
+                    }
+                    /diffuse>;
+                    // TODO: use the Alpha stuff in texture_format to decide if
+                    // we need transparency here
+                    if (image_name.is_some()) {
+                        <transparent>
+                            <texture texture=["Image-sampler"] texcoord=["tc"]/>;
+                        /transparent>;
+                    }
+                /phong>;
+            /technique>;
+        );
 
-        write_lines!(w,
-            r##"      </profile_COMMON>"##,
-            r##"    </effect>"##;
-        )?;
+        xml!(xml;
+                /profile_COMMON>;
+            /effect>;
+        );
     }
-    write_lines!(w,
-        r##"  </library_effects>"##;
-    )?;
-    Ok(())
+    xml!(xml;
+        /library_effects>;
+    );
 }
 
-fn write_library_geometries<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
+fn library_geometries(xml: &mut Xml, ctx: &Ctx) {
+    let model_name = ctx.model.name;
+    xml!(xml;
+        <library_geometries>;
+            <geometry id=["geometry"] name=[(model_name.print_safe())]>;
+                <mesh>;
+    );
+
     let verts = &ctx.prims.vertices;
 
-    write_lines!(w,
-        r##"  <library_geometries>"##,
-        r##"    <geometry id="geometry" name="{model_name}">"##,
-        r##"      <mesh>"##;
-        model_name = ctx.model.name.print_safe(),
-    )?;
-
-    write_lines!(w,
-        r##"        <source id="positions">"##,
-        r##"          <float_array id="positions-array" count="{num_floats}">{floats}</float_array>"##,
-        r##"          <technique_common>"##,
-        r##"            <accessor source="#positions-array" count="{num_verts}" stride="3">"##,
-        r##"              <param name="X" type="float"/>"##,
-        r##"              <param name="Y" type="float"/>"##,
-        r##"              <param name="Z" type="float"/>"##,
-        r##"            </accessor>"##,
-        r##"          </technique_common>"##,
-        r##"        </source>"##;
-        num_floats = 3 * verts.len(), num_verts = verts.len(),
-        floats = FnFmt(|f| {
-            for v in verts {
-                let pos = &v.position;
-                write!(f, "{} {} {} ", pos[0], pos[1], pos[2])?;
+    // Positions
+    xml!(xml;
+        <source id=[("positions")]>;
+            <float_array id=[("positions-array")] count=[(3 * verts.len())]>
+            for v in (verts) {
+                (v.position[0])" "(v.position[1])" "(v.position[2])" "
             }
-            Ok(())
-        }),
-    )?;
+            </float_array>;
+            <technique_common>;
+                <accessor source=["#positions-array"] count=[(verts.len())] stride=["3"]>;
+                    <param name=["X"] type=["float"]/>;
+                    <param name=["Y"] type=["float"]/>;
+                    <param name=["Z"] type=["float"]/>;
+                /accessor>;
+            /technique_common>;
+        /source>;
+    );
 
-    write_lines!(w,
-        r##"        <source id="texcoords">"##,
-        r##"          <float_array id="texcoords-array" count="{num_floats}">{floats}</float_array>"##,
-        r##"          <technique_common>"##,
-        r##"            <accessor source="#texcoords-array" count="{num_verts}" stride="2">"##,
-        r##"              <param name="S" type="float"/>"##,
-        r##"              <param name="T" type="float"/>"##,
-        r##"            </accessor>"##,
-        r##"          </technique_common>"##,
-        r##"        </source>"##;
-        num_floats = 2 * verts.len(), num_verts = verts.len(),
-        floats = FnFmt(|f| {
-            for v in verts {
-                let texcoord = &v.texcoord;
-                write!(f, "{} {} ", texcoord[0], texcoord[1])?;
+    // Texcoords
+    xml!(xml;
+        <source id=["texcoords"]>;
+            <float_array id=["texcoords-array"] count=[(2 * verts.len())]>
+            for v in (verts) {
+                (v.texcoord[0])" "(v.texcoord[1])" "
             }
-            Ok(())
-        }),
-    )?;
+            </float_array>;
+            <technique_common>;
+                <accessor source=["#texcoords-array"] count=[(verts.len())] stride=["2"]>;
+                    <param name=["S"] type=["float"]/>;
+                    <param name=["T"] type=["float"]/>;
+                /accessor>;
+            /technique_common>;
+        /source>;
+    );
 
-    // Omit the colors if they are all white
+    // Vertex colors
+    // Omit if they are all white
     let omit_colors = verts.iter().all(|v| v.color == [1.0, 1.0, 1.0]);
     if !omit_colors {
-        write_lines!(w,
-            r##"        <source id="colors">"##,
-            r##"          <float_array id="colors-array" count="{num_floats}">{floats}</float_array>"##,
-            r##"          <technique_common>"##,
-            r##"            <accessor source="#colors-array" count="{num_verts}" stride="3">"##,
-            r##"              <param name="R" type="float"/>"##,
-            r##"              <param name="G" type="float"/>"##,
-            r##"              <param name="B" type="float"/>"##,
-            r##"            </accessor>"##,
-            r##"          </technique_common>"##,
-            r##"        </source>"##;
-            num_floats = 3 * verts.len(), num_verts = verts.len(),
-            floats = FnFmt(|f| {
-                for v in verts {
-                    let color = &v.color;
-                    write!(f, "{} {} {} ", color[0], color[1], color[2])?;
+        xml!(xml;
+            <source id=["colors"]>;
+                <float_array id=["colors-array"] count=[(3 * verts.len())]>
+                for v in (verts) {
+                    (v.color[0])" "(v.color[1])" "(v.color[2])" "
                 }
-                Ok(())
-            }),
-        )?;
+                </float_array>;
+                <technique_common>;
+                    <accessor source=["#colors-array"] count=[(verts.len())] stride=["3"]>;
+                        <param name=["R"] type=["float"]/>;
+                        <param name=["G"] type=["float"]/>;
+                        <param name=["B"] type=["float"]/>;
+                    /accessor>;
+                /technique_common>;
+            /source>;
+        );
     }
 
-    write_lines!(w,
-        r##"        <vertices id="vertices">"##,
-        r##"          <input semantic="POSITION" source="#positions"/>"##,
-        r##"          <input semantic="TEXCOORD" source="#texcoords"/>"##;
-    )?;
-    if !omit_colors {
-        write_lines!(w,
-            r##"          <input semantic="COLOR" source="#colors"/>"##;
-        )?;
-    }
-    write_lines!(w,
-        r#"        </vertices>"#;
-    )?;
+    xml!(xml;
+        <vertices id=["vertices"]>;
+            <input semantic=["POSITION"] source=["#positions"]/>;
+            <input semantic=["TEXCOORD"] source=["#texcoords"]/>;
+            if (!omit_colors) {
+            <input semantic=["COLOR"] source=["#colors"]/>;
+            }
+        /vertices>;
+    );
 
+    // One <polylist> per draw call
     for call in &ctx.prims.draw_calls {
         let indices = &ctx.prims.indices[call.index_range.clone()];
-        write_lines!(w,
-            r##"        <polylist material="material{mat_id}" count="{num_polys}">"##,
-            r##"          <input semantic="VERTEX" source="#vertices" offset="0"/>"##,
-            r##"          <vcount>{vcounts}</vcount>"##,
-            r##"          <p>{indices}</p>"##,
-            r##"        </polylist>"##;
-            mat_id = call.mat_id, num_polys = indices.len() / 4,
-            vcounts = FnFmt(|f| {
-                let mut i = 0;
-                while i < indices.len() {
-                    if indices[i + 3] == 0xffff {
-                        write!(f, "3 ")?;
-                    } else {
-                        write!(f, "4 ")?;
-                    }
-                    i += 4;
+        // Remember indices come in groups of four.
+        // [a, b, c, 0xffff] = triangle(a, b, c)
+        // [a, b, c, d] = quad(a, b, c, d)
+        let num_polys = indices.len() / 4;
+        xml!(xml;
+            <polylist material=["material"(call.mat_id)] count=[(num_polys)]>;
+                <input semantic=["VERTEX"] source=["#vertices"] offset=["0"]/>;
+                <vcount>
+                for inds in (indices.chunks(4)) {
+                    if (inds[3] == 0xffff) { "3 " }
+                    else { "4 " }
                 }
-                Ok(())
-            }),
-            indices = FnFmt(|f| {
-                for &index in indices {
-                    if index == 0xffff { continue; }
-                    write!(f, "{} ", index)?;
+                </vcount>;
+                <p>
+                for &ind in (indices) {
+                    if (ind != 0xffff) { (ind)" " }
                 }
-                Ok(())
-            }),
-        )?;
-
+                </p>;
+            /polylist>;
+        );
     }
 
-    write_lines!(w,
-        r##"      </mesh>"##,
-        r##"    </geometry>"##,
-        r##"  </library_geometries>"##;
-    )?;
-
-    Ok(())
+    xml!(xml;
+                /mesh>;
+            /geometry>;
+        /library_geometries>;
+    );
 }
 
-fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    write_lines!(w,
-        r##"  <library_controllers>"##;
-    )?;
+fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
+    xml!(xml;
+        <library_controllers>;
+            <controller id=["controller"]>;
+                <skin source=["#geometry"]>;
+    );
 
     let num_joints = ctx.skel.tree.node_count();
 
-    write_lines!(w,
-        r##"    <controller id="controller">"##,
-        r##"      <skin source="#geometry">"##;
-    )?;
-    write_lines!(w,
-        r##"        <source id="controller-joints">"##,
-        r##"          <Name_array id="controller-joints-array" count="{num_joints}">{joints}</Name_array>"##,
-        r##"          <technique_common>"##,
-        r##"            <accessor source="#controller-joints-array" count="{num_joints}">"##,
-        r##"              <param name="JOINT" type="Name"/>"##,
-        r##"            </accessor>"##,
-        r##"          </technique_common>"##,
-        r##"        </source>"##;
-        num_joints = num_joints,
-        joints = FnFmt(|f| {
-            for j in ctx.skel.tree.node_indices() {
-                write!(f, "joint{} ", j.index())?;
+    // XML IDs of the joint <node>s
+    xml!(xml;
+        <source id=["controller-joints"]>;
+            <Name_array id=["controller-joints-array"] count=[(num_joints)]>
+            for j in (ctx.skel.tree.node_indices()) {
+                "joint"(j.index())" "
             }
-            Ok(())
-        }),
-    )?;
+            </Name_array>;
+            <technique_common>;
+                <accessor source=["#controller-joints-array"] count=[(num_joints)]>;
+                    <param name=["JOINT"] type=["Name"]/>;
+                /accessor>;
+            /technique_common>;
+        /source>;
+    );
 
-    write_lines!(w,
-        r##"        <source id="controller-bind_poses">"##,
-        r##"          <float_array id="controller-bind_poses-array" count="{num_floats}">{floats}</float_array>"##,
-        r##"          <technique_common>"##,
-        r##"            <accessor source="#controller-bind_poses-array" count="{num_joints}" stride="16">"##,
-        r##"              <param name="TRANSFORM" type="float4x4"/>"##,
-        r##"            </accessor>"##,
-        r##"          </technique_common>"##,
-        r##"        </source>"##;
-        num_floats = 16 * num_joints, num_joints = num_joints,
-        floats = FnFmt(|f| {
-            for j in ctx.skel.tree.node_indices() {
-                let inv_bind = &ctx.skel.tree[j].rest_world_to_local;
-                write!(f, "{} ", Mat(inv_bind))?;
+    // Inverse bind matrices (ie. rest world-to-locals)
+    xml!(xml;
+        <source id=["controller-bind-poses"]>;
+            <float_array id=["controller-bind-poses-array"] count=[(16 * num_joints)]>
+            for j in (ctx.skel.tree.node_indices()) {
+                MATRIX(&ctx.skel.tree[j].rest_world_to_local)" "
             }
-            Ok(())
-        }),
-    )?;
+            </float_array>;
+            <technique_common>;
+                <accessor source=["#controller-bind-poses-array"] count=[(num_joints)] stride=["16"]>;
+                    <param name=["TRANSFORM"] type=["float4x4"]/>;
+                /accessor>;
+            /technique_common>;
+        /source>;
+    );
 
     // We gives weights by first giving a list of all weights we're going to
     // use and then giving indices into the list with the vertices, so we start
@@ -403,283 +353,241 @@ fn write_library_controllers<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             all_weights.insert(encode(influence.weight));
         }
     }
-    write_lines!(w,
-        r##"        <source id="controller-weights">"##,
-        r##"          <float_array id="controller-weights-array" count="{num_weights}">{weights}</float_array>"##,
-        r##"          <technique_common>"##,
-        r##"            <accessor source="#controller-weights-array" count="{num_weights}">"##,
-        r##"              <param name="WEIGHT" type="float"/>"##,
-        r##"            </accessor>"##,
-        r##"          </technique_common>"##,
-        r##"        </source>"##;
-        num_weights = all_weights.len(),
-        weights = FnFmt(|f| {
-            for &weight in all_weights.iter() {
-                write!(f, "{} ", decode(weight))?;
+    // Here is the list of all weights.
+    xml!(xml;
+        <source id=["controller-weights"]>;
+            <float_array id=["controller-weights-array"] count=[(all_weights.len())]>
+            for &weight in (all_weights.iter()) {
+                (decode(weight))" "
             }
-            Ok(())
-        })
-    )?;
+            </float_array>;
+            <technique_common>;
+                <accessor source=["#controller-weights-array"] count=[(all_weights.len())]>;
+                    <param name=["WEIGHT"] type=["float"]/>;
+                /accessor>;
+            /technique_common>;
+        /source>;
+    );
 
-    write_lines!(w,
-        r##"        <joints>"##,
-        r##"          <input semantic="JOINT" source="#controller-joints"/>"##,
-        r##"          <input semantic="INV_BIND_MATRIX" source="#controller-bind_poses"/>"##,
-        r##"        </joints>"##;
-    )?;
+    xml!(xml;
+        <joints>;
+            <input semantic=["JOINT"] source=["#controller-joints"]/>;
+            <input semantic=["INV_BIND_MATRIX"] source=["#controller-bind-poses"]/>;
+        /joints>;
+    );
 
-    write_lines!(w,
-        r##"        <vertex_weights count="{num_verts}">"##,
-        r##"          <input semantic="JOINT" source="#controller-joints" offset="0"/>"##,
-        r##"          <input semantic="WEIGHT" source="#controller-weights" offset="1"/>"##,
-        r##"          <vcount>{vcount}</vcount>"##,
-        r##"          <v>{v}</v>"##,
-        r##"        </vertex_weights>"##;
-        num_verts = ctx.skel.vertices.len(),
-        vcount = FnFmt(|f| {
-            for v in &ctx.skel.vertices {
-                write!(f, "{} ", v.influences.len())?;
+    let num_verts = ctx.skel.vertices.len();
+    xml!(xml;
+        <vertex_weights count=[(num_verts)]>;
+            <input semantic=["JOINT"] source=["#controller-joints"] offset=["0"]/>;
+            <input semantic=["WEIGHT"] source=["#controller-weights"] offset=["1"]/>;
+            <vcount>
+            for v in (&ctx.skel.vertices) {
+                (v.influences.len())" "
             }
-            Ok(())
-        }),
-        v = FnFmt(|f| {
-            for v in &ctx.skel.vertices {
-                for influence in &v.influences {
-                    write!(f, "{} {} ",
-                        influence.joint.index(),
-                        all_weights.get_index_from_value(&encode(influence.weight)).unwrap(),
-                    )?;
+            </vcount>;
+            <v>
+            for v in (&ctx.skel.vertices) {
+                for influence in (&v.influences) {
+                    (influence.joint.index())" "
+                    (all_weights.get_index_from_value(&encode(influence.weight)).unwrap())" "
                 }
             }
-            Ok(())
-        }),
-    )?;
+            </v>;
+        /vertex_weights>;
+    );
 
-    write_lines!(w,
-        r##"      </skin>"##,
-        r##"    </controller>"##,
-        r##"  </library_controllers>"##;
-    )?;
-
-    Ok(())
+    xml!(xml;
+                /skin>;
+            /controller>;
+        /library_controllers>;
+    );
 }
 
-fn write_library_animations<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
+fn library_animations(xml: &mut Xml, ctx: &Ctx) {
     let anims = &ctx.conn.models[ctx.model_id].animations;
-    if anims.is_empty() { return Ok(()); }
+    if anims.is_empty() { return; }
 
-    write_lines!(w,
-        r##"  <library_animations>"##;
-    )?;
+    xml!(xml;
+        <library_animations>;
+    );
     for &anim_id in anims {
         let anim = &ctx.db.animations[anim_id];
         let num_frames = anim.num_frames;
 
         for joint_id in ctx.skel.tree.node_indices() {
+            let joint_index = joint_id.index();
             let joint = &ctx.skel.tree[joint_id];
             let object_id = match joint.local_to_parent {
                 Transform::SMatrix(SMatrix::Object { object_idx }) => object_idx,
                 _ => continue,
             };
 
-            write_lines!(w,
-                r##"    <animation id="anim{anim_id}-joint{joint_id}">"##;
-                anim_id = anim_id, joint_id = joint_id.index(),
-            )?;
+            xml!(xml;
+                <animation id=["anim"(anim_id)"-joint"(joint_index)]>;
+            );
 
-            write_lines!(w,
-                r##"      <source id="anim{anim_id}-joint{joint_id}-time">"##,
-                r##"        <float_array id="anim{anim_id}-joint{joint_id}-time-array" count="{num_frames}">{times}</float_array>"##,
-                r##"        <technique_common>"##,
-                r##"          <accessor source="#anim{anim_id}-joint{joint_id}-time-array" count="{num_frames}">"##,
-                r##"            <param name="TIME" type="float"/>"##,
-                r##"          </accessor>"##,
-                r##"        </technique_common>"##,
-                r##"      </source>"##;
-                anim_id = anim_id, joint_id = joint_id.index(), num_frames = num_frames,
-                times = FnFmt(|f| {
-                    for frame in 0..num_frames {
-                        write!(f, "{} ", frame as f64 * FRAME_LENGTH)?;
+            // Time
+            xml!(xml;
+                <source id=["anim"(anim_id)"-joint"(joint_index)"-time"]>;
+                    <float_array id=["anim"(anim_id)"-joint"(joint_index)"-time-array"] count=[(num_frames)]>
+                    for frame in (0..num_frames) {
+                        (frame as f64 * FRAME_LENGTH)" "
                     }
-                    Ok(())
-                }),
-            )?;
+                    </float_array>;
+                    <technique_common>;
+                        <accessor source=["#anim"(anim_id)"-joint"(joint_index)"-time-array"] count=[(num_frames)]>;
+                            <param name=["TIME"] type=["float"]/>;
+                        /accessor>;
+                    /technique_common>;
+                /source>;
+            );
 
-            write_lines!(w,
-                r##"      <source id="anim{anim_id}-joint{joint_id}-matrix">"##,
-                r##"        <float_array id="anim{anim_id}-joint{joint_id}-matrix-array" count="{num_floats}">{mats}</float_array>"##,
-                r##"        <technique_common>"##,
-                r##"          <accessor source="#anim{anim_id}-joint{joint_id}-matrix-array" count="{num_frames}" stride="16">"##,
-                r##"            <param name="TRANSFORM" type="float4x4"/>"##,
-                r##"          </accessor>"##,
-                r##"        </technique_common>"##,
-                r##"      </source>"##;
-                anim_id = anim_id, joint_id = joint_id.index(), num_floats = 16 * num_frames, num_frames = num_frames,
-                mats = FnFmt(|f| {
-                    for frame in 0..num_frames {
-                        let mat = anim.objects_curves.get(object_id as usize)
-                            .map(|trs| trs.sample_at(frame))
-                            .unwrap_or_else(|| Matrix4::one());
-                        write!(f, "{} ", Mat(&mat))?;
+            // Matrix
+            xml!(xml;
+                <source id=["anim"(anim_id)"-joint"(joint_index)"-matrix"]>;
+                    <float_array id=["anim"(anim_id)"-joint"(joint_index)"-matrix-array"] count=[(16 * num_frames)]>
+                    for frame in (0..num_frames) {
+                        MATRIX(
+                            &anim.objects_curves.get(object_id as usize)
+                                .map(|trs| trs.sample_at(frame))
+                                .unwrap_or_else(|| Matrix4::one())
+                        )" "
                     }
-                    Ok(())
-                }),
-            )?;
+                    </float_array>;
+                    <technique_common>;
+                        <accessor source=["#anim"(anim_id)"-joint"(joint_index)"-matrix-array"] count=[(num_frames)] stride=["16"]>;
+                            <param name=["TRANSFORM"] type=["float4x4"]/>;
+                        /accessor>;
+                    /technique_common>;
+                /source>;
+            );
 
-            write_lines!(w,
-                r##"      <source id="anim{anim_id}-joint{joint_id}-interpolation">"##,
-                r##"        <Name_array id="anim{anim_id}-joint{joint_id}-interpolation-array" count="{num_frames}">{interps}</Name_array>"##,
-                r##"        <technique_common>"##,
-                r##"          <accessor source="#anim{anim_id}-joint{joint_id}-interpolation-array" count="{num_frames}">"##,
-                r##"            <param name="INTERPOLATION" type="name"/>"##,
-                r##"          </accessor>"##,
-                r##"        </technique_common>"##,
-                r##"      </source>"##;
-                anim_id = anim_id, joint_id = joint_id.index(), num_frames = num_frames,
-                interps = FnFmt(|f| {
-                    for _ in 0..num_frames {
-                        write!(f, "LINEAR ")?;
+            // Interpolation (all LINEAR)
+            xml!(xml;
+                <source id=["anim"(anim_id)"-joint"(joint_index)"-interpolation"]>;
+                    <Name_array id=["anim"(anim_id)"-joint"(joint_index)"-interpolation-array"] count=[(num_frames)]>
+                    for _frame in (0..num_frames) {
+                        "LINEAR "
                     }
-                    Ok(())
-                }),
-            )?;
+                    </Name_array>;
+                    <technique_common>;
+                        <accessor source=["#anim"(anim_id)"-joint"(joint_index)"-interpolation-array"] count=[(num_frames)]>;
+                            <param name=["INTERPOLATION"] type=["name"]/>;
+                        /accessor>;
+                    /technique_common>;
+                /source>;
+            );
 
-            write_lines!(w,
-                r##"      <sampler id="anim{anim_id}-joint{joint_id}-sampler">"##,
-                r##"        <input semantic="INPUT" source="#anim{anim_id}-joint{joint_id}-time"/>"##,
-                r##"        <input semantic="OUTPUT" source="#anim{anim_id}-joint{joint_id}-matrix"/>"##,
-                r##"        <input semantic="INTERPOLATION" source="#anim{anim_id}-joint{joint_id}-interpolation"/>"##,
-                r##"      </sampler>"##;
-                anim_id = anim_id, joint_id = joint_id.index(),
-            )?;
+            xml!(xml;
+                <sampler id=["anim"(anim_id)"-joint"(joint_index)"-sampler"]>;
+                    <input semantic=["INPUT"] source=["#anim"(anim_id)"-joint"(joint_index)"-time"]/>;
+                    <input semantic=["OUTPUT"] source=["#anim"(anim_id)"-joint"(joint_index)"-matrix"]/>;
+                    <input semantic=["INTERPOLATION"] source=["#anim"(anim_id)"-joint"(joint_index)"-interpolation"]/>;
+                </sampler>;
+            );
 
-            write_lines!(w,
-                r##"      <channel source="#anim{anim_id}-joint{joint_id}-sampler" target="joint{joint_id}/transform"/>"##;
-                anim_id = anim_id, joint_id = joint_id.index(),
-            )?;
+            xml!(xml;
+                <channel
+                    source=["#anim"(anim_id)"-joint"(joint_index)"-sampler"]
+                    target=["joint"(joint_index)"/transform"]/>;
+            );
 
-            write_lines!(w,
-                r##"    </animation>"##;
-            )?;
+            xml!(xml;
+                /animation>;
+            );
         }
     }
-    write_lines!(w,
-        r##"  </library_animations>"##;
-    )?;
-
-    Ok(())
+    xml!(xml;
+        /library_animations>;
+    );
 }
 
 
-fn write_library_animation_clips<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
+fn library_animation_clips(xml: &mut Xml, ctx: &Ctx) {
     let anims = &ctx.conn.models[ctx.model_id].animations;
-    if anims.is_empty() { return Ok(()); }
+    if anims.is_empty() { return ;}
 
-    write_lines!(w,
-        r##"  <library_animation_clips>"##;
-    )?;
+    xml!(xml;
+        <library_animation_clips>;
+    );
     for &anim_id in anims {
         let anim = &ctx.db.animations[anim_id];
-        check!(anim.num_frames != 0)?;
+        assert!(anim.num_frames != 0);
         let end_time = (anim.num_frames - 1) as f64 * FRAME_LENGTH;
 
-        write_lines!(w,
-            r##"    <animation_clip id="anim{anim_id}" name="{name}" end="{end_time}">"##;
-            anim_id = anim_id, name = anim.name.print_safe(), end_time = end_time,
-        )?;
-        for joint_id in ctx.skel.tree.node_indices() {
-            write_lines!(w,
-                r##"      <instance_animation url="#anim{anim_id}-joint{joint_id}"/>"##;
-                anim_id = anim_id, joint_id = joint_id.index(),
-            )?;
-        }
-        write_lines!(w,
-            r##"    </animation_clip>"##;
-        )?;
+        xml!(xml;
+            <animation_clip id=["anim"(anim_id)] name=[(anim.name.print_safe())] end=[(end_time)]>;
+            for j in (ctx.skel.tree.node_indices()) {
+                <instance_animation url=["#anim"(anim_id)"-joint"(j.index())]/>;
+            }
+            /animation_clip>;
+        );
     }
-    write_lines!(w,
-        r##"  </library_animation_clips>"##;
-    )?;
-
-    Ok(())
+    xml!(xml;
+        /library_animation_clips>;
+    );
 }
 
-fn write_library_visual_scenes<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    write_lines!(w,
-        r#"  <library_visual_scenes>"#,
-        r#"    <visual_scene id="scene0" name="{model_name}">"#;
-        model_name = ctx.model.name.print_safe(),
-    )?;
+fn library_visual_scenes(xml: &mut Xml, ctx: &Ctx) {
+    let model_name = ctx.model.name;
 
-    write_joint_hierarchy(w, ctx)?;
+    xml!(xml;
+        <library_visual_scenes>;
+            <visual_scene id=["scene0"] name=[(model_name.print_safe())]>;
+    );
 
-    write_lines!(w,
-        r##"      <node id="node" name="{model_name}" type="NODE">"##,
-        r##"        <instance_controller url="#controller">"##,
-        r##"          <skeleton>#joint{root_id}</skeleton>"##,
-        r##"          <bind_material>"##,
-        r##"            <technique_common>"##;
-        model_name = ctx.model.name.print_safe(),
-        root_id = ctx.skel.root.index(),
-    )?;
+    joint_hierarchy(xml, ctx);
 
-    for i in 0..ctx.model.materials.len() {
-        write_lines!(w,
-            r##"              <instance_material symbol="material{i}" target="#material{i}">"##,
-            r##"                <bind_vertex_input semantic="tc" input_semantic="TEXCOORD"/>"##,
-            r##"              </instance_material>"##;
-            i = i,
-        )?;
-    }
+    xml!(xml;
+        <node id=["node"] name=[(model_name.print_safe())] type=["NODE"]>;
+            <instance_controller url=["#controller"]>;
+                <skeleton>"#joint"(ctx.skel.root.index())</skeleton>;
+                <bind_material>;
+                    <technique_common>;
+                    for i in (0..ctx.model.materials.len()) {
+                        <instance_material symbol=["material"(i)] target=["#material"(i)]>;
+                            <bind_vertex_input semantic=["tc"] input_semantic=["TEXCOORD"]/>;
+                        /instance_material>;
+                    }
+                    /technique_common>;
+                /bind_material>;
+            /instance_controller>;
+        /node>;
+    );
 
-    write_lines!(w,
-        r##"            </technique_common>"##,
-        r##"          </bind_material>"##,
-        r##"        </instance_controller>"##,
-        r##"      </node>"##;
-    )?;
-
-    write_lines!(w,
-        r##"    </visual_scene>"##,
-        r##"  </library_visual_scenes>"##;
-    )?;
-
-    Ok(())
+    xml!(xml;
+            /visual_scene>;
+        /library_visual_scenes>;
+    );
 }
 
-fn write_joint_hierarchy<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
-    fn write_indent<W: Write>(w: &mut W, indent: u32) -> Result<()> {
-        // Base indent
-        write!(w, "      ")?;
-        for _ in 0..indent {
-            write!(w, "  ")?;
-        }
-        Ok(())
-    }
-
+fn joint_hierarchy(xml: &mut Xml, ctx: &Ctx) {
     /// Write the name for a joint that will appear in DCC programs.
-    fn write_joint_name<W: Write>(w: &mut W, ctx: &Ctx, node: NodeIndex) -> fmt::Result {
+    fn joint_name(ctx: &Ctx, node: NodeIndex) -> String {
         match ctx.skel.tree[node].local_to_parent {
             Transform::Root =>
-                write!(w, "__ROOT__"),
+                format!("__ROOT__"),
             Transform::SMatrix(SMatrix::Object { object_idx }) =>
-                write!(w, "{}", ctx.model.objects[object_idx as usize].name.print_safe()),
+                format!("{}", ctx.model.objects[object_idx as usize].name.print_safe()),
             Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) =>
-                write!(w, "__INV_BIND{}", inv_bind_idx),
+                format!("__INV_BIND{}", inv_bind_idx),
             Transform::SMatrix(SMatrix::Uninitialized { stack_pos }) =>
-                write!(w, "__UNINITIALIZED{}", stack_pos),
+                format!("__UNINITIALIZED{}", stack_pos),
         }
     }
 
-    fn write_rec<W: Write>(w: &mut W, ctx: &Ctx, node: NodeIndex, indent: u32) -> Result<()> {
+    // Recursive tree walker
+    fn rec(xml: &mut Xml, ctx: &Ctx, node: NodeIndex) {
         let tree = &ctx.skel.tree;
 
-        write_indent(w, indent)?;
-        write_lines!(w,
-            r#"<node id="joint{joint_id}" sid="joint{joint_id}" name="{name}" type="JOINT">"#;
-            joint_id = node.index(),
-            name = FnFmt(|f| write_joint_name(f, ctx, node)),
-        )?;
+        xml!(xml;
+            <node
+                id=["joint"(node.index())]
+                sid=["joint"(node.index())]
+                name=[(joint_name(ctx, node))]
+                type=["JOINT"]>;
+        );
 
         let mat = match tree[node].local_to_parent {
             Transform::Root =>
@@ -691,26 +599,27 @@ fn write_joint_hierarchy<W: Write>(w: &mut W, ctx: &Ctx) -> Result<()> {
             Transform::SMatrix(SMatrix::Uninitialized { .. }) =>
                 Matrix4::one(),
         };
-        write_indent(w, indent + 1)?;
-        write_lines!(w, r#"<matrix sid="transform">{}</matrix>"#; Mat(&mat))?;
+        xml!(xml;
+            <matrix sid=["transform"]>MATRIX(&mat)</matrix>;
+        );
 
         let children = tree.neighbors_directed(node, Direction::Outgoing);
         for child in children {
-            write_rec(w, ctx, child, indent + 1)?;
+            rec(xml, ctx, child);
         }
 
-        write_indent(w, indent)?;
-        write!(w, "</node>\n")?;
-        Ok(())
+        xml!(xml;
+            /node>;
+        );
     }
-    write_rec(w, ctx, ctx.skel.root, 0)
+
+    rec(xml, ctx, ctx.skel.root)
 }
 
-fn write_scene<W: Write>(w: &mut W) -> Result<()> {
-    write_lines!(w,
-        r##"  <scene>"##,
-        r##"    <instance_visual_scene url="#scene0"/>"##,
-        r##"  </scene>"##;
-    )?;
-    Ok(())
+fn scene(xml: &mut Xml, _ctx: &Ctx) {
+    xml!(xml;
+        <scene>;
+            <instance_visual_scene url=["#scene0"]/>;
+        /scene>;
+    );
 }

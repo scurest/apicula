@@ -1,5 +1,7 @@
 //! apicula, NDS model viewer/converter
 
+#![recursion_limit="128"]
+
 #[macro_use]
 extern crate log;
 #[macro_use]

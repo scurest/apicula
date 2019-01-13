@@ -1,5 +1,5 @@
 #[macro_use]
-mod format;
+mod xml;
 mod collada;
 mod image_namer;
 mod make_invertible;
@@ -40,17 +40,8 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     let mut dae_namer = UniqueNamer::new();
 
     // Save each model as a COLLADA file
-    let mut s = String::new();
     for (model_id, model) in db.models.iter().enumerate() {
-        s.clear();
-
-        match collada::write(&mut s, &db, &conn, &image_namer, model_id) {
-            Ok(()) => (),
-            Err(e) => {
-                error!("error building COLLADA for model {}: {}", model_id, e);
-                continue;
-            }
-        }
+        let s = collada::write(&db, &conn, &image_namer, model_id);
 
         let name = dae_namer.get_fresh_name(format!("{}", model.name.print_safe()));
         let dae_path = out_dir.join(&format!("{}.dae", name));
