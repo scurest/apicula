@@ -1,5 +1,5 @@
 use clap::ArgMatches;
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 use std::collections::HashMap;
 use nitro::{Name, Model, Texture, Palette, Animation, Container};
 use errors::{Result, ResultExt};
@@ -68,7 +68,7 @@ impl Database {
             // Hard-fail if we can't open the path. We don't expect the caller
             // to know which files are valid Nitro files but we expect them to
             // give us files we can actually open.
-            let buf = read_file(&self.file_paths[file_id])
+            let buf = std::fs::read(&self.file_paths[file_id])
                 .chain_err(|| {
                     format!("couldn't read file: {}", &self.file_paths[file_id].to_string_lossy())
                 })?;
@@ -127,14 +127,4 @@ impl Database {
                 .push(id);
         }
     }
-}
-
-
-fn read_file(path: &Path) -> Result<Vec<u8>> {
-    use std::fs::File;
-    use std::io::Read;
-    let mut f = File::open(&path)?;
-    let mut b: Vec<u8> = vec![];
-    f.read_to_end(&mut b)?;
-    Ok(b)
 }
