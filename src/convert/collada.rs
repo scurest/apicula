@@ -158,20 +158,33 @@ fn library_effects(xml: &mut Xml, ctx: &Ctx) {
             );
         }
 
+        // Lookup the texture we're using and find out if it has transparency.
+        let has_transparency = match mat_conn.image_id() {
+            Ok(Some(image_id)) => {
+                let texture_id = image_id.0;
+                let params = ctx.db.textures[texture_id].params;
+                let alpha_type = params.format().alpha_type(params);
+
+                use nds::Alpha;
+                match alpha_type {
+                    Alpha::Opaque => false,
+                    Alpha::Transparent | Alpha::Translucent => true,
+                }
+            }
+            _ => false,
+        };
         xml!(xml;
-            <technique sid=["common"]>
-                <phong>
-                    <diffuse>
+            <technique sid=["common"]>;
+                <phong>;
+                    <diffuse>;
                     if (image_name.is_some()) {
                         <texture texture=["Image-sampler"] texcoord=["tc"]/>;
                     } else {
                         <color>"1 1 1 1"</color>;
                     }
                     /diffuse>;
-                    // TODO: use the Alpha stuff in texture_format to decide if
-                    // we need transparency here
-                    if (image_name.is_some()) {
-                        <transparent>
+                    if (has_transparency) {
+                        <transparent>;
                             <texture texture=["Image-sampler"] texcoord=["tc"]/>;
                         /transparent>;
                     }
