@@ -6,7 +6,6 @@ use errors::Result;
 use errors::ResultExt;
 use nitro::Container;
 use nitro::container::read_container;
-use regex::bytes::Regex;
 use std::fs;
 use std::io::Read;
 use std::io::Write;
@@ -35,13 +34,10 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     // Search for four bytes that match the stamp of a BMD, BTX, or BCA
     // file. Then try to parse a file from that point. If we succeed, write
     // the bytes for that file to a new file in the output directory.
-
-    let regex = Regex::new("BMD0|BTX0|BCA0").unwrap();
-
     let mut cur = Cur::new(&input[..]);
 
-    while let Some(found) = regex.find(cur.slice_from_cur_to_end()) {
-        cur.jump_forward(found.start());
+    while let Some(start_idx) = find_next_stamp(cur.slice_from_cur_to_end()) {
+        cur.jump_forward(start_idx);
         extractor.try_proc_file_at(&mut cur);
     }
 
@@ -182,4 +178,20 @@ fn guess_container_name(cont: &Container) -> String {
             _ => "unknown_file",
         }.to_string()
     }
+}
+
+pub fn find_next_stamp(bytes: &[u8]) -> Option<usize> {
+    // find BMD0|BTX0|BCA0
+    let mut i = 0;
+    while i < bytes.len() - 3 {
+        if bytes[i] == b'B' && bytes[i+3] == b'0' {
+            if (bytes[i+1] == b'M' && bytes[i+2] == b'D') ||
+               (bytes[i+1] == b'T' && bytes[i+2] == b'X') ||
+               (bytes[i+1] == b'C' && bytes[i+2] == b'A') {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    return None;
 }
