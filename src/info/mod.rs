@@ -26,6 +26,10 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     for animation_id in 0..db.animations.len() {
         animation_info(&db, animation_id);
     }
+    println!();
+    for pattern_id in 0..db.patterns.len() {
+        pattern_info(&db, pattern_id);
+    }
 
     Ok(())
 }
@@ -172,3 +176,25 @@ fn animation_info(db: &Database, anim_id: usize) {
     }
     println!();
 }
+
+fn pattern_info(db: &Database, pat_id: usize) {
+    let pat = &db.patterns[pat_id];
+    println!("Pattern Animation {}:", pat_id);
+    println!("  Name: {:?}", pat.name);
+    println!("  Found In: {}",
+        db.file_paths[db.patterns_found_in[pat_id]].to_string_lossy());
+    println!("  Frames: {}", pat.num_frames);
+    println!("  Tracks ({} total):", pat.material_tracks.len());
+    for (i, track) in pat.material_tracks.iter().enumerate() {
+        println!("    Track {}: {}", i, track.name);
+        for key in &track.keyframes {
+            println!("      {}: {:?} / {:?}",
+                key.frame,
+                pat.texture_names[key.texture_idx as usize],
+                pat.palette_names[key.palette_idx as usize],
+            );
+        }
+    }
+    println!();
+}
+

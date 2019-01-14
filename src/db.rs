@@ -1,7 +1,7 @@
 use clap::ArgMatches;
 use std::path::PathBuf;
 use std::collections::HashMap;
-use nitro::{Name, Model, Texture, Palette, Animation, Container};
+use nitro::{Name, Model, Texture, Palette, Animation, Pattern, Container};
 use errors::{Result, ResultExt};
 use util::cur::Cur;
 
@@ -20,11 +20,13 @@ pub struct Database {
     pub textures: Vec<Texture>,
     pub palettes: Vec<Palette>,
     pub animations: Vec<Animation>,
+    pub patterns: Vec<Pattern>,
 
     pub models_found_in: Vec<FileId>,
     pub textures_found_in: Vec<FileId>,
     pub palettes_found_in: Vec<FileId>,
     pub animations_found_in: Vec<FileId>,
+    pub patterns_found_in: Vec<FileId>,
 
     pub textures_by_name: HashMap<Name, Vec<TextureId>>,
     pub palettes_by_name: HashMap<Name, Vec<PaletteId>>,
@@ -49,11 +51,16 @@ impl Database {
         let num_textures = self.textures.len();
         let num_palettes = self.palettes.len();
         let num_animations = self.animations.len();
+        let num_patterns = self.patterns.len();
 
         let plural = |x| if x != 1 { "s" } else { "" };
-        println!("Got {} model{}, {} texture{}, {} palette{}, {} animation{}.",
-            num_models, plural(num_models), num_textures, plural(num_textures),
-            num_palettes, plural(num_palettes), num_animations, plural(num_animations),
+        println!(
+            "Got {} model{}, {} texture{}, {} palette{}, {} animation{}, {} pattern animation{}.",
+            num_models, plural(num_models),
+            num_textures, plural(num_textures),
+            num_palettes, plural(num_palettes),
+            num_animations, plural(num_animations),
+            num_patterns, plural(num_patterns),
         );
     }
 
@@ -92,25 +99,19 @@ impl Database {
     fn add_container(&mut self, file_id: FileId, cont: Container) {
         use std::iter::repeat;
 
-        let num_models = cont.models.len();
-        let num_textures = cont.textures.len();
-        let num_palettes = cont.palettes.len();
-        let num_animations = cont.animations.len();
+        macro_rules! move_from_cont {
+            ($kind:ident, $kind_found_in:ident) => {
+                let num = cont.$kind.len();
+                self.$kind.extend(cont.$kind.into_iter());
+                self.$kind_found_in.extend(repeat(file_id).take(num));
+            };
+        }
 
-        // Move the items from the container into the DB, marking which
-        // file we found them in as we go.
-
-        self.models.extend(cont.models.into_iter());
-        self.models_found_in.extend(repeat(file_id).take(num_models));
-
-        self.textures.extend(cont.textures.into_iter());
-        self.textures_found_in.extend(repeat(file_id).take(num_textures));
-
-        self.palettes.extend(cont.palettes.into_iter());
-        self.palettes_found_in.extend(repeat(file_id).take(num_palettes));
-
-        self.animations.extend(cont.animations.into_iter());
-        self.animations_found_in.extend(repeat(file_id).take(num_animations));
+        move_from_cont!(models, models_found_in);
+        move_from_cont!(textures, textures_found_in);
+        move_from_cont!(palettes, palettes_found_in);
+        move_from_cont!(animations, animations_found_in);
+        move_from_cont!(patterns, patterns_found_in);
     }
 
     /// Fill out `textures_by_name` and `palettes_by_name`.

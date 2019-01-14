@@ -55,6 +55,7 @@ struct Extractor {
     num_bmds: u32,
     num_btxs: u32,
     num_bcas: u32,
+    num_btps: u32,
 }
 
 impl Extractor {
@@ -68,6 +69,7 @@ impl Extractor {
             num_bmds: 0,
             num_btxs: 0,
             num_bcas: 0,
+            num_btps: 0,
         }
     }
 
@@ -75,10 +77,11 @@ impl Extractor {
     /// file found.
     fn print_report(&self) {
         let plural = |x| if x != 1 { "s" } else { "" };
-        println!("Found {} BMD{}, {} BTX{}, {} BCA{}.",
+        println!("Found {} BMD{}, {} BTX{}, {} BCA{}, {} BTP{}.",
             self.num_bmds, plural(self.num_bmds),
             self.num_btxs, plural(self.num_btxs),
             self.num_bcas, plural(self.num_bcas),
+            self.num_btps, plural(self.num_btps),
         );
     }
 
@@ -135,6 +138,7 @@ impl Extractor {
             b"BMD0" => "nsbmd",
             b"BTX0" => "nsbtx",
             b"BCA0" => "nsbca",
+            b"BTP0" => "nsbtp",
             _ => "nsbxx",
         };
         let save_path = self.save_directory
@@ -149,6 +153,7 @@ impl Extractor {
                     b"BMD0" => self.num_bmds += 1,
                     b"BTX0" => self.num_btxs += 1,
                     b"BCA0" => self.num_bcas += 1,
+                    b"BTP0" => self.num_btps += 1,
                     _ => (),
                 }
             }
@@ -170,24 +175,28 @@ fn guess_container_name(cont: &Container) -> String {
         format!("{}", cont.palettes[0].name.print_safe())
     } else if !cont.animations.is_empty() {
         format!("{}", cont.animations[0].name.print_safe())
+    } else if !cont.patterns.is_empty() {
+        format!("{}", cont.patterns[0].name.print_safe())
     } else {
         match cont.stamp {
             b"BMD0" => "model_file",
             b"BTX0" => "texture_file",
             b"BCA0" => "animation_file",
+            b"BTP0" => "pattern_file",
             _ => "unknown_file",
         }.to_string()
     }
 }
 
 pub fn find_next_stamp(bytes: &[u8]) -> Option<usize> {
-    // find BMD0|BTX0|BCA0
+    // find BMD0|BTX0|BCA0|BTP0
     let mut i = 0;
     while i < bytes.len() - 3 {
         if bytes[i] == b'B' && bytes[i+3] == b'0' {
             if (bytes[i+1] == b'M' && bytes[i+2] == b'D') ||
                (bytes[i+1] == b'T' && bytes[i+2] == b'X') ||
-               (bytes[i+1] == b'C' && bytes[i+2] == b'A') {
+               (bytes[i+1] == b'C' && bytes[i+2] == b'A') ||
+               (bytes[i+1] == b'T' && bytes[i+2] == b'P') {
                 return Some(i);
             }
         }
