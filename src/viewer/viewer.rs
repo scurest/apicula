@@ -239,7 +239,7 @@ impl Viewer {
                 Err(_) => MaterialTextureBinding::Missing,
             }
         }).collect();
-        let prims = Primitives::build(self.cur_model(), PolyType::Tris, &objects).unwrap();
+        let prims = Primitives::build(self.cur_model(), PolyType::Tris, &objects);
         self.model_viewer.change_model(display, &self.db, prims, material_map);
     }
 
@@ -265,7 +265,7 @@ impl Viewer {
                     .collect::<Vec<Matrix4<f64>>>()
             }
         };
-        let prims = Primitives::build(self.cur_model(), PolyType::Tris, &objects).unwrap();
+        let prims = Primitives::build(self.cur_model(), PolyType::Tris, &objects);
         self.model_viewer.update_vertices(&prims.vertices);
     }
 

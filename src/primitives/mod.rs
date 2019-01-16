@@ -8,7 +8,6 @@
 //! This is then further consumed by both the viewer and the COLLADA writer.
 
 use cgmath::{Matrix4, Point2, Transform, vec4, Zero};
-use errors::Result;
 use nitro::Model;
 use nitro::render_cmds::SkinTerm;
 use std::default::Default;
@@ -78,7 +77,7 @@ impl Default for Vertex {
 implement_vertex!(Vertex, position, texcoord, color, normal);
 
 impl Primitives {
-    pub fn build(model: &Model, poly_type: PolyType, objects: &[Matrix4<f64>]) -> Result<Primitives> {
+    pub fn build(model: &Model, poly_type: PolyType, objects: &[Matrix4<f64>]) -> Primitives {
         let mut b = Builder::new(model, poly_type, objects);
         use nitro::render_cmds::Op;
         for op in &model.render_ops {
@@ -93,7 +92,7 @@ impl Primitives {
                 Op::Draw { mesh_idx } => b.draw(mesh_idx),
             }
         }
-        Ok(b.done())
+        b.done()
     }
 }
 

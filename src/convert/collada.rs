@@ -38,8 +38,7 @@ pub fn write(
     let objects = &model.objects.iter()
         .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
-    let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, objects)
-        .unwrap(); // FIXME
+    let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, objects);
     let skel = &Skeleton::build(model, objects);
 
     let ctx = Ctx { model_id, model, db, conn, image_namer, objects, prims, skel };
