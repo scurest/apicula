@@ -64,6 +64,10 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
 
     check!(stamp == b"J\0AC")?; // wtf NUL
 
+    if num_frames == 0 {
+        bail!("ignoring animation with 0 frames");
+    }
+
     let pivot_data = base_cur + pivot_data_off;
     let basis_data = base_cur + basis_data_off;
 
@@ -77,31 +81,63 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
         });
         cur = end;
 
+        // The flags tells us if anything is anything, which of the TRS
+        // properties are animated, and for each animated property, whether its
+        // curve is constant or not.
+
+        #[derive(Debug)]
+        struct AnimationFlags {
+            animated: bool,
+            trans_animated: bool,
+            trans_xyz_const: [bool; 3],
+            rot_animated: bool,
+            rot_const: bool,
+            scale_animated: bool,
+            scale_xyz_const: [bool; 3],
+        }
+
+        let flags = AnimationFlags {
+            animated: flags.bits(0,1) == 0,
+            trans_animated: flags.bits(1,3) == 0,
+            trans_xyz_const: [
+                flags.bits(3,4) != 0,
+                flags.bits(4,5) != 0,
+                flags.bits(5,6) != 0,
+            ],
+            rot_animated: flags.bits(6,8) == 0,
+            rot_const: flags.bits(8,9) != 0,
+            scale_animated: flags.bits(9,11) == 0,
+            scale_xyz_const: [
+                flags.bits(11,12) != 0,
+                flags.bits(12,13) != 0,
+                flags.bits(13,14) != 0,
+            ]
+        };
+
+        trace!("flags: {:?}", flags);
+
         let mut trs_curves = TRSCurves {
             trans: [Curve::None, Curve::None, Curve::None],
             rotation: Curve::None,
             scale: [Curve::None, Curve::None, Curve::None],
         };
 
-        let no_curves = flags.bits(0,1) != 0;
-        if no_curves {
+        if !flags.animated {
             return Ok(trs_curves);
         }
-
 
         ////////////////
         // Translation
         ////////////////
 
-        let no_trans = flags.bits(1,2) != 0;
-        if !no_trans {
+        if flags.trans_animated {
             for i in 0..3 {
-                let is_const = flags.bits(3+i, 4+i) != 0;
+                let is_const = flags.trans_xyz_const[i];
                 if is_const {
                     let v = fix32(cur.next::<u32>()?, 1, 19, 12);
                     trs_curves.trans[i as usize] = Curve::Constant(v);
                 } else {
-                    let info = CurveInfo::from_u32(cur.next::<u32>()?);
+                    let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
                     let off = cur.next::<u32>()?;
 
                     let start_frame = info.start_frame;
@@ -155,15 +191,13 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
 
         };
 
-        let no_rotation = flags.bits(6, 7) != 0;
-        if !no_rotation {
-            let is_const = flags.bits(8, 9) != 0;
-            if is_const {
+        if flags.rot_animated {
+            if flags.rot_const {
                 let v = cur.next::<u16>()?;
                 let _ = cur.next::<u16>()?; // Skipped? For alignment?
                 trs_curves.rotation = Curve::Constant(fetch_matrix(v)?);
             } else {
-                let info = CurveInfo::from_u32(cur.next::<u32>()?);
+                let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
                 let off = cur.next::<u32>()?;
 
                 let start_frame = info.start_frame;
@@ -197,15 +231,14 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
         // curve instead of one. I ignore the second one because I don't know
         // what it's for.
 
-        let no_scale = flags.bits(9, 10) != 0;
-        if !no_scale {
+        if flags.scale_animated {
             for i in 0..3 {
-                let is_const = flags.bits(11+i, 12+i) != 0;
+                let is_const = flags.scale_xyz_const[i];
                 if is_const {
                     let v = fix32(cur.next::<(u32, u32)>()?.0, 1, 19, 12);
                     trs_curves.scale[i as usize] = Curve::Constant(v);
                 } else {
-                    let info = CurveInfo::from_u32(cur.next::<u32>()?);
+                    let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
                     let off = cur.next::<u32>()?;
 
                     let start_frame = info.start_frame;
@@ -247,12 +280,15 @@ struct CurveInfo {
 }
 
 impl CurveInfo {
-    fn from_u32(x: u32) -> CurveInfo {
+    fn from_u32(x: u32) -> Result<CurveInfo> {
         let start_frame = x.bits(0, 16) as u16;
         let end_frame = x.bits(16, 28) as u16;
         let rate = x.bits(30, 32) as u8;
         let data_width = x.bits(28, 30) as u8;
-        CurveInfo { start_frame, end_frame, rate, data_width }
+
+        check!(start_frame < end_frame)?;
+
+        Ok(CurveInfo { start_frame, end_frame, rate, data_width })
     }
 
     fn num_samples(&self) -> usize {
