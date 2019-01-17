@@ -71,3 +71,16 @@ pub fn read_pattern(cur: Cur, name: Name) -> Result<Pattern> {
     })
 }
 
+impl PatternTrack {
+    pub fn sample(&self, frame: u16) -> (u8, u8) {
+        // Linear search for the first keyframe after the given frame. The
+        // desired keyframe is the one before that.
+        let next_pos = self.keyframes.iter().position(|key| key.frame > frame);
+        let keyframe = match next_pos {
+            Some(0) => &self.keyframes[0],
+            Some(n) => &self.keyframes[n - 1],
+            None => &self.keyframes[self.keyframes.len() - 1],
+        };
+        (keyframe.texture_idx, keyframe.palette_idx)
+    }
+}

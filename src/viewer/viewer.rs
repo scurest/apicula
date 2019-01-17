@@ -1,11 +1,11 @@
 use super::model_viewer::{ModelViewer, MaterialTextureBinding};
-use db::{Database, ModelId, AnimationId};
+use db::{Database, ModelId, AnimationId, PatternId};
 use connection::Connection;
 use glium::Display;
 use glium::glutin::ElementState;
 use glium::{Frame, Surface};
 use glium::glutin::VirtualKeyCode;
-use nitro::{Model, Animation};
+use nitro::{Model, Animation, Pattern};
 use primitives::{Primitives, PolyType};
 use cgmath::{Matrix4, InnerSpace, One, Vector3, vec3, vec2};
 use super::fps::FpsCounter;
@@ -24,6 +24,8 @@ pub struct Viewer {
     anim_idx: Option<usize>,
     /// Current animation frame.
     anim_frame: u16,
+    pat_idx: Option<usize>,
+    pat_anim_frame: u16,
     /// When single-stepping is enabled, the user advanced the animation
     /// manually. When disabled, the animation advanced with time (ie. plays
     /// normally).
@@ -53,6 +55,7 @@ pub static CONTROL_HELP: &'static str =
         "  ,.           Prev/Next Model\n",
         "  OP           Prev/Next Animation\n",
         "  []           Single-step Animation\n",
+        "  KL           Prev/Next Pattern Animation\n",
     );
 
 
@@ -69,6 +72,8 @@ impl Viewer {
             model_id: 9999, // arbitrary; we're about to set it to 0
             anim_idx: None,
             anim_frame: 0,
+            pat_idx: None,
+            pat_anim_frame: 0,
             single_stepping: false,
             move_vector: vec3(0.0, 0.0, 0.0),
             speed_idx: DEFAULT_SPEED_IDX,
@@ -81,7 +86,7 @@ impl Viewer {
 
     /// Update state with the delta-time since last update. Called once before
     /// each frame.
-    pub fn update(&mut self, dt: f64) {
+    pub fn update(&mut self, display: &Display, dt: f64) {
         self.time_acc += dt;
         self.fps_counter.update(dt);
 
@@ -101,6 +106,7 @@ impl Viewer {
             if !self.single_stepping {
                 self.next_frame();
             }
+            self.next_pattern_frame(display);
             self.time_acc -= FRAMERATE;
         }
     }
@@ -168,6 +174,18 @@ impl Viewer {
                 self.prev_frame();
             }
 
+            // Next/prev pattern animation
+            Key::L => {
+                let num_pats = self.conn.models[self.model_id].patterns.len();
+                let new_pat_idx = maybe_next(self.pat_idx, 0..num_pats);
+                self.change_pat_idx(display, new_pat_idx);
+            }
+            Key::K => {
+                let num_pats = self.conn.models[self.model_id].patterns.len();
+                let new_pat_idx = maybe_prev(self.pat_idx, 0..num_pats);
+                self.change_pat_idx(display, new_pat_idx);
+            }
+
             // Speed up/down
             Key::LShift => {
                 if self.speed_idx != SPEEDS.len() - 1 {
@@ -216,6 +234,18 @@ impl Viewer {
             ).unwrap()
         } else {
             write!(s, "Rest Pose === ").unwrap()
+        }
+        if let Some(pat_id) = self.pattern_id() {
+            let pat = self.cur_pattern().unwrap();
+            write!(s, "{pat_name}[{pat_id}/{num_pats}] ({cur_frame}/{num_frames}) === ",
+                pat_name = pat.name,
+                pat_id = pat_id,
+                num_pats = self.db.patterns.len(),
+                cur_frame = self.pat_anim_frame,
+                num_frames = pat.num_frames,
+            ).unwrap()
+        } else {
+            write!(s, "No Pattern === ").unwrap()
         }
         write!(s, "{:5.2}fps", self.fps_counter.fps()).unwrap();
     }
@@ -269,10 +299,45 @@ impl Viewer {
         self.model_viewer.update_vertices(&prims.vertices);
     }
 
+    /// Update what texture to use for each material (to the values in the
+    /// current pattern animation frame).
+    fn update_materials(&mut self, display: &Display) {
+        let material_map = match self.cur_pattern() {
+            None => {
+                self.conn.models[self.model_id].materials.iter().map(|mat_conn| {
+                    match mat_conn.image_id() {
+                        Ok(Some(image_id)) => MaterialTextureBinding::ImageId(image_id),
+                        Ok(None) => MaterialTextureBinding::None,
+                        Err(_) => MaterialTextureBinding::Missing,
+                    }
+                }).collect()
+            }
+            Some(pat) => {
+                let pat_conn = &self.conn.models[self.model_id].patterns[self.pat_idx.unwrap()];
+                pat.material_tracks.iter().map(|track| {
+                    let (texture_idx, palette_idx) = track.sample(self.pat_anim_frame);
+                    let texture_id = pat_conn.texture_ids[texture_idx as usize]?;
+                    let palette_id = pat_conn.palette_ids[palette_idx as usize]?;
+                    Some((texture_id, palette_id))
+                }).map(|result| {
+                    match result {
+                        Some((texture_id, palette_id)) =>
+                            MaterialTextureBinding::ImageId((texture_id, Some(palette_id))),
+                        None =>
+                            MaterialTextureBinding::Missing,
+                    }
+                }).collect()
+            }
+        };
+        self.model_viewer.update_materials(display, &self.db, material_map);
+    }
+
     fn stop_animations(&mut self) {
         self.anim_idx = None;
         self.anim_frame = 0;
         self.single_stepping = false;
+        self.pat_idx = None;
+        self.pat_anim_frame = 0;
     }
 
     fn change_anim_idx(&mut self, anim_idx: Option<usize>) {
@@ -307,23 +372,49 @@ impl Viewer {
         }
     }
 
+    fn change_pat_idx(&mut self, display: &Display, pat_idx: Option<usize>) {
+        if self.pat_idx == pat_idx {
+            return;
+        }
+
+        self.pat_idx = pat_idx;
+        self.pat_anim_frame = 0;
+        self.update_materials(display);
+    }
+
+    pub fn next_pattern_frame(&mut self, display: &Display) {
+        let num_frames = self.cur_pattern().map(|pat| pat.num_frames);
+        if let Some(num_frames) = num_frames {
+            self.pat_anim_frame += 1;
+            self.pat_anim_frame %= num_frames;
+            self.update_materials(display);
+        }
+    }
+
     pub fn set_aspect_ratio(&mut self, aspect_ratio: f64) {
         self.model_viewer.aspect_ratio = aspect_ratio as f32;
     }
 
-    pub fn cur_model(&self) -> &Model {
+    fn cur_model(&self) -> &Model {
         &self.db.models[self.model_id]
     }
 
     fn cur_animation<'a>(&self, db: &'a Database) -> Option<&'a Animation> {
-        let idx = self.anim_idx?;
-        let anim_id = self.conn.models[self.model_id].animations[idx];
-        Some(&db.animations[anim_id])
+        Some(&db.animations[self.animation_id()?])
+    }
+
+    fn cur_pattern(&self) -> Option<&Pattern> {
+        Some(&self.db.patterns[self.pattern_id()?])
     }
 
     fn animation_id(&self) -> Option<AnimationId> {
         let idx = self.anim_idx?;
         Some(self.conn.models[self.model_id].animations[idx])
+    }
+
+    fn pattern_id(&self) -> Option<PatternId> {
+        let idx = self.pat_idx?;
+        Some(self.conn.models[self.model_id].patterns[idx].pattern_id)
     }
 
     pub fn speed(&self) -> f32 {

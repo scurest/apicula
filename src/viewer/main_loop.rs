@@ -44,7 +44,7 @@ pub fn main_loop(db: Database, conn: Connection) {
         let dt_in_ns = cur_time.wrapping_sub(last_time);
         let dt = dt_in_ns as f64 / 1_000_000_000.0;
 
-        viewer.update(dt);
+        viewer.update(&display, dt);
 
         if let Some(LogicalSize { width, height }) = window.get_inner_size() {
             viewer.set_aspect_ratio(width / height);

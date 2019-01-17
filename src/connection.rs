@@ -7,7 +7,7 @@
 //! out for ourselves. This modules contains the heuristics for that.
 
 use clap::ArgMatches;
-use db::{Database, AnimationId, TextureId, PaletteId, ModelId};
+use db::{Database, AnimationId, TextureId, PaletteId, ModelId, PatternId};
 use errors::Result;
 
 /// A Connection records interrelationships between Nitro resources, namely how
@@ -22,6 +22,9 @@ pub struct ModelConnection {
     pub materials: Vec<MaterialConnection>,
     /// List of animations that can be applied to the model.
     pub animations: Vec<AnimationId>,
+    /// List of patterns that can be applied to the model (and how to apply
+    /// them).
+    pub patterns: Vec<PatternConnection>,
 }
 
 /// Result of resolving which texture/palette a material should use.
@@ -104,8 +107,8 @@ impl Connection {
                     resolve_material(db, model_id, material_id)
                 }).collect();
             let animations = find_applicable_animations(db, model_id, options);
-
-            ModelConnection { materials, animations }
+            let patterns = find_applicable_patterns(db, model_id);
+            ModelConnection { materials, animations, patterns }
         }).collect();
         Connection { models }
     }
@@ -221,4 +224,34 @@ fn find_applicable_animations(db: &Database, model_id: ModelId, options: Connect
             num_anim_objs == num_model_objs
         })
         .collect()
+}
+
+/// Indicates that a model can have the specified pattern applied to it, and
+/// tells what the texture/palette names in that pattern should resolve to for
+/// that model.
+pub struct PatternConnection {
+    pub pattern_id: PatternId,
+    pub texture_ids: Vec<Option<TextureId>>,
+    pub palette_ids: Vec<Option<PaletteId>>,
+}
+
+/// TO DETERMINE WHICH PATTERNS APPLY: Currently we just use all of them for
+/// every model.
+fn find_applicable_patterns(db: &Database, _model_id: ModelId) -> Vec<PatternConnection> {
+    db.patterns.iter().enumerate().filter_map(|(pattern_id, pattern)| {
+        let texture_ids = pattern.texture_names.iter().map(|name| {
+            let ids = db.textures_by_name.get(name)?;
+            Some(ids[0])
+        }).collect();
+        let palette_ids = pattern.palette_names.iter().map(|name| {
+            let ids = db.palettes_by_name.get(name)?;
+            Some(ids[0])
+        }).collect();
+
+        Some(PatternConnection {
+            pattern_id,
+            texture_ids,
+            palette_ids,
+        })
+    }).collect()
 }
