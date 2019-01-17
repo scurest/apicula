@@ -7,7 +7,7 @@ use nitro::Model;
 use petgraph::{Direction};
 use petgraph::graph::NodeIndex;
 use time;
-use util::ins_set::InsOrderSet;
+use util::BiList;
 use connection::Connection;
 use super::xml::Xml;
 
@@ -384,25 +384,25 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
     // by gathering all weights into a list. Since weights are floats, we can't
     // insert them into a HashMap directly, so we first encode them as a
     // fixed-point number. Remember to decode them when they come out!
-    let mut all_weights = InsOrderSet::new();
+    let mut weights_lut = BiList::new();
     let encode = |x: f32| (x * 4096.0) as u32;
     let decode = |x: u32| x as f64 / 4096.0;
-    all_weights.clear();
+    weights_lut.clear();
     for v in &ctx.skel.vertices {
         for influence in &v.influences {
-            all_weights.insert(encode(influence.weight));
+            weights_lut.push(encode(influence.weight));
         }
     }
     // Here is the list of all weights.
     xml!(xml;
         <source id=["controller-weights"]>;
-            <float_array id=["controller-weights-array"] count=[(all_weights.len())]>
-            for &weight in (all_weights.iter()) {
+            <float_array id=["controller-weights-array"] count=[(weights_lut.len())]>
+            for &weight in (weights_lut.iter()) {
                 (decode(weight))" "
             }
             </float_array>;
             <technique_common>;
-                <accessor source=["#controller-weights-array"] count=[(all_weights.len())]>;
+                <accessor source=["#controller-weights-array"] count=[(weights_lut.len())]>;
                     <param name=["WEIGHT"] type=["float"]/>;
                 /accessor>;
             /technique_common>;
@@ -430,7 +430,7 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
             for v in (&ctx.skel.vertices) {
                 for influence in (&v.influences) {
                     (influence.joint.index())" "
-                    (all_weights.get_index_from_value(&encode(influence.weight)).unwrap())" "
+                    (weights_lut.index(&encode(influence.weight)))" "
                 }
             }
             </v>;
