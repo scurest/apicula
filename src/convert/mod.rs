@@ -4,8 +4,6 @@ mod collada;
 mod image_namer;
 mod make_invertible;
 mod gltf;
-mod glb;
-mod object_trs;
 
 use clap::ArgMatches;
 use errors::{Result, ResultExt};
@@ -34,8 +32,8 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     let conn = Connection::build(&db, conn_options);
 
     let format = matches.value_of("FORMAT").unwrap_or("dae");
-    if format != "dae" && format != "glb" {
-        bail!("format should be either dae or glb");
+    if format != "dae" && format != "glb" && format != "gltf" {
+        bail!("format should be either dae or glb or gltf");
     }
 
     let mut image_namer = ImageNamer::build(&db, &conn);
@@ -55,9 +53,16 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         let res = if format == "dae" {
             let s = collada::write(&db, &conn, &image_namer, model_id);
             f.write_all(s.as_bytes()).and_then(|_| f.flush())
-        } else if format == "glb" {
-            let glb = gltf::to_glb(&db, &conn, &image_namer, model_id);
-            glb.write(&mut f)
+        } else if format == "glb" || format == "gltf" {
+            let gltf = gltf::to_gltf(&db, &conn, &image_namer, model_id);
+            if format == "glb" {
+                gltf.write_glb(&mut f)
+            } else {
+                let bin_file_name = format!("{}.bin", name);
+                let bin_file_path = out_dir.join(&bin_file_name);
+                let mut bin_f = File::create(bin_file_path)?;
+                gltf.write_gltf_bin(&mut f, &mut bin_f, &bin_file_name)
+            }
         } else {
             unreachable!()
         };
@@ -99,6 +104,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     let model_file_name = match format {
         "dae" => "DAE",
         "glb" => "GLB",
+        "gltf" => "glTF",
         _ => unreachable!(),
     };
     println!("Wrote {} {}{}, {} PNG{}.",

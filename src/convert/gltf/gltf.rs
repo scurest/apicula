@@ -1,9 +1,9 @@
 use json::JsonValue;
 use std::io::Write;
 
-pub struct Glb {
+pub struct GlTF {
     pub buffers: Vec<Buffer>,
-    pub gltf: JsonValue,
+    pub json: JsonValue,
 }
 
 pub struct Buffer {
@@ -11,11 +11,11 @@ pub struct Buffer {
     pub alignment: usize,
 }
 
-impl Glb {
-    pub fn new() -> Glb {
-        Glb {
+impl GlTF {
+    pub fn new() -> GlTF {
+        GlTF {
             buffers: vec![],
-            gltf: object!(
+            json: object!(
                 "asset" => object!(
                     "version" => "2.0",
                 ),
@@ -25,12 +25,14 @@ impl Glb {
         }
     }
 
-    pub fn write<W: Write>(mut self, w: &mut W) -> std::io::Result<()> {
-        // Lay all the buffers out into one GLB buffer.
-
-        // Gives the offset to the start of each buffer into the GLB buffer
+    /// Updates all the buffer views to point to the correct location when the
+    /// buffers are all joined into one single json["buffers"][0]. Returns the
+    /// size the joined buffer will have.
+    pub fn update_buffer_views(&mut self) -> usize {
+        // Record the offset to the start of each buffer when they are all laid
+        // out end-to-end.
         let mut buf_offsets = Vec::with_capacity(self.buffers.len());
-        let bin_len = {
+        let buf_byte_len = {
             let mut l = 0_usize;
             for buffer in &self.buffers {
                 // Pad to alignment
@@ -42,6 +44,7 @@ impl Glb {
 
                 l += buffer.bytes.len();
             }
+            // Pad buffer to 4-byte alignment (required for GLBs)
             if l % 4 != 0 {
                 l += 4 - (l % 4);
             }
@@ -49,14 +52,14 @@ impl Glb {
         };
 
         // Add the glTF buffer
-        self.gltf["buffers"] = array!(
+        self.json["buffers"] = array!(
             object!(
-                "byteLength" => bin_len,
+                "byteLength" => buf_byte_len,
             )
         );
 
-        // Fixup bufferView references to be the single buffer
-        for buf_view in self.gltf["bufferViews"].members_mut() {
+        // Fixup bufferView pointers
+        for buf_view in self.json["bufferViews"].members_mut() {
             let old_buf_idx = buf_view["buffer"].as_usize().unwrap();
             buf_view["buffer"] = 0.into();
             let offset = if buf_view.has_key("byteOffset") {
@@ -68,8 +71,37 @@ impl Glb {
             buf_view["byteOffset"] = new_offset.into();
         }
 
+        buf_byte_len
+    }
+
+    /// Write the joined buffer to w.
+    pub fn write_buffer<W: Write>(&mut self, w: &mut W) -> std::io::Result<()> {
+        let mut scratch = Vec::<u8>::with_capacity(4);
+
+        let mut l = 0;
+        for buffer in &self.buffers {
+            // Pad to alignment
+            if l % buffer.alignment != 0 {
+                scratch.resize(buffer.alignment - (l % buffer.alignment), 0);
+                w.write(&scratch)?;
+                l += buffer.alignment - (l % buffer.alignment);
+            }
+
+            w.write(&buffer.bytes)?;
+            l += buffer.bytes.len();
+        }
+        if l % 4 != 0 {
+            scratch.resize(4 - (l % 4), 0);
+            w.write(&scratch)?;
+        }
+        Ok(())
+    }
+
+    pub fn write_glb<W: Write>(mut self, w: &mut W) -> std::io::Result<()> {
+        let bin_len = self.update_buffer_views();
+
         // JSON -> String
-        let mut s = self.gltf.dump();
+        let mut s = self.json.dump();
         while s.len() % 4 != 0 {
             s.push(' ');
         }
@@ -101,20 +133,21 @@ impl Glb {
         scratch.extend_from_slice(b"BIN\0");
         w.write(&scratch)?;
         // Write all the buffer into the BIN data
-        scratch.clear();
-        let mut l = 0;
-        for buffer in &self.buffers {
-            // Pad to alignment
-            if l % buffer.alignment != 0 {
-                scratch.resize(buffer.alignment - (l % buffer.alignment), 0);
-                w.write(&scratch)?;
-            }
+        self.write_buffer(w)?;
 
-            w.write(&buffer.bytes)?;
+        Ok(())
+    }
 
-            l += buffer.bytes.len();
-        }
-
+    pub fn write_gltf_bin<W1: Write, W2: Write>(
+        mut self,
+        gltf_w: &mut W1,
+        bin_w: &mut W2,
+        buffer_uri: &str,
+    ) -> std::io::Result<()> {
+        self.update_buffer_views();
+        self.json["buffers"][0]["uri"] = buffer_uri.into();
+        self.json.write_pretty(gltf_w, 2)?;
+        self.write_buffer(bin_w)?;
         Ok(())
     }
 }

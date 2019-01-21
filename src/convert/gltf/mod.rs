@@ -1,3 +1,6 @@
+mod gltf;
+mod object_trs;
+
 use nitro::Model;
 use db::{Database, ModelId};
 use connection::Connection;
@@ -6,8 +9,8 @@ use skeleton::Skeleton;
 use super::image_namer::ImageNamer;
 use cgmath::Matrix4;
 use json::JsonValue;
-use super::glb::{Glb, Buffer, ByteVec, VecExt};
-use super::object_trs::ObjectTRSes;
+use self::gltf::{GlTF, Buffer, ByteVec, VecExt};
+use self::object_trs::ObjectTRSes;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
@@ -23,12 +26,12 @@ struct Ctx<'a> {
     skel: &'a Skeleton,
 }
 
-pub fn to_glb(
+pub fn to_gltf(
     db: &Database,
     conn: &Connection,
     image_namer: &ImageNamer,
     model_id: ModelId,
-) -> Glb {
+) -> GlTF {
     let model = &db.models[model_id];
 
     let rest_trses = ObjectTRSes::for_model_at_rest(model);
@@ -40,20 +43,20 @@ pub fn to_glb(
 
     let ctx = Ctx { model_id, model, db, conn, image_namer, rest_trses, objects, prims, skel };
 
-    let mut glb = Glb::new();
+    let mut gltf = GlTF::new();
 
-    mesh(&ctx, &mut glb);
-    nodes(&ctx, &mut glb);
-    materials(&ctx, &mut glb);
+    mesh(&ctx, &mut gltf);
+    nodes(&ctx, &mut gltf);
+    materials(&ctx, &mut gltf);
 
-    glb
+    gltf
 }
 
 static UNSIGNED_BYTE: u32 = 5121;
 static UNSIGNED_SHORT: u32 = 5123;
 static FLOAT: u32 = 5126;
 
-fn mesh(ctx: &Ctx, glb: &mut Glb) {
+fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
     let verts = &ctx.prims.vertices;
 
     // Positions
@@ -67,21 +70,21 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
         }
     }
     let pos_accessor = {
-        let buf = glb.buffers.add(Buffer {
+        let buf = gltf.buffers.add(Buffer {
             alignment: 4,
             bytes: Vec::with_capacity(3 * verts.len() * 4),
         });
-        let dat = &mut glb.buffers[buf].bytes;
+        let dat = &mut gltf.buffers[buf].bytes;
         for v in verts {
             dat.push_f32(v.position[0]);
             dat.push_f32(v.position[1]);
             dat.push_f32(v.position[2]);
         }
-        let buf_view = glb.gltf["bufferViews"].add(object!(
+        let buf_view = gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
             "byteLength" => dat.len(),
         ));
-        glb.gltf["accessors"].add(object!(
+        gltf.json["accessors"].add(object!(
             "bufferView" => buf_view,
             "type" => "VEC3",
             "componentType" => FLOAT,
@@ -94,20 +97,20 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
     // Texcoord
     let has_texcoords = ctx.prims.draw_calls.iter().any(|call| call.used_texcoords);
     let tex_accessor = if has_texcoords {
-        let buf = glb.buffers.add(Buffer {
+        let buf = gltf.buffers.add(Buffer {
             alignment: 4,
             bytes: Vec::with_capacity(2 * verts.len() * 4),
         });
-        let dat = &mut glb.buffers[buf].bytes;
+        let dat = &mut gltf.buffers[buf].bytes;
         for v in verts {
             dat.push_f32(v.texcoord[0]);
             dat.push_f32(v.texcoord[1]);
         }
-        let buf_view = glb.gltf["bufferViews"].add(object!(
+        let buf_view = gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
             "byteLength" => dat.len(),
         ));
-        Some(glb.gltf["accessors"].add(object!(
+        Some(gltf.json["accessors"].add(object!(
             "bufferView" => buf_view,
             "type" => "VEC2",
             "componentType" => FLOAT,
@@ -120,21 +123,21 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
     // Color
     let has_colors = ctx.prims.draw_calls.iter().any(|call| call.used_vertex_color);
     let color_accessor = if has_colors {
-        let buf = glb.buffers.add(Buffer {
+        let buf = gltf.buffers.add(Buffer {
             alignment: 1,
             bytes: Vec::with_capacity(3 * verts.len() * 1),
         });
-        let dat = &mut glb.buffers[buf].bytes;
+        let dat = &mut gltf.buffers[buf].bytes;
         for v in verts {
             dat.push_normalized_u8(v.color[0]);
             dat.push_normalized_u8(v.color[1]);
             dat.push_normalized_u8(v.color[2]);
         }
-        let buf_view = glb.gltf["bufferViews"].add(object!(
+        let buf_view = gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
             "byteLength" => dat.len(),
         ));
-        Some(glb.gltf["accessors"].add(object!(
+        Some(gltf.json["accessors"].add(object!(
             "bufferView" => buf_view,
             "type" => "VEC3",
             "componentType" => UNSIGNED_BYTE,
@@ -148,21 +151,21 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
     // Normals
     let has_normals = ctx.prims.draw_calls.iter().any(|call| call.used_normals);
     let normal_accessor = if has_normals {
-        let buf = glb.buffers.add(Buffer {
+        let buf = gltf.buffers.add(Buffer {
             alignment: 4,
             bytes: Vec::with_capacity(3 * verts.len() * 4),
         });
-        let dat = &mut glb.buffers[buf].bytes;
+        let dat = &mut gltf.buffers[buf].bytes;
         for v in verts {
             dat.push_f32(v.normal[0]);
             dat.push_f32(v.normal[1]);
             dat.push_f32(v.normal[2]);
         }
-        let buf_view = glb.gltf["bufferViews"].add(object!(
+        let buf_view = gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
             "byteLength" => dat.len(),
         ));
-        Some(glb.gltf["accessors"].add(object!(
+        Some(gltf.json["accessors"].add(object!(
             "bufferView" => buf_view,
             "type" => "VEC3",
             "componentType" => FLOAT,
@@ -184,12 +187,12 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
 
     // Joints
     let joints_accessors = {
-        let buf = glb.buffers.add(Buffer {
+        let buf = gltf.buffers.add(Buffer {
             alignment: 1,
             bytes: Vec::with_capacity(4 * num_sets * verts.len() * 1),
         });
         let dat_len = {
-            let dat = &mut glb.buffers[buf].bytes;
+            let dat = &mut gltf.buffers[buf].bytes;
             for sv in &ctx.skel.vertices {
                 let mut i = 0;
                 while i != 4 * num_sets {
@@ -204,13 +207,13 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
             dat.len()
         };
         (0..num_sets).map(|set_num| {
-            let buf_view = glb.gltf["bufferViews"].add(object!(
+            let buf_view = gltf.json["bufferViews"].add(object!(
                 "buffer" => buf,
                 "byteOffset" => 4 * set_num,
                 "byteStride" => 4 * num_sets,
                 "byteLength" => dat_len - 4 * set_num,
             ));
-            glb.gltf["accessors"].add(object!(
+            gltf.json["accessors"].add(object!(
                 "bufferView" => buf_view,
                 "type" => "VEC4",
                 "componentType" => UNSIGNED_BYTE,
@@ -221,12 +224,12 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
 
     // Weights
     let weights_accessors = {
-        let buf = glb.buffers.add(Buffer {
+        let buf = gltf.buffers.add(Buffer {
             alignment: 1,
             bytes: Vec::with_capacity(4 * num_sets * verts.len() * 1),
         });
         let dat_len = {
-            let dat = &mut glb.buffers[buf].bytes;
+            let dat = &mut gltf.buffers[buf].bytes;
             for sv in &ctx.skel.vertices {
                 let mut i = 0;
                 while i != 4 * num_sets {
@@ -241,13 +244,13 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
             dat.len()
         };
         (0..num_sets).map(|set_num| {
-            let buf_view = glb.gltf["bufferViews"].add(object!(
+            let buf_view = gltf.json["bufferViews"].add(object!(
                 "buffer" => buf,
                 "byteOffset" => 4 * set_num,
                 "byteStride" => 4 * num_sets,
                 "byteLength" => dat_len - 4 * set_num,
             ));
-            glb.gltf["accessors"].add(object!(
+            gltf.json["accessors"].add(object!(
                 "bufferView" => buf_view,
                 "type" => "VEC4",
                 "componentType" => UNSIGNED_BYTE,
@@ -259,15 +262,15 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
 
     // Put the indices into a buffer view
     let index_buf_view = {
-        let buf = glb.buffers.add(Buffer {
+        let buf = gltf.buffers.add(Buffer {
             alignment: 2,
             bytes: Vec::with_capacity(verts.len() * 2),
         });
-        let dat = &mut glb.buffers[buf].bytes;
+        let dat = &mut gltf.buffers[buf].bytes;
         for &ind in &ctx.prims.indices {
             dat.push_u16(ind);
         }
-        glb.gltf["bufferViews"].add(object!(
+        gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
             "byteLength" => dat.len(),
         ))
@@ -275,7 +278,7 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
 
     // One glTF primitive per draw call
     let primitives = ctx.prims.draw_calls.iter().map(|call| {
-        let indices_accessor = glb.gltf["accessors"].add(object!(
+        let indices_accessor = gltf.json["accessors"].add(object!(
             "bufferView" => index_buf_view,
             "type" => "SCALAR",
             "byteOffset" => 2 * call.index_range.start,
@@ -307,7 +310,7 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
         primitive
     }).collect::<Vec<JsonValue>>();
 
-    glb.gltf["meshes"] = array!(
+    gltf.json["meshes"] = array!(
         object!(
             "primitives" => primitives,
             "name" => ctx.model.name.to_string(),
@@ -315,11 +318,11 @@ fn mesh(ctx: &Ctx, glb: &mut Glb) {
     );
 }
 
-fn nodes(ctx: &Ctx, glb: &mut Glb) {
+fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
     // NOTE: the NodeIndices for skel.tree are the same as the indices into the
     // glTF nodes array
 
-    glb.gltf["nodes"] = ctx.skel.tree.node_indices().map(|idx| {
+    gltf.json["nodes"] = ctx.skel.tree.node_indices().map(|idx| {
         use petgraph::Direction;
         use skeleton::{Transform, SMatrix};
         let mut node = object!();
@@ -375,11 +378,11 @@ fn nodes(ctx: &Ctx, glb: &mut Glb) {
     let skel = &ctx.skel;
 
     let inv_bind_accessor = {
-        let buf = glb.buffers.add(Buffer {
+        let buf = gltf.buffers.add(Buffer {
             alignment: 4,
             bytes: Vec::with_capacity(16 * skel.tree.node_count() * 4),
         });
-        let dat = &mut glb.buffers[buf].bytes;
+        let dat = &mut gltf.buffers[buf].bytes;
         for joint_idx in skel.tree.node_indices() {
             let joint = &skel.tree[joint_idx];
             let matrix: &[f64; 16] = joint.rest_world_to_local.as_ref();
@@ -387,11 +390,11 @@ fn nodes(ctx: &Ctx, glb: &mut Glb) {
                 dat.push_f32(entry as f32);
             }
         }
-        let buf_view = glb.gltf["bufferViews"].add(object!(
+        let buf_view = gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
             "byteLength" => dat.len(),
         ));
-        glb.gltf["accessors"].add(object!(
+        gltf.json["accessors"].add(object!(
             "bufferView" => buf_view,
             "type" => "MAT4",
             "componentType" => FLOAT,
@@ -399,7 +402,7 @@ fn nodes(ctx: &Ctx, glb: &mut Glb) {
         ))
     };
 
-    glb.gltf["skins"] = array!(
+    gltf.json["skins"] = array!(
         object!(
             "skeleton" => skel.root.index(),
             "joints" => (0..skel.tree.node_count()).collect::<Vec<_>>(),
@@ -408,15 +411,15 @@ fn nodes(ctx: &Ctx, glb: &mut Glb) {
     );
 
     // Make a scene
-    glb.gltf["scenes"] = array!(object!("nodes" => array!(skel.root.index())));
-    glb.gltf["scene"] = 0.into();
+    gltf.json["scenes"] = array!(object!("nodes" => array!(skel.root.index())));
+    gltf.json["scene"] = 0.into();
 }
 
-fn materials(ctx: &Ctx, glb: &mut Glb) {
+fn materials(ctx: &Ctx, gltf: &mut GlTF) {
     let materials = ctx.model.materials.iter().map(|material| {
         object!(
             "name" => material.name.to_string(),
         )
     }).collect::<Vec<JsonValue>>();
-    glb.gltf["materials"] = materials.into();
+    gltf.json["materials"] = materials.into();
 }
