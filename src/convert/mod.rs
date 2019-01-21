@@ -5,6 +5,7 @@ mod image_namer;
 mod make_invertible;
 mod gltf;
 mod glb;
+mod object_trs;
 
 use clap::ArgMatches;
 use errors::{Result, ResultExt};
