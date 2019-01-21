@@ -3,6 +3,8 @@ mod xml;
 mod collada;
 mod image_namer;
 mod make_invertible;
+mod gltf;
+mod glb;
 
 use clap::ArgMatches;
 use errors::{Result, ResultExt};
@@ -30,24 +32,37 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     let conn_options = ConnectionOptions::from_arg_matches(matches);
     let conn = Connection::build(&db, conn_options);
 
+    let format = matches.value_of("FORMAT").unwrap_or("dae");
+    if format != "dae" && format != "glb" {
+        bail!("format should be either dae or glb");
+    }
+
     let mut image_namer = ImageNamer::build(&db, &conn);
 
-    let mut daes_written = 0;
+    let mut models_written = 0;
     let mut pngs_written = 0;
 
-    // Gives unique names to each .dae file, so that eg. two models with
-    // the same name don't get written to the same file.
-    let mut dae_namer = UniqueNamer::new();
+    // Gives unique names to each model file to avoid name clashes.
+    let mut model_file_namer = UniqueNamer::new();
 
     // Save each model as a COLLADA file
     for (model_id, model) in db.models.iter().enumerate() {
-        let s = collada::write(&db, &conn, &image_namer, model_id);
+        let name = model_file_namer.get_fresh_name(format!("{}", model.name.print_safe()));
+        let model_file_path = out_dir.join(&format!("{}.{}", name, format));
+        let mut f = File::create(model_file_path)?;
 
-        let name = dae_namer.get_fresh_name(format!("{}", model.name.print_safe()));
-        let dae_path = out_dir.join(&format!("{}.dae", name));
-        let mut f = File::create(dae_path)?;
-        match f.write_all(s.as_bytes()).and_then(|_| f.flush()) {
-            Ok(()) => { daes_written += 1; },
+        let res = if format == "dae" {
+            let s = collada::write(&db, &conn, &image_namer, model_id);
+            f.write_all(s.as_bytes()).and_then(|_| f.flush())
+        } else if format == "glb" {
+            let glb = gltf::to_glb(&db, &conn, &image_namer, model_id);
+            glb.write(&mut f)
+        } else {
+            unreachable!()
+        };
+
+        match res {
+            Ok(()) => { models_written += 1; },
             Err(e) => error!("failed to write {}: {}", name, e),
         }
     }
@@ -80,8 +95,14 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     // Print results
     let plural = |x| if x != 1 { "s" } else { "" };
-    println!("Wrote {} DAE{}, {} PNG{}.",
-        daes_written, plural(daes_written), pngs_written, plural(pngs_written));
+    let model_file_name = match format {
+        "dae" => "DAE",
+        "glb" => "GLB",
+        _ => unreachable!(),
+    };
+    println!("Wrote {} {}{}, {} PNG{}.",
+        models_written, model_file_name, plural(models_written),
+        pngs_written, plural(pngs_written));
 
     Ok(())
 }

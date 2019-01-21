@@ -17,6 +17,8 @@ extern crate png as png_crate;
 extern crate termcolor;
 extern crate atty;
 extern crate smallvec;
+#[macro_use]
+extern crate json;
 
 #[macro_use]
 mod errors;
@@ -78,6 +80,7 @@ fn main2() -> Result<()> {
             (alias: "c")
             (@arg INPUT: +required +multiple "Nitro file")
             (@arg OUTPUT: -o --output +required +takes_value "Output directory")
+            (@arg FORMAT: -f --format +takes_value "Model format")
             (@arg apply_any_animation: --("apply-any-animation")
                 "Disable the heuristic that animation only apply to models with \
                 the same number of objects. Apply all animations to every model.")

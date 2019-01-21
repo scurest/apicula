@@ -122,11 +122,13 @@ pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]
 
     // Caches the right skinvertex for each of the matrices in vr.
     let mut skin_vert_cache: Vec<Option<SkinVertex>> = vec![None; vr.matrices.len()];
+    let mut max_num_influences = 0;
 
     let vertices = vr.vertices.iter().map(|&mat_idx| {
         if skin_vert_cache[mat_idx as usize].is_none() {
             let mut sv = b.amatrix_to_skinvert(&vr.matrices[mat_idx as usize]);
             simplify_skinvert(&mut sv);
+            max_num_influences = max_num_influences.max(sv.influences.len());
             skin_vert_cache[mat_idx as usize] = Some(sv);
         }
 
@@ -158,6 +160,7 @@ pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]
         tree: b.graph,
         root,
         vertices,
+        max_num_influences,
     }
 }
 

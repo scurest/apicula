@@ -66,6 +66,8 @@ pub struct Skeleton {
     pub tree: JointTree,
     pub root: NodeIndex,
     pub vertices: Vec<SkinVertex>,
+    /// Largest number of influences on any vertex.
+    pub max_num_influences: usize,
 }
 
 /// Tree of joints. The convention for edges is that go *from* the parent *to*
