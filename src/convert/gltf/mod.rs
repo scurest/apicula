@@ -1,18 +1,23 @@
 mod gltf;
 mod object_trs;
+mod curve;
 
 use nitro::Model;
 use db::{Database, ModelId};
 use connection::Connection;
 use primitives::{Primitives, PolyType};
-use skeleton::Skeleton;
+use skeleton::{Skeleton, Transform, SMatrix};
 use super::image_namer::ImageNamer;
 use cgmath::Matrix4;
 use json::JsonValue;
 use self::gltf::{GlTF, Buffer, ByteVec, VecExt};
 use self::object_trs::ObjectTRSes;
+use util::{BiList, BiMap};
+use self::curve::{GlTFObjectCurves, CurveDomain};
+use nitro::animation::Curve;
+use std::collections::HashMap;
 
-static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
+static FRAME_LENGTH: f32 = 1.0 / 60.0; // 60 fps
 
 struct Ctx<'a> {
     model_id: ModelId,
@@ -47,6 +52,7 @@ pub fn to_gltf(
 
     mesh(&ctx, &mut gltf);
     nodes(&ctx, &mut gltf);
+    animations(&ctx, & mut gltf);
     materials(&ctx, &mut gltf);
 
     gltf
@@ -413,6 +419,300 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
     // Make a scene
     gltf.json["scenes"] = array!(object!("nodes" => array!(skel.root.index())));
     gltf.json["scene"] = 0.into();
+}
+
+fn animations(ctx: &Ctx, gltf: &mut GlTF) {
+    let models_animations = &ctx.conn.models[ctx.model_id].animations;
+
+    if models_animations.is_empty() {
+        return;
+    }
+
+    #[derive(Hash, Copy, Clone, PartialEq, Eq)]
+    struct TimelineDescriptor {
+        start_frame: u16,
+        end_frame: u16,
+        sampling_rate: u16,
+    }
+    // Maps an accessor index to the description of the keyframes it should
+    // contain. Let's us reuse keyframes between curves. We wait until we're
+    // done writing the animations to actually fill in the accessor fields
+    // though.
+    let mut timeline_descs = BiMap::<usize, TimelineDescriptor>::new();
+
+    // Used to hold the translation/rotation/scale data.
+    let data_buffer = gltf.buffers.add(Buffer {
+        bytes: Vec::with_capacity(1024 * 512),
+        alignment: 4,
+    });
+    let data_buf_view = gltf.json["bufferViews"].add(object!(
+        "buffer" => data_buffer,
+        // NOTE: must fill out byte length when we finish writing to data_buffer
+    ));
+
+    let animations =
+        models_animations.iter()
+        .map(|&animation_id| {
+            let anim = &ctx.db.animations[animation_id];
+
+            let object_curves =
+                anim.objects_curves.iter()
+                .map(|c| GlTFObjectCurves::for_trs_curves(c))
+                .collect::<Vec<GlTFObjectCurves>>();
+
+            #[derive(Hash, Clone, Copy, PartialEq, Eq)]
+            enum SamplerPath {
+                Translation,
+                Rotation,
+                Scale,
+            }
+            #[derive(Hash, Clone, Copy, PartialEq, Eq)]
+            struct SamplerDescriptor {
+                object_idx: u8,
+                path: SamplerPath,
+            }
+            // Each glTF sampler will contain the curve for one TRS property of
+            // one object matrix. This maps a sampler index to the description
+            // of what it will contain.
+            let mut sampler_descs = BiList::<SamplerDescriptor>::new();
+
+            // The channels array wires nodes/paths up to the samplers they use.
+            let mut channels = Vec::<JsonValue>::new();
+
+            for node_idx in ctx.skel.tree.node_indices() {
+                // Only objects are animated
+                let object_idx = match ctx.skel.tree[node_idx].local_to_parent {
+                    Transform::SMatrix(SMatrix::Object { object_idx }) => object_idx,
+                    _ => continue,
+                };
+
+                let curves = &object_curves[object_idx as usize];
+
+                // Add channels for any of the TRSs that are animated for this
+                // object
+
+                if let Curve::Samples { .. } = curves.translation {
+                    let sampler_descriptor = SamplerDescriptor {
+                        object_idx,
+                        path: SamplerPath::Translation,
+                    };
+                    sampler_descs.push(sampler_descriptor);
+                    channels.push(object!(
+                        "target" => object!(
+                            "node" => node_idx.index(),
+                            "path" => "translation",
+                        ),
+                        "sampler" => sampler_descs.index(&sampler_descriptor),
+                    ));
+                }
+
+                if let Curve::Samples { .. } = curves.rotation {
+                    let sampler_descriptor = SamplerDescriptor {
+                        object_idx,
+                        path: SamplerPath::Rotation,
+                    };
+                    sampler_descs.push(sampler_descriptor);
+                    channels.push(object!(
+                        "target" => object!(
+                            "node" => node_idx.index(),
+                            "path" => "rotation",
+                        ),
+                        "sampler" => sampler_descs.index(&sampler_descriptor),
+                    ));
+                }
+
+                if let Curve::Samples { .. } = curves.scale {
+                    let sampler_descriptor = SamplerDescriptor {
+                        object_idx,
+                        path: SamplerPath::Scale,
+                    };
+                    sampler_descs.push(sampler_descriptor);
+                    channels.push(object!(
+                        "target" => object!(
+                            "node" => node_idx.index(),
+                            "path" => "scale",
+                        ),
+                        "sampler" => sampler_descs.index(&sampler_descriptor),
+                    ));
+                }
+            }
+
+            // Now use the sampler descriptions to write the actual samplers
+            let samplers = sampler_descs.iter().map(|desc| {
+                let &SamplerDescriptor { object_idx, path } = desc;
+                let curves = &object_curves[object_idx as usize];
+
+                let domain = match path {
+                    SamplerPath::Translation => curves.translation.domain(),
+                    SamplerPath::Rotation => curves.rotation.domain(),
+                    SamplerPath::Scale => curves.scale.domain(),
+                };
+                let (start_frame, end_frame, sampling_rate) = match domain {
+                    CurveDomain::None => unreachable!(),
+                    CurveDomain::Sampled { start_frame, end_frame, sampling_rate } =>
+                        (start_frame, end_frame, sampling_rate),
+                };
+                let timeline_descriptor = TimelineDescriptor {
+                    start_frame, end_frame, sampling_rate,
+                };
+
+                // Reserve the input accessor
+                if !timeline_descs.right_contains(&timeline_descriptor) {
+                    let accessor = gltf.json["accessors"].add(
+                        JsonValue::new_object()
+                    );
+                    timeline_descs.insert((accessor, timeline_descriptor));
+                };
+                let &input = timeline_descs.backward(&timeline_descriptor);
+
+                // Make the output accessor
+                let data = &mut gltf.buffers[data_buffer].bytes;
+                let output = match path {
+                    SamplerPath::Translation | SamplerPath::Scale => {
+                        let values = match path {
+                            SamplerPath::Translation => match curves.translation {
+                                Curve::Samples { ref values, .. } => values,
+                                _ => unreachable!(),
+                            },
+                            SamplerPath::Scale => match curves.scale {
+                                Curve::Samples { ref values, .. } => values,
+                                _ => unreachable!(),
+                            },
+                            _ => unreachable!(),
+                        };
+                        let byte_offset = data.len();
+                        data.reserve(3 * values.len() * 4);
+                        for v in values {
+                            data.push_f32(v.x as f32);
+                            data.push_f32(v.y as f32);
+                            data.push_f32(v.z as f32);
+                        }
+                        gltf.json["accessors"].add(object!(
+                            "bufferView" => data_buf_view,
+                            "type" => "VEC3",
+                            "componentType" => FLOAT,
+                            "byteOffset" => byte_offset,
+                            "count" => values.len(),
+                        ))
+                    }
+
+                    SamplerPath::Rotation => {
+                        let values = match curves.rotation {
+                            Curve::Samples { ref values, .. } => values,
+                            _ => unreachable!(),
+                        };
+                        let byte_offset = data.len();
+                        data.reserve(4 * values.len() * 4);
+                        for quat in values {
+                            data.push_f32(quat.v.x as f32);
+                            data.push_f32(quat.v.y as f32);
+                            data.push_f32(quat.v.z as f32);
+                            data.push_f32(quat.s as f32);
+                        }
+                        gltf.json["accessors"].add(object!(
+                            "bufferView" => data_buf_view,
+                            "type" => "VEC4",
+                            "componentType" => FLOAT,
+                            "byteOffset" => byte_offset,
+                            "count" => values.len(),
+                        ))
+                    }
+                };
+
+                object!(
+                    "input" => input,
+                    "output" => output,
+                )
+            }).collect::<Vec<JsonValue>>();
+
+            object!(
+                "name" => anim.name.to_string(),
+                "samplers" => samplers,
+                "channels" => channels,
+            )
+        })
+        .collect::<Vec<JsonValue>>();
+
+    gltf.json["bufferViews"][data_buf_view]["byteLength"] =
+        gltf.buffers[data_buffer].bytes.len().into();
+
+    // Now we need to write out the keyframe descriptors to real accessors.
+    // The reason we defered it is because we can share most of this data.
+    //
+    // For each rate, find the range of values used by timelines with that
+    // rate. Write that range of values sampled at that rate into a buffer.
+    // Eg.
+    //
+    //     rate 1:      1 2 3 4 5
+    //     rate 2:      2 4
+    //     rate 4:      4 8 12
+    //
+    // Make a buffer view for each of these rates. Then for each accessor,
+    // reference the buffer view for that rate and use the byteOffset and
+    // count properties to select the appropiate subrange.
+
+    let mut rate_to_range = HashMap::<u16, std::ops::Range<u16>>::new();
+    let mut rate_to_buf_view = HashMap::<u16, usize>::new();
+
+    for (_, &timeline_desc) in timeline_descs.iter() {
+        let TimelineDescriptor { start_frame, end_frame, sampling_rate } =
+            timeline_desc;
+        let range =
+            rate_to_range.entry(sampling_rate)
+            .or_insert(start_frame..end_frame);
+        range.start = range.start.min(start_frame);
+        range.end = range.end.max(end_frame);
+    }
+
+    let time_buf = gltf.buffers.add(Buffer {
+        alignment: 4,
+        bytes: vec![],
+    });
+    let dat = &mut gltf.buffers[time_buf].bytes;
+    for (&rate, range) in rate_to_range.iter() {
+        let byte_offset = dat.len();
+
+        let mut frame = range.start;
+        while frame < range.end {
+            dat.push_f32(frame as f32 * FRAME_LENGTH);
+            frame += rate;
+        }
+
+        let buf_view = gltf.json["bufferViews"].add(object!(
+            "buffer" => time_buf,
+            "byteOffset" => byte_offset,
+            "byteLength" => dat.len() - byte_offset,
+        ));
+
+        rate_to_buf_view.insert(rate, buf_view);
+    }
+
+    for (&accessor_idx, &timeline_desc) in timeline_descs.iter() {
+        let TimelineDescriptor { start_frame, end_frame, sampling_rate } =
+            timeline_desc;
+
+        let range = rate_to_range[&sampling_rate].clone();
+        let buf_view = rate_to_buf_view[&sampling_rate];
+
+        // The offset inside the buffer view of our starting frame
+        let offset = (start_frame - range.start) / sampling_rate;
+        let byte_offset = 4 * offset;
+
+        let min = start_frame as f32 * FRAME_LENGTH;
+        let max = (end_frame - sampling_rate) as f32 * FRAME_LENGTH;
+
+        gltf.json["accessors"][accessor_idx] = object!(
+            "bufferView" => buf_view,
+            "type" => "SCALAR",
+            "componentType" => FLOAT,
+            "byteOffset" => byte_offset,
+            "count" => (end_frame - start_frame) / sampling_rate,
+            "min" => array!(min),
+            "max" => array!(max),
+        );
+    }
+
+    gltf.json["animations"] = animations.into();
 }
 
 fn materials(ctx: &Ctx, gltf: &mut GlTF) {

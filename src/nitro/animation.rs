@@ -300,7 +300,7 @@ impl CurveInfo {
 
 impl<T> Curve<T>
 where T: Copy + Mul<f64, Output=T> + Add<T, Output=T> {
-    fn sample_at(&self, default: T, frame: u16) -> T {
+    pub fn sample_at(&self, default: T, frame: u16) -> T {
         match *self {
             Curve::None => default,
             Curve::Constant(v) => { v },
