@@ -1,16 +1,12 @@
-#[macro_use]
-mod xml;
 mod collada;
 mod image_namer;
-mod make_invertible;
 mod gltf;
 
 use clap::ArgMatches;
 use errors::{Result, ResultExt};
-use std::fs;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use util::namers::UniqueNamer;
 use db::Database;
 use convert::image_namer::ImageNamer;
@@ -91,7 +87,6 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
             }
         };
 
-        use png::write_rgba;
         let path = out_dir.join(&format!("{}.png", image_name));
         match write_rgba(&path, &rgba.0[..], texture.params.width(), texture.params.height()) {
             Ok(()) => { pngs_written += 1; }
@@ -110,6 +105,22 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     println!("Wrote {} {}{}, {} PNG{}.",
         models_written, model_file_name, plural(models_written),
         pngs_written, plural(pngs_written));
+
+    Ok(())
+}
+
+pub fn write_rgba(path: &Path, rgba: &[u8], width: u32, height: u32)
+-> Result<()>
+{
+    use png::{Encoder, ColorType, BitDepth, HasParameters};
+    let f = File::create(path)?;
+    let mut encoder = Encoder::new(f, width, height);
+    encoder
+        .set(ColorType::RGBA)
+        .set(BitDepth::Eight);
+
+    let mut writer = encoder.write_header()?;
+    writer.write_image_data(rgba)?;
 
     Ok(())
 }

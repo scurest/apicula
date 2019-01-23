@@ -27,7 +27,6 @@ struct Ctx<'a> {
     conn: &'a Connection,
     image_namer: &'a ImageNamer,
     rest_trses: ObjectTRSes,
-    objects: &'a [Matrix4<f64>],
     prims: &'a Primitives,
     skel: &'a Skeleton,
 }
@@ -41,13 +40,13 @@ pub fn to_gltf(
     let model = &db.models[model_id];
 
     let rest_trses = ObjectTRSes::for_model_at_rest(model);
-    let objects = &rest_trses.objects.iter()
+    let objects = rest_trses.objects.iter()
         .map(|trs| Matrix4::from(trs))
         .collect::<Vec<_>>();
-    let prims = &Primitives::build(model, PolyType::Tris, objects);
-    let skel = &Skeleton::build(model, objects);
+    let prims = &Primitives::build(model, PolyType::Tris, &objects);
+    let skel = &Skeleton::build(model, &objects);
 
-    let ctx = Ctx { model_id, model, db, conn, image_namer, rest_trses, objects, prims, skel };
+    let ctx = Ctx { model_id, model, db, conn, image_namer, rest_trses, prims, skel };
 
     let mut gltf = GlTF::new();
 
@@ -614,6 +613,8 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                             "byteOffset" => byte_offset,
                             "count" => values.len(),
                         ))
+                        // IDEA: would probably be okay to emit normalized i16s
+                        // instead of floats...
                     }
                 };
 

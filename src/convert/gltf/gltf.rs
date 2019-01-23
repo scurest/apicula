@@ -190,6 +190,7 @@ impl ByteVec for Vec<u8> {
 }
 
 pub trait VecExt<T> {
+    /// Pushes an element to a list and returns its index.
     fn add(&mut self, x: T) -> usize;
 }
 

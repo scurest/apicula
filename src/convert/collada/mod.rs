@@ -1,3 +1,7 @@
+#[macro_use]
+mod xml;
+mod make_invertible;
+
 use cgmath::{Matrix4, One};
 use convert::image_namer::ImageNamer;
 use db::{Database, ModelId};
@@ -9,7 +13,7 @@ use petgraph::graph::NodeIndex;
 use time;
 use util::BiList;
 use connection::Connection;
-use super::xml::Xml;
+use self::xml::Xml;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
@@ -34,7 +38,7 @@ pub fn write(
 
     // We need invertible matrices since we're obliged to give values for
     // inverse bind matrices.
-    use convert::make_invertible::make_invertible;
+    use self::make_invertible::make_invertible;
     let objects = &model.objects.iter()
         .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
