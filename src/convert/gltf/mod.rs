@@ -372,13 +372,14 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
             }
         }
 
-        // Instantiate the mesh/skin at the root node
-        if idx == ctx.skel.root {
-            node["mesh"] = 0.into();
-            node["skin"] = 0.into();
-        }
         node
     }).collect::<Vec<_>>().into();
+
+    // Insert a node in a separate tree to instantiate the mesh at
+    gltf.json["nodes"].push(object!(
+        "mesh" => 0,
+        "skin" => 0,
+    )).unwrap();
 
     // Make the skin
 
@@ -416,10 +417,6 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
             "inverseBindMatrices" => inv_bind_accessor,
         )
     );
-
-    // Make a scene
-    gltf.json["scenes"] = array!(object!("nodes" => array!(skel.root.index())));
-    gltf.json["scene"] = 0.into();
 }
 
 fn animations(ctx: &Ctx, gltf: &mut GlTF) {
