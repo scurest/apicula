@@ -130,18 +130,20 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
     let has_colors = ctx.prims.draw_calls.iter().any(|call| call.used_vertex_color);
     let color_accessor = if has_colors {
         let buf = gltf.buffers.add(Buffer {
-            alignment: 1,
-            bytes: Vec::with_capacity(3 * verts.len() * 1),
+            alignment: 4,
+            bytes: Vec::with_capacity(4 * verts.len() * 1),
         });
         let dat = &mut gltf.buffers[buf].bytes;
         for v in verts {
             dat.push_normalized_u8(v.color[0]);
             dat.push_normalized_u8(v.color[1]);
             dat.push_normalized_u8(v.color[2]);
+            dat.push_normalized_u8(1.0); // padding
         }
         let buf_view = gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
             "byteLength" => dat.len(),
+            "byteStride" => 4,
         ));
         Some(gltf.json["accessors"].add(object!(
             "bufferView" => buf_view,
@@ -194,7 +196,7 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
     // Joints
     let joints_accessors = {
         let buf = gltf.buffers.add(Buffer {
-            alignment: 1,
+            alignment: 4,
             bytes: Vec::with_capacity(4 * num_sets * verts.len() * 1),
         });
         let dat_len = {
@@ -231,7 +233,7 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
     // Weights
     let weights_accessors = {
         let buf = gltf.buffers.add(Buffer {
-            alignment: 1,
+            alignment: 4,
             bytes: Vec::with_capacity(4 * num_sets * verts.len() * 1),
         });
         let dat_len = {
