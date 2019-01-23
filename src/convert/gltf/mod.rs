@@ -416,6 +416,18 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
             "inverseBindMatrices" => inv_bind_accessor,
         )
     );
+
+    gltf.json["scenes"] = array!(
+        object!(
+            "nodes" => array!(
+                // Root of the joint tree
+                skel.root.index(),
+                // The mesh node
+                skel.tree.node_count()
+            )
+        )
+    );
+    gltf.json["scene"] = 0.into();
 }
 
 fn animations(ctx: &Ctx, gltf: &mut GlTF) {
