@@ -16,6 +16,7 @@ use util::{BiList, BiMap};
 use self::curve::{GlTFObjectCurves, CurveDomain};
 use nitro::animation::Curve;
 use std::collections::HashMap;
+use nds::Alpha;
 
 static FRAME_LENGTH: f32 = 1.0 / 60.0; // 60 fps
 
@@ -110,7 +111,7 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
         let dat = &mut gltf.buffers[buf].bytes;
         for v in verts {
             dat.push_f32(v.texcoord[0]);
-            dat.push_f32(v.texcoord[1]);
+            dat.push_f32(1.0 - v.texcoord[1]);
         }
         let buf_view = gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
@@ -716,10 +717,122 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
 }
 
 fn materials(ctx: &Ctx, gltf: &mut GlTF) {
-    let materials = ctx.model.materials.iter().map(|material| {
-        object!(
+    #[derive(Copy, Clone, Hash, PartialEq, Eq)]
+    enum WrapMode {
+        Clamp,
+        MirroredRepeat,
+        Repeat,
+    }
+    #[derive(Copy, Clone, Hash, PartialEq, Eq)]
+    struct SamplerDescriptor {
+        wrap_s: WrapMode,
+        wrap_t: WrapMode,
+    }
+    // Maps a sampler index to the wrapping mode it should use.
+    let mut sampler_descs = BiList::<SamplerDescriptor>::new();
+
+    // Maps an image index to the image name it should use.
+    let mut image_descs = BiList::<String>::new();
+
+    #[derive(Copy, Clone, Hash, PartialEq, Eq)]
+    struct TextureDescriptor {
+        sampler: usize,
+        image: usize,
+    }
+    // Maps a texture index to the sampler and image it will use.
+    let mut texture_descs = BiList::<TextureDescriptor>::new();
+
+    let materials = ctx.model.materials.iter().enumerate()
+        .map(|(material_idx, material)| {
+        let mut mat = object!(
             "name" => material.name.to_string(),
-        )
+            "extensions" => object!(
+                "KHR_materials_unlit" => JsonValue::new_object(),
+            )
+        );
+
+        let image_id =
+            ctx.conn.models[ctx.model_id]
+            .materials[material_idx].image_id();
+        match image_id {
+            Ok(Some(image_id)) => {
+                let params = ctx.db.textures[image_id.0].params;
+                match params.format().alpha_type(params) {
+                    Alpha::Opaque => (),
+                    Alpha::Transparent =>
+                        mat["alphaMode"] = "MASK".into(),
+                    Alpha::Translucent =>
+                        mat["alphaMode"] = "BLEND".into(),
+                }
+
+                let wrap = |repeat, mirror| {
+                    match (repeat, mirror) {
+                        (false, _) => WrapMode::Clamp,
+                        (true, false) => WrapMode::Repeat,
+                        (true, true) => WrapMode::MirroredRepeat,
+                    }
+                };
+                let params = material.params;
+                let sampler_desc = SamplerDescriptor {
+                    wrap_s: wrap(params.repeat_s(), params.mirror_s()),
+                    wrap_t: wrap(params.repeat_t(), params.mirror_t()),
+                };
+                let sampler = sampler_descs.push(sampler_desc);
+
+                let image_name = ctx.image_namer.names.get(&image_id).unwrap();
+                let image = image_descs.push(image_name.clone());
+
+                let texture_desc = TextureDescriptor { sampler, image };
+                let texture = texture_descs.push(texture_desc);
+
+                mat["pbrMetallicRoughness"] = object!(
+                    "baseColorTexture" => object!(
+                        "index" => texture,
+                    ),
+                    "metallicFactor" => 0,
+                );
+            }
+            _ => (),
+        }
+
+        if !material.cull_backface {
+            mat["doubleSided"] = true.into();
+        }
+        // TODO: handle cull frontfacing
+
+        mat
     }).collect::<Vec<JsonValue>>();
+
+    let wrap = |wrap_mode| {
+        match wrap_mode {
+            WrapMode::Clamp => 33071,
+            WrapMode::MirroredRepeat => 33648,
+            WrapMode::Repeat => 10497,
+        }
+    };
+    gltf.json["samplers"] = sampler_descs.iter().map(|desc| {
+        object!(
+            "wrapS" => wrap(desc.wrap_s),
+            "wrapT" => wrap(desc.wrap_t),
+        )
+    }).collect::<Vec<JsonValue>>().into();
+
+    gltf.json["images"] = image_descs.iter().map(|name| {
+        object!(
+            "uri" => format!("{}.png", name),
+        )
+    }).collect::<Vec<JsonValue>>().into();
+
+    gltf.json["textures"] = texture_descs.iter().map(|desc| {
+        object!(
+            "source" => desc.image,
+            "sampler" => desc.sampler,
+        )
+    }).collect::<Vec<JsonValue>>().into();
+
     gltf.json["materials"] = materials.into();
+
+    gltf.json["extensionsUsed"] = array!(
+        "KHR_materials_unlit"
+    );
 }

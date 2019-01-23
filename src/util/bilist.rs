@@ -32,12 +32,12 @@ impl<T: Eq + Hash + Clone> BiList<T> {
 
     /// Push an element onto the list. Does nothing if the element is already in
     /// the list.
-    pub fn push(&mut self, t: T) {
+    pub fn push(&mut self, t: T) -> usize {
         let list = &mut self.list;
-        self.reverse.entry(t.clone()).or_insert_with(|| {
+        *self.reverse.entry(t.clone()).or_insert_with(|| {
             list.push(t);
             list.len() - 1
-        });
+        })
     }
 
     pub fn get_elem(&self, idx: usize) -> Option<&T> {
