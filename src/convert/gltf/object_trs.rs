@@ -28,7 +28,7 @@ impl ObjectTRSes {
                     static SMALL: f64 = 0.000_002;
                     if s >= 0.0 && s < SMALL {
                         SMALL
-                    } else if s > -SMALL {
+                    } else if s <= 0.0 && s > -SMALL {
                         -SMALL
                     } else {
                         s
