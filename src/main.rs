@@ -83,9 +83,9 @@ fn main2() -> Result<()> {
             (@arg apply_any_animation: --("apply-any-animation")
                 "Disable the heuristic that animation only apply to models with \
                 the same number of objects. Apply all animations to every model.")
-            (@arg more_textures: --("more-textures") +hidden
+            (@arg more_textures: --("more-textures")
                 "Try to extract more textures; only textures that are needed for a \
-                model are extracted by default (EXPERIMENTAL)")
+                model are extracted by default")
         )
         (@subcommand extract =>
             (about: "Extract Nitro files from a ROM or archive")

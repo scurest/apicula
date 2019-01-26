@@ -1,3 +1,6 @@
+//! Discovers images in a Connection and assigns them names. We use these for
+//! image filenames so that models know what the path to a specific image it
+//! uses will be.
 use db::{Database, TextureId, PaletteId};
 use nitro::Name;
 use std::collections::HashMap;
@@ -9,6 +12,7 @@ type ImageId = (TextureId, Option<PaletteId>);
 pub struct ImageNamer {
     pub namer: UniqueNamer,
     pub names: HashMap<ImageId, String>,
+    pub used_texture_ids: Vec<bool>, // TODO: BitVec
 }
 
 impl ImageNamer {
@@ -16,6 +20,7 @@ impl ImageNamer {
         let mut image_namer = ImageNamer {
             namer: UniqueNamer::new(),
             names: HashMap::new(),
+            used_texture_ids: vec![false; db.textures.len()],
         };
 
         // Discovery images from model materials
@@ -61,44 +66,54 @@ impl ImageNamer {
         self.names.entry(image_id).or_insert_with(|| {
             namer.get_fresh_name(texture_name.print_safe().to_string())
         });
+        self.used_texture_ids[image_id.0] = true;
     }
 
+    /// Discover even more images by guessing, based on their names, which
+    /// palettes go with which textures.
     pub fn add_more_images(&mut self, db: &Database) {
         let mut num_guesses = 0;
+        let mut still_unextracted = false;
 
         for (texture_id, texture) in db.textures.iter().enumerate() {
-
-            let mut guess = |(texture_id, palette_id)| {
-                use std::collections::hash_map::Entry;
-                let namer = &mut self.namer;
-                match self.names.entry((texture_id, palette_id)) {
-                    Entry::Vacant(ve) => {
-                        let name = format!("{}", db.textures[texture_id].name.print_safe());
-                        ve.insert(namer.get_fresh_name(name));
-                        num_guesses += 1;
-                    }
-                    _ => (),
-                };
-            };
-
-            // Direct color textures don't need a palette.
-            if !texture.params.format().desc().requires_palette {
-                guess((texture_id, None));
+            if self.used_texture_ids[texture_id] {
                 continue;
             }
 
-            let mut guess_palette_name = |name: &Name| {
-                if let Some(ids) = db.palettes_by_name.get(name) {
-                    guess((texture_id, Some(ids[0])));
-                }
-            };
+            // Direct color textures don't need a palette.
+            if !texture.params.format().desc().requires_palette {
+                self.insert_image_id(db, (texture_id, None));
+                num_guesses += 1;
+                continue;
+            }
 
-            guess_palette_name(&texture.name);
-            guess_palette_name(&append_pl(&texture.name));
+            // If there's one palette, guess it
+            if db.palettes.len() == 1 {
+                self.insert_image_id(db, (texture_id, Some(0)));
+                num_guesses += 1;
+                continue;
+            }
+
+            // Guess palette name == texture name
+            if let Some(ids) = db.palettes_by_name.get(&texture.name) {
+                self.insert_image_id(db, (texture_id, Some(ids[0])));
+                num_guesses += 1;
+                continue;
+            }
+
+            // Guess palette name == texture_name + "_pl"
+            if let Some(ids) = db.palettes_by_name.get(&append_pl(&texture.name)) {
+                self.insert_image_id(db, (texture_id, Some(ids[0])));
+                num_guesses += 1;
+                continue;
+            }
+
+            still_unextracted = true;
         }
 
-        if num_guesses > 0 {
-            info!("guessed {} new images (for --more-textures)", num_guesses);
+        info!("Guessed {} new images (for --more-images)", num_guesses);
+        if still_unextracted {
+            info!("There are still unextracted textures though");
         }
     }
 }

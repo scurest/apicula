@@ -42,6 +42,9 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     }
 
     let mut image_namer = ImageNamer::build(&db, &conn);
+    if matches.is_present("more_textures") {
+        image_namer.add_more_images(&db);
+    }
 
     let mut models_written = 0;
     let mut pngs_written = 0;
@@ -78,10 +81,6 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
             Ok(()) => { models_written += 1; },
             Err(e) => error!("failed to write {}: {}", name, e),
         }
-    }
-
-    if matches.is_present("more_textures") {
-        image_namer.add_more_images(&db);
     }
 
     // Save PNGs for all the images
