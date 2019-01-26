@@ -8,9 +8,7 @@
 //! See the [GBATEK documentation](http://problemkaputt.de/gbatek.htm#ds3dvideo)
 //! for a reference on the DS's GPU.
 
-use cgmath::Point2;
-use cgmath::Point3;
-use cgmath::vec3;
+use cgmath::{Point2, Point3, Vector3, vec3};
 use errors::Result;
 use util::bits::BitField;
 use util::fixed::fix16;
@@ -53,7 +51,7 @@ pub enum GpuCmd {
     Color { color: Point3<f32> },
 
     /// Set the normal vector for subsequent vertices.
-    Normal { normal: Point3<f64> },
+    Normal { normal: Vector3<f64> },
 }
 
 /// Parses the memory representation of GPU commands, yielding them as
@@ -262,7 +260,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
             let x = fix32(p.bits(0, 10), 1, 0, 9);
             let y = fix32(p.bits(10, 20), 1, 0, 9);
             let z = fix32(p.bits(20, 30), 1, 0, 9);
-            let normal = Point3::new(x, y, z);
+            let normal = vec3(x, y, z);
             GpuCmd::Normal { normal }
         }
 

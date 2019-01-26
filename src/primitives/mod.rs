@@ -7,7 +7,7 @@
 //!
 //! This is then further consumed by both the viewer and the COLLADA writer.
 
-use cgmath::{Matrix4, Point2, Transform, vec4, Zero};
+use cgmath::{Matrix4, Point2, Transform, InnerSpace, vec4, Zero};
 use nitro::Model;
 use nitro::render_cmds::SkinTerm;
 use std::default::Default;
@@ -375,7 +375,8 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
             }
             GpuCmd::Normal { normal } => {
                 b.cur_draw_call.used_normals = true;
-                b.next_vertex.normal = [normal.x as f32, normal.y as f32, normal.z as f32];
+                let n = b.gpu.cur_matrix.transform_vector(normal).normalize();
+                b.next_vertex.normal = [n.x as f32, n.y as f32, n.z as f32];
             }
             GpuCmd::Vertex { position } => {
                 let p = b.gpu.cur_matrix.transform_point(position);
