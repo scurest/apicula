@@ -3,33 +3,23 @@
 use clap::ArgMatches;
 use decompress::try_decompress;
 use errors::Result;
-use errors::ResultExt;
 use nitro::Container;
 use nitro::container::read_container;
 use std::fs;
-use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 use util::cur::Cur;
 use util::namers::UniqueNamer;
+use util::OutDir;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
-    let input = {
-        let cli_arg = matches.value_of_os("INPUT").unwrap();
-        let mut f = fs::File::open(cli_arg)?;
-        let mut bytes = vec![];
-        f.read_to_end(&mut bytes)?;
-        bytes
-    };
+    let input_file = matches.value_of_os("INPUT").unwrap();
+    let input = fs::read(&input_file)?;
 
-    let save_directory = PathBuf::from(matches.value_of("OUTPUT").unwrap());
-    fs::create_dir(&save_directory)
-        .chain_err(||
-            "output directory could not be created -- maybe it \
-            already exists?"
-        )?;
+    let out_dir_path = PathBuf::from(matches.value_of("OUTPUT").unwrap());
+    let out_dir = OutDir::make_ready(out_dir_path)?;
 
-    let mut extractor = Extractor::new(save_directory);
+    let mut extractor = Extractor::new(out_dir);
 
     // Search for four bytes that match the stamp of a BMD, BTX, or BCA
     // file. Then try to parse a file from that point. If we succeed, write
@@ -47,8 +37,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 }
 
 struct Extractor {
-    /// Directory to save extracted files to.
-    save_directory: PathBuf,
+    out_dir: OutDir,
     /// Assigns unique names to the found files, so their
     /// file names in the save directory won't collide.
     file_namer: UniqueNamer,
@@ -59,12 +48,9 @@ struct Extractor {
 }
 
 impl Extractor {
-    /// Create a new `Extractor`.
-    ///
-    /// Note that the save directory must exist.
-    fn new(save_directory: PathBuf) -> Extractor {
+    fn new(out_dir: OutDir) -> Extractor {
         Extractor {
-            save_directory,
+            out_dir,
             file_namer: UniqueNamer::new(),
             num_bmds: 0,
             num_btxs: 0,
@@ -141,12 +127,11 @@ impl Extractor {
             b"BTP0" => "nsbtp",
             _ => "nsbxx",
         };
-        let save_path = self.save_directory
-            .join(&format!("{}.{}", file_name, file_extension));
 
+        let file_name = format!("{}.{}", file_name, file_extension);
         let res =
-            fs::File::create(&save_path)
-            .and_then(|mut f| f.write_all(bytes));
+            self.out_dir.create_file(&file_name)
+            .and_then(|mut f| Ok(f.write_all(bytes)?));
         match res {
             Ok(()) => {
                 match container.stamp {
@@ -158,7 +143,7 @@ impl Extractor {
                 }
             }
             Err(e) => {
-                error!("failed to write {}: {:?}", save_path.to_string_lossy(), e);
+                error!("failed to write {}: {:?}", file_name, e);
             }
         }
     }

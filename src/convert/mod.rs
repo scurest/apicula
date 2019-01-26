@@ -3,31 +3,19 @@ mod image_namer;
 mod gltf;
 
 use clap::ArgMatches;
-use errors::{Result, ResultExt};
-use std::fs::{self, File};
+use errors::Result;
+use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use util::namers::UniqueNamer;
+use util::OutDir;
 use db::Database;
 use convert::image_namer::ImageNamer;
 use connection::{Connection, ConnectionOptions};
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
-    let out_dir = PathBuf::from(matches.value_of("OUTPUT").unwrap());
-    // We'll create the output dir lazily when we first write a file to it,
-    let mut out_dir_created = false;
-    let mut ensure_out_dir_created = || -> Result<()> {
-        if out_dir_created {
-            return Ok(());
-        }
-        fs::create_dir(&out_dir)
-            .chain_err(||
-                "output directory could not be created -- maybe it \
-                already exists?"
-            )?;
-        out_dir_created = true;
-        Ok(())
-    };
+    let out_dir_path = PathBuf::from(matches.value_of("OUTPUT").unwrap());
+    let mut out_dir = OutDir::make_ready(out_dir_path)?;
 
     let db = Database::from_arg_matches(matches)?;
 
@@ -54,11 +42,8 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
 
     // Save each model as a COLLADA file
     for (model_id, model) in db.models.iter().enumerate() {
-        ensure_out_dir_created()?;
-
         let name = model_file_namer.get_fresh_name(format!("{}", model.name.print_safe()));
-        let model_file_path = out_dir.join(&format!("{}.{}", name, format));
-        let mut f = File::create(model_file_path)?;
+        let mut f = out_dir.create_file(&format!("{}.{}", name, format))?;
 
         let res = if format == "dae" {
             let s = collada::write(&db, &conn, &image_namer, model_id);
@@ -69,8 +54,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
                 gltf.write_glb(&mut f)
             } else {
                 let bin_file_name = format!("{}.bin", name);
-                let bin_file_path = out_dir.join(&bin_file_name);
-                let mut bin_f = File::create(bin_file_path)?;
+                let mut bin_f = out_dir.create_file(&bin_file_name)?;
                 gltf.write_gltf_bin(&mut f, &mut bin_f, &bin_file_name)
             }
         } else {
@@ -97,12 +81,11 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
             }
         };
 
-        ensure_out_dir_created()?;
-
-        let path = out_dir.join(&format!("{}.png", image_name));
-        match write_rgba(&path, &rgba.0[..], texture.params.width(), texture.params.height()) {
+        let dim = (texture.params.width(), texture.params.height());
+        let mut png_file = out_dir.create_file(&format!("{}.png", image_name))?;
+        match write_rgba(&mut png_file, &rgba.0[..], dim) {
             Ok(()) => { pngs_written += 1; }
-            Err(e) => error!("failed to write {}: {}", path.to_string_lossy(), e),
+            Err(e) => error!("failed writing PNG: {}", e),
         }
     }
 
@@ -121,12 +104,9 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn write_rgba(path: &Path, rgba: &[u8], width: u32, height: u32)
--> Result<()>
-{
+pub fn write_rgba(f: &mut File, rgba: &[u8], dim: (u32, u32)) -> Result<()> {
     use png::{Encoder, ColorType, BitDepth, HasParameters};
-    let f = File::create(path)?;
-    let mut encoder = Encoder::new(f, width, height);
+    let mut encoder = Encoder::new(f, dim.0, dim.1);
     encoder
         .set(ColorType::RGBA)
         .set(BitDepth::Eight);
