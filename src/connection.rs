@@ -86,16 +86,16 @@ impl MaterialConnection {
 
 #[derive(Copy, Clone)]
 pub struct ConnectionOptions {
-    /// Let's you disable the animation heuristic, which can be inaccurate, and
-    /// apply all animations.
-    pub animation_heuristic_on: bool,
+    /// Apply all animations to every model.
+    pub all_animations: bool,
 }
 
 impl ConnectionOptions {
     /// Creates a ConnectionOptions from the CLI arguments.
     pub fn from_arg_matches(matches: &ArgMatches) -> ConnectionOptions {
-        let animation_heuristic_on = !matches.is_present("apply_any_animation");
-        ConnectionOptions { animation_heuristic_on }
+        ConnectionOptions {
+            all_animations: matches.is_present("all_animations"),
+        }
     }
 }
 
@@ -229,8 +229,8 @@ fn resolve_material(db: &Database, model_id: ModelId, material_idx: usize) -> Ma
 /// whole games.
 fn find_applicable_animations(db: &Database, model_id: ModelId, options: ConnectionOptions)
 -> Vec<AnimationId> {
-    if !options.animation_heuristic_on {
-        // All animations apply. Let's try not to worry about how big this is :o
+    if options.all_animations {
+        // Let's try not to worry about how big this is :o
         return (0..db.animations.len()).collect();
     }
 

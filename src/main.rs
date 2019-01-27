@@ -70,9 +70,9 @@ fn main2() -> Result<()> {
             (about: "View models")
             (alias: "v")
             (@arg INPUT: +required +multiple "Nitro files")
-            (@arg apply_any_animation: --("apply-any-animation")
-                "Disable the heuristic that animation only apply to models with \
-                the same number of objects. Apply all animations to every model.")
+            (@arg all_animations: --("all-animations")
+                "Disable the heuristic that guesses which animations apply to a \
+                model and apply them all to every model.")
         )
         (@subcommand convert =>
             (about: "Convert models to COLLADA")
@@ -80,9 +80,9 @@ fn main2() -> Result<()> {
             (@arg INPUT: +required +multiple "Nitro file")
             (@arg OUTPUT: -o --output +required +takes_value "Output directory")
             (@arg FORMAT: -f --format +takes_value "Model format")
-            (@arg apply_any_animation: --("apply-any-animation")
-                "Disable the heuristic that animation only apply to models with \
-                the same number of objects. Apply all animations to every model.")
+            (@arg all_animations: --("all-animations")
+                "Disable the heuristic that guesses which animations apply to a \
+                model and apply them all to every model.")
             (@arg more_textures: --("more-textures")
                 "Try to extract more textures; only textures that are needed for a \
                 model are extracted by default")
