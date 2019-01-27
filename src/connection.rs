@@ -139,7 +139,8 @@ fn resolve_material(db: &Database, model_id: ModelId, material_idx: usize) -> Ma
     let has_palette = material.palette_name.is_some();
 
     // Resolve the texture name. Start with all textures with the right name.
-    let mut candidates = db.textures_by_name[texture_name].clone();
+    let mut candidates = db.textures_by_name.get(texture_name)
+        .cloned().unwrap_or(vec![]);
 
     // If the material specifies a palette, discard candidates that don't use
     // one, and conversely.
@@ -173,7 +174,8 @@ fn resolve_material(db: &Database, model_id: ModelId, material_idx: usize) -> Ma
     // Otherwise, resolve the palette. Start with candidates that have the right
     // name.
     let palette_name = material.palette_name.as_ref().unwrap();
-    let mut candidates = db.palettes_by_name[palette_name].clone();
+    let mut candidates = db.palettes_by_name.get(palette_name)
+        .cloned().unwrap_or(vec![]);
 
     // If there are candidates in the same file as the texture we prefer them;
     // discard the others.
