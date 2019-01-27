@@ -10,23 +10,21 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     let conn = Connection::build(&db, conn_options);
 
     db.print_status();
+
     println!();
+
     for model_id in 0..db.models.len() {
         model_info(&db, &conn, model_id);
     }
-    println!();
     for texture_id in 0..db.textures.len() {
         texture_info(&db, texture_id);
     }
-    println!();
     for palette_id in 0..db.palettes.len() {
         palette_info(&db, palette_id);
     }
-    println!();
     for animation_id in 0..db.animations.len() {
         animation_info(&db, animation_id);
     }
-    println!();
     for pattern_id in 0..db.patterns.len() {
         pattern_info(&db, pattern_id);
     }
