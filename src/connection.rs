@@ -101,15 +101,31 @@ impl ConnectionOptions {
 
 impl Connection {
     pub fn build(db: &Database, options: ConnectionOptions) -> Connection {
+        // Record whether we failed to resolve any materials so we can warn
+        let mut missing_textures = false;
+
         let models = db.models.iter().enumerate().map(|(model_id, model)| {
             let materials = (0..model.materials.len())
                 .map(|material_id| {
-                    resolve_material(db, model_id, material_id)
+                    let mat_conn = resolve_material(db, model_id, material_id);
+
+                    if mat_conn.image_id().is_err() {
+                        missing_textures = true;
+                    }
+
+                    mat_conn
                 }).collect();
+
             let animations = find_applicable_animations(db, model_id, options);
             let patterns = find_applicable_patterns(db, model_id);
             ModelConnection { materials, animations, patterns }
         }).collect();
+
+        if missing_textures {
+            warn!("A matching texture/palette couldn't be found for some materials!");
+            info!("Hint: textures are sometimes stored in a separate .nsbtx file.");
+        }
+
         Connection { models }
     }
 }
