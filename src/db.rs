@@ -1,8 +1,9 @@
 use clap::ArgMatches;
 use std::path::PathBuf;
+use std::fs;
 use std::collections::HashMap;
 use nitro::{Name, Model, Texture, Palette, Animation, Pattern, Container};
-use errors::{Result, ResultExt};
+use errors::Result;
 use util::cur::Cur;
 
 pub type FileId = usize;
@@ -14,7 +15,6 @@ pub type PatternId = usize;
 
 #[derive(Default)]
 pub struct Database {
-    /// Files provided by the user on the command line.
     pub file_paths: Vec<PathBuf>,
 
     pub models: Vec<Model>,
@@ -35,11 +35,10 @@ pub struct Database {
 
 impl Database {
     pub fn from_arg_matches(matches: &ArgMatches) -> Result<Database> {
-        let file_paths: Vec<PathBuf> =
-            matches
-            .values_of_os("INPUT").unwrap()
-            .map(PathBuf::from)
-            .collect();
+        let user_paths =
+            matches.values_of_os("INPUT").unwrap()
+            .map(PathBuf::from);
+        let file_paths = expand_directories(user_paths);
 
         use std::default::Default;
         let mut db: Database = Default::default();
@@ -73,13 +72,15 @@ impl Database {
         for file_id in 0..self.file_paths.len() {
             debug!("Processing {:?}...", self.file_paths[file_id]);
 
-            // Hard-fail if we can't open the path. We don't expect the caller
-            // to know which files are valid Nitro files but we expect them to
-            // give us files we can actually open.
-            let buf = std::fs::read(&self.file_paths[file_id])
-                .chain_err(|| {
-                    format!("couldn't read file: {}", &self.file_paths[file_id].to_string_lossy())
-                })?;
+            let buf = match std::fs::read(&self.file_paths[file_id]) {
+                Ok(buf) => buf,
+                Err(e) =>{
+                    error!("file-system error reading {}: {}",
+                        self.file_paths[file_id].to_string_lossy(), e,
+                    );
+                    continue;
+                }
+            };
 
             use nitro::container::read_container;
             match read_container(Cur::new(&buf)) {
@@ -87,7 +88,7 @@ impl Database {
                     self.add_container(file_id, cont);
                 }
                 Err(e) => {
-                    error!("error in file {}: {}",
+                    error!("couldn't parse as a Nitro file: {}: {}",
                         self.file_paths[file_id].to_string_lossy(), e);
                 }
             }
@@ -129,4 +130,36 @@ impl Database {
                 .push(id);
         }
     }
+}
+
+/// Collects the user's provided paths, expanding any that are directories into
+/// their children (only expand once, not recursively).
+fn expand_directories<I: Iterator<Item=PathBuf>>(paths: I) -> Vec<PathBuf> {
+    let mut file_paths = vec![];
+    for path in paths {
+        if path.is_dir() {
+            let start_idx = file_paths.len();
+
+            let entries = match fs::read_dir(path) {
+                Ok(entries) => entries,
+                Err(e) => {
+                    warn!("error reading directory: {}", e);
+                    continue;
+                }
+            };
+            for entry in entries {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(_) => continue,
+                };
+                file_paths.push(entry.path());
+            }
+
+            let end_idx = file_paths.len();
+            file_paths[start_idx..end_idx].sort();
+        } else {
+            file_paths.push(path);
+        }
+    }
+    file_paths
 }
