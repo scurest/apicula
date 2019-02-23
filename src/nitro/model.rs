@@ -125,15 +125,25 @@ fn read_mesh(cur: Cur, name: Name) -> Result<Mesh> {
     Ok(Mesh { name, gpu_commands })
 }
 
-/// Material contains drawing state, eg. texture name, whether to cull
-/// backfacing polys, etc.
+/// Material contains drawing state, eg. diffuse color, texture name, whether to
+/// cull backfacing polys, etc.
 pub struct Material {
     pub name: Name,
+
     pub texture_name: Option<Name>,
     pub palette_name: Option<Name>,
     pub params: TextureParams,
     pub width: u16,
     pub height: u16,
+
+    pub diffuse: [f32; 3],
+    pub diffuse_is_default_vertex_color: bool,
+    pub ambient: [f32; 3],
+    pub specular: [f32; 3],
+    pub enable_shininess_table: bool,
+    pub emission: [f32; 3],
+    pub alpha: f32,
+
     pub cull_backface: bool,
     pub cull_frontface: bool,
     pub texture_mat: Matrix4<f64>,
@@ -191,7 +201,7 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
         dif_amb: u32,
         spe_emi: u32,
         polygon_attr: u32,
-        unknown2: u32,
+        unknown2: u32, // possibly SHININESS?
         params: u32,
         unknown3: u32,
         unknown4: u32, // flag for texture matrix?
@@ -203,6 +213,18 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
     });
 
     let params = TextureParams(params);
+
+    fn rgb(x: u32) -> [f32; 3] {
+        [x.bits(0,5) as f32 / 31.0, x.bits(5,10) as f32 / 31.0, x.bits(10,15) as f32 / 31.0]
+    }
+
+    let diffuse = rgb(dif_amb.bits(0,15));
+    let diffuse_is_default_vertex_color = dif_amb.bits(15,16) != 0;
+    let ambient = rgb(dif_amb.bits(16,31));
+    let specular = rgb(spe_emi.bits(0,15));
+    let enable_shininess_table = spe_emi.bits(15,16) != 0;
+    let emission = rgb(spe_emi.bits(16,31));
+    let alpha = polygon_attr.bits(16,21) as f32 / 31.0;
 
     let cull_backface = polygon_attr.bits(6,7) == 0;
     let cull_frontface = polygon_attr.bits(7,8) == 0;
@@ -227,6 +249,13 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
         params,
         width,
         height,
+        diffuse,
+        diffuse_is_default_vertex_color,
+        ambient,
+        specular,
+        enable_shininess_table,
+        emission,
+        alpha,
         cull_backface,
         cull_frontface,
         texture_mat,

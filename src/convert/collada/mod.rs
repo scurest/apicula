@@ -179,17 +179,31 @@ fn library_effects(xml: &mut Xml, ctx: &Ctx) {
         xml!(xml;
             <technique sid=["common"]>;
                 <phong>;
+                    <emission>;
+                        <color>(mat.emission[0])" "(mat.emission[1])" "(mat.emission[2])" 1"</color>;
+                    /emission>;
+                    <ambient>;
+                        <color>(mat.ambient[0])" "(mat.ambient[1])" "(mat.ambient[2])" 1"</color>;
+                    /ambient>;
                     <diffuse>;
                     if (image_name.is_some()) {
                         <texture texture=["Image-sampler"] texcoord=["tc"]/>;
                     } else {
-                        <color>"1 1 1 1"</color>;
+                        <color>(mat.diffuse[0])" "(mat.diffuse[1])" "(mat.diffuse[2])" "(mat.alpha)</color>;
                     }
                     /diffuse>;
+                    <specular>;
+                        <color>(mat.specular[0])" "(mat.specular[1])" "(mat.specular[2])" 1"</color>;
+                    /specular>;
                     if (has_transparency) {
                         <transparent>;
                             <texture texture=["Image-sampler"] texcoord=["tc"]/>;
                         /transparent>;
+                    }
+                    if (mat.alpha != 1.0) {
+                        <transparency>;
+                            <float>(mat.alpha)</float>;
+                        /transparency>;
                     }
                 /phong>;
             /technique>;

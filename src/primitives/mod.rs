@@ -241,12 +241,19 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     fn draw(&mut self, mesh_idx: u8) {
         let cur_material = self.cur_material;
+
         let mat = &self.model.materials[cur_material as usize];
         let dim = (mat.width as u32, mat.height as u32);
         self.cur_texture_dim = dim;
         self.gpu.texture_matrix = mat.texture_mat;
 
         self.begin_draw_call(mesh_idx, cur_material);
+
+        if mat.diffuse_is_default_vertex_color && mat.diffuse != [1.0, 1.0, 1.0] {
+            self.next_vertex.color = mat.diffuse;
+            self.cur_draw_call.used_vertex_color = true;
+        }
+
         run_gpu_cmds(self, &self.model.meshes[mesh_idx as usize].gpu_commands);
         self.end_draw_call();
     }

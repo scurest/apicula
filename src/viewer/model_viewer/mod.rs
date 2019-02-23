@@ -184,6 +184,7 @@ impl ModelViewer {
 
             let uniforms = uniform! {
                 matrix: model_view_persp,
+                alpha: material.alpha,
                 tex: sampler,
             };
 

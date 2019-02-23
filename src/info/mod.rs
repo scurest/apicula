@@ -39,8 +39,6 @@ fn model_info(db: &Database, conn: &Connection, model_id: usize) {
     println!("  Name: {:?}", model.name);
     println!("  Found In: {}",
         db.file_paths[db.models_found_in[model_id]].to_string_lossy());
-    println!("  Up Scale: {:?}", model.up_scale);
-    println!("  Down Scale: {:?}", model.down_scale);
     println!("  Num Meshes: {}", model.meshes.len());
     println!("  Objects ({} total):", model.objects.len());
     for (i, object) in model.objects.iter().enumerate() {
@@ -54,6 +52,7 @@ fn model_info(db: &Database, conn: &Connection, model_id: usize) {
     println!("  Materials ({} total):", model.materials.len());
     for (i, material) in model.materials.iter().enumerate() {
         println!("    Material {}:", i);
+        println!("      Name: {:?}", material.name);
         if let Some(name) = material.texture_name {
             print!("      Texture: {:?} ", name);
 
@@ -100,6 +99,14 @@ fn model_info(db: &Database, conn: &Connection, model_id: usize) {
         println!("      Mirror (s,t): ({}, {})", params.mirror_s(), params.mirror_t());
         println!("      Texcoord Transform Mode: {}", params.texcoord_transform_mode());
 
+        println!("      Diffuse Color: {:?}", material.diffuse);
+        println!("      Diffuse is Default Vertex Color: {}", material.diffuse_is_default_vertex_color);
+        println!("      Ambient Color: {:?}", material.ambient);
+        println!("      Specular Color: {:?}", material.specular);
+        println!("      Enable Shininess Table: {}", material.enable_shininess_table);
+        println!("      Emission: {:?}", material.emission);
+        println!("      Alpha: {:?}", material.alpha);
+
         println!("      Cull: {}",
             match (material.cull_backface, material.cull_frontface) {
                 (true, true) => "All (y tho?)",
@@ -145,7 +152,7 @@ fn animation_info(db: &Database, anim_id: usize) {
     println!("  Found In: {}",
         db.file_paths[db.animations_found_in[anim_id]].to_string_lossy());
     println!("  Frames: {}", anim.num_frames);
-    println!("  Objects: {}", anim.objects_curves.len());
+    println!("  Num Objects: {}", anim.objects_curves.len());
     println!("  TRS Curves:",);
     for (i, trs_curves) in anim.objects_curves.iter().enumerate() {
         println!("    Object {}:", i);

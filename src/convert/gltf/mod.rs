@@ -758,6 +758,7 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
         .map(|(material_idx, material)| {
         let mut mat = object!(
             "name" => material.name.to_string(),
+            "pbrMetallicRoughness" => JsonValue::new_object(),
             "extensions" => object!(
                 "KHR_materials_unlit" => JsonValue::new_object(),
             )
@@ -797,20 +798,45 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
                 let texture_desc = TextureDescriptor { sampler, image };
                 let texture = texture_descs.push(texture_desc);
 
-                mat["pbrMetallicRoughness"] = object!(
-                    "baseColorTexture" => object!(
-                        "index" => texture,
-                    ),
-                    "metallicFactor" => 0,
-                );
+                mat["pbrMetallicRoughness"]["baseColorTexture"] =
+                    object!("index" => texture);
+                mat["pbrMetallicRoughness"]["metallicFactor"] = 0.into();
+
             }
             _ => (),
+        }
+
+        let has_diffuse =
+            !material.diffuse_is_default_vertex_color &&
+            material.diffuse != [1.0, 1.0, 1.0];
+        if has_diffuse || material.alpha != 1.0 {
+            let [r, g, b] = if has_diffuse {
+                material.diffuse
+            } else {
+                [1.0, 1.0, 1.0]
+            };
+            mat["pbrMetallicRoughness"]["baseColorFactor"] = array!(r, g, b, material.alpha);
+        }
+
+        if material.alpha == 0.0 {
+            mat["alphaMode"] = "MASK".into();
+        } else if material.alpha != 1.0 {
+            mat["alphaMode"] = "BLEND".into();
+        }
+
+        if material.emission != [0.0, 0.0, 0.0] {
+            // Does nothing since we use KHR_materials_unlit
+            mat["emissiveFactor"] = material.emission.to_vec().into();
         }
 
         if !material.cull_backface {
             mat["doubleSided"] = true.into();
         }
         // TODO: handle cull frontfacing
+
+        if mat["pbrMetallicRoughness"].is_empty() {
+            mat.remove("pbrMetallicRoughness");
+        }
 
         mat
     }).collect::<Vec<JsonValue>>();
@@ -844,7 +870,14 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
 
     gltf.json["materials"] = materials.into();
 
-    gltf.json["extensionsUsed"] = array!(
-        "KHR_materials_unlit"
-    );
+    if gltf.json["samplers"].is_empty() { gltf.json.remove("samplers"); }
+    if gltf.json["images"].is_empty() { gltf.json.remove("images"); }
+    if gltf.json["textures"].is_empty() { gltf.json.remove("textures"); }
+    if gltf.json["materials"].is_empty() { gltf.json.remove("materials"); }
+
+    if gltf.json.has_key("materials") {
+        gltf.json["extensionsUsed"] = array!(
+            "KHR_materials_unlit"
+        );
+    }
 }
