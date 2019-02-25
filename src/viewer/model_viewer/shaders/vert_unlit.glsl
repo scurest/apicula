@@ -1,6 +1,7 @@
 #version 140
 
 uniform mat4 matrix;
+
 uniform float alpha;
 
 in vec3 position;

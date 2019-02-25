@@ -22,7 +22,10 @@ use super::{Z_NEAR, Z_FAR, FOV_Y};
 pub struct ModelViewer {
     pub eye: Eye,
     pub aspect_ratio: f32,
-    program: Program,
+    /// Program for unlit materials (using vertex colors)
+    unlit_program: Program,
+    /// Program for lit materials (using normals)
+    lit_program: Program,
     vertex_buffer: Option<VertexBuffer<Vertex>>,
     index_buffer: Option<IndexBuffer<u16>>,
     draw_calls: Vec<DrawCall>,
@@ -42,11 +45,12 @@ pub enum MaterialTextureBinding {
 
 impl ModelViewer {
     pub fn new(display: &Display) -> ModelViewer {
-        let vertex_shader = include_str!("shaders/vert.glsl");
+        let unlit_vertex_shader = include_str!("shaders/vert_unlit.glsl");
+        let lit_vertex_shader = include_str!("shaders/vert_lit.glsl");
         let fragment_shader = include_str!("shaders/frag.glsl");
         let program_args =
             glium::program::ProgramCreationInput::SourceCode {
-                vertex_shader,
+                vertex_shader: unlit_vertex_shader,
                 fragment_shader,
                 geometry_shader: None,
                 tessellation_control_shader: None,
@@ -55,12 +59,25 @@ impl ModelViewer {
                 outputs_srgb: true,
                 uses_point_size: false,
             };
-        let program = Program::new(display, program_args).unwrap();
+        let unlit_program = Program::new(display, program_args).unwrap();
+        let program_args =
+            glium::program::ProgramCreationInput::SourceCode {
+                vertex_shader: lit_vertex_shader,
+                fragment_shader,
+                geometry_shader: None,
+                tessellation_control_shader: None,
+                tessellation_evaluation_shader: None,
+                transform_feedback_varyings: None,
+                outputs_srgb: true,
+                uses_point_size: false,
+            };
+        let lit_program = Program::new(display, program_args).unwrap();
 
         ModelViewer {
             eye: Default::default(),
             aspect_ratio: 1.0,
-            program,
+            unlit_program,
+            lit_program,
             vertex_buffer: None,
             index_buffer: None,
             texture_cache: TextureCache::new(display),
@@ -182,12 +199,6 @@ impl ModelViewer {
                 s
             };
 
-            let uniforms = uniform! {
-                matrix: model_view_persp,
-                alpha: material.alpha,
-                tex: sampler,
-            };
-
             let indices = &index_buffer.slice(call.index_range.clone()).unwrap();
 
             let draw_params = glium::DrawParameters {
@@ -208,13 +219,38 @@ impl ModelViewer {
                 .. Default::default()
             };
 
-            target.draw(
-                vertex_buffer,
-                indices,
-                &self.program,
-                &uniforms,
-                &draw_params,
-            ).unwrap();
+            if !call.used_normals {
+                let uniforms = uniform! {
+                    matrix: model_view_persp,
+                    alpha: material.alpha,
+                    tex: sampler,
+                };
+                target.draw(
+                    vertex_buffer,
+                    indices,
+                    &self.unlit_program,
+                    &uniforms,
+                    &draw_params,
+                ).unwrap();
+            } else {
+                let uniforms = uniform! {
+                    matrix: model_view_persp,
+                    light_vec: [0.0, -0.624695, -0.78086877f32],
+                    light_color: [1.0, 1.0, 1.0f32],
+                    diffuse_color: material.diffuse,
+                    ambient_color: material.ambient,
+                    emission_color: material.emission,
+                    alpha: material.alpha,
+                    tex: sampler,
+                };
+                target.draw(
+                    vertex_buffer,
+                    indices,
+                    &self.lit_program,
+                    &uniforms,
+                    &draw_params,
+                ).unwrap();
+            }
         }
     }
 }
