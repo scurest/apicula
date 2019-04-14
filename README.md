@@ -35,7 +35,8 @@ Redistributable packages installed.
 
 ### Building
 
-Make sure [Rust is installed](https://rustup.rs/) and [build the usual way](https://doc.rust-lang.org/cargo/guide/working-on-an-existing-project.html)
+Make sure [Rust (1.31+) is installed](https://rustup.rs/) and [build the usual
+way](https://doc.rust-lang.org/cargo/guide/working-on-an-existing-project.html)
 
     $ git clone https://github.com/scurest/apicula.git
     $ cd apicula
