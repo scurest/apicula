@@ -2,7 +2,7 @@
 <h3 align=center>apicula</h3>
 <p align=center>
 <a href="https://ci.appveyor.com/project/scurest/apicula"><img src="https://ci.appveyor.com/api/projects/status/bavh9qh25mbta41x?svg=true" alt="Build status"></a>
-<a href="https://github.com/Aaronepower/tokei"><img src="https://tokei.rs/b1/github/scurest/apicula" alt="Lines of code"></a>
+<a href="https://github.com/XAMPPRocky/tokei"><img src="https://tokei.rs/b1/github/scurest/apicula?category=code" alt="Lines of code"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-0BSD-lightgrey.svg" alt="license 0BSD"></a>
 <br>
 Rip models from DS games.
