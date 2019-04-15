@@ -531,7 +531,7 @@ fn library_animations(xml: &mut Xml, ctx: &Ctx) {
                     </Name_array>;
                     <technique_common>;
                         <accessor source=["#anim"(anim_id)"-joint"(joint_index)"-interpolation-array"] count=[(num_frames)]>;
-                            <param name=["INTERPOLATION"] type=["name"]/>;
+                            <param name=["INTERPOLATION"] type=["Name"]/>;
                         /accessor>;
                     /technique_common>;
                 /source>;
@@ -542,7 +542,7 @@ fn library_animations(xml: &mut Xml, ctx: &Ctx) {
                     <input semantic=["INPUT"] source=["#anim"(anim_id)"-joint"(joint_index)"-time"]/>;
                     <input semantic=["OUTPUT"] source=["#anim"(anim_id)"-joint"(joint_index)"-matrix"]/>;
                     <input semantic=["INTERPOLATION"] source=["#anim"(anim_id)"-joint"(joint_index)"-interpolation"]/>;
-                </sampler>;
+                /sampler>;
             );
 
             xml!(xml;
