@@ -147,7 +147,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // MTX_RESTORE - Restore Current Matrix from Stack
         0x14 => {
-            let idx = params.nth(0);
+            let idx = params.nth(0) & 31;
             GpuCmd::Restore { idx }
         }
 
@@ -161,7 +161,7 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 
         // BEGIN_VTXS - Start of Vertex List
         0x40 => {
-            let prim_type = params.nth(0);
+            let prim_type = params.nth(0) & 3;
             GpuCmd::Begin { prim_type }
         }
 
