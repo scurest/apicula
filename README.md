@@ -115,6 +115,9 @@ If you can test in others (Maya, 3DS Max), that would be appreciated :)
 * **Lowlines and [Console Tool](http://llref.emutalk.net/projects/ctool/)**, for animations and
   documentation for Nitro formats. I also use Console Tool for extracting files from DS ROMs.
 
+* **Barubary's [DSDecmp](https://github.com/Barubary/dsdecmp)** for NDS
+  decompression algorithms.
+
 * **[GBATEK](http://problemkaputt.de/gbatek.htm#ds3dvideo)**, for DS hardware documentation.
 
 * **[deSmuME](http://desmume.org/)**, for the DS debugger. `_3D_LOG_EXEC` and the GDB stub were
