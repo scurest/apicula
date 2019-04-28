@@ -49,6 +49,7 @@ pub fn read_container(cur: Cur) -> Result<Container> {
 
     check!(bom == 0xfeff)?;
     check!(header_size == 16)?;
+    check!(file_size > 16)?;
 
     let mut cont = Container {
         stamp, file_size, models: vec![], textures: vec![],

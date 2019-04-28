@@ -26,8 +26,22 @@ impl<'a> Cur<'a> {
         self.buf_.len().saturating_sub(self.pos_)
     }
 
+    pub fn peek<T: Viewable>(&self) -> Result<T, Error> {
+        let size = <T as Viewable>::size();
+        if self.bytes_remaining() < size {
+            return Err(Error::TooShort);
+        }
+        Ok(<T as Viewable>::view(&self.buf_[self.pos_..self.pos_ + size]))
+    }
+
     pub fn next<T: Viewable>(&mut self) -> Result<T, Error> {
-        Ok(self.next_n::<T>(1)?.nth(0))
+        let size = <T as Viewable>::size();
+        if self.bytes_remaining() < size {
+            return Err(Error::TooShort);
+        }
+        let next = <T as Viewable>::view(&self.buf_[self.pos_..self.pos_ + size]);
+        self.pos_ += size;
+        Ok(next)
     }
 
     pub fn nth<T: Viewable>(&self, n: usize) -> Result<T, Error> {
@@ -41,13 +55,12 @@ impl<'a> Cur<'a> {
     }
 
     pub fn next_n_u8s(&mut self, n: usize) -> Result<&'a [u8], Error> {
-        let end_pos = self.pos_ + n;
-        if end_pos > self.buf_.len() {
+        if self.pos_.saturating_add(n) > self.buf_.len() {
             return Err(Error::TooShort);
         }
-        let res = &self.buf_[self.pos_ .. self.pos_ + n];
+        let next_n = &self.buf_[self.pos_..self.pos_ + n];
         self.pos_ += n;
-        Ok(res)
+        Ok(next_n)
     }
 
     pub fn slice_from_cur_to_end(&self) -> &'a [u8] {
