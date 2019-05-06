@@ -5,11 +5,11 @@ use decompress;
 use errors::Result;
 use nitro::Container;
 use nitro::container::read_container;
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use util::cur::Cur;
-use util::namers::UniqueNamer;
 use util::OutDir;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
@@ -88,8 +88,7 @@ fn find_next_compression_start_byte(bytes: &[u8]) -> Option<usize> {
 }
 
 struct ExtractOutput {
-    /// Assigns unique names to files so they don't collide.
-    file_namer: UniqueNamer,
+    taken_file_names: HashSet<String>,
     out_dir: OutDir,
     num_bmds: u32,
     num_btxs: u32,
@@ -100,7 +99,7 @@ struct ExtractOutput {
 impl ExtractOutput {
     fn new(out_dir: OutDir) -> ExtractOutput {
         ExtractOutput {
-            file_namer: UniqueNamer::new(),
+            taken_file_names: HashSet::new(),
             out_dir,
             num_bmds: 0,
             num_btxs: 0,
@@ -123,7 +122,7 @@ impl ExtractOutput {
     /// Given the slice `bytes` that successfully parsed as the Nitro container
     /// `container`, save the slice to a file in the output directory.
     fn save_file(&mut self, bytes: &[u8], container: &Container) {
-        let file_name = self.file_namer.get_fresh_name(guess_container_name(container));
+        let file_name = guess_container_name(container);
         let file_extension = match container.stamp {
             b"BMD0" => "nsbmd",
             b"BTX0" => "nsbtx",
@@ -132,11 +131,21 @@ impl ExtractOutput {
             _ => "nsbxx",
         };
 
-        let file_name = format!("{}.{}", file_name, file_extension);
-        let res =
-            self.out_dir.create_file(&file_name)
+        // Find an available filename
+        let mut save_path = format!("{}.{}", file_name, file_extension);
+        let mut cntr = 1;
+        while self.taken_file_names.contains(&save_path) {
+            save_path.clear();
+            use std::fmt::Write;
+            write!(save_path, "{}.{:03}.{}", file_name, cntr, file_extension).unwrap();
+            cntr += 1;
+        }
+        self.taken_file_names.insert(save_path.clone());
+
+        let result = self.out_dir
+            .create_file(&save_path)
             .and_then(|mut f| Ok(f.write_all(bytes)?));
-        match res {
+        match result {
             Ok(()) => {
                 match container.stamp {
                     b"BMD0" => self.num_bmds += 1,
