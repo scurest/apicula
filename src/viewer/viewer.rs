@@ -56,6 +56,7 @@ pub static CONTROL_HELP: &'static str =
         "  OP           Prev/Next Animation\n",
         "  []           Single-step Animation\n",
         "  KL           Prev/Next Pattern Animation\n",
+        "  Space        Print Info\n",
     );
 
 
@@ -198,6 +199,10 @@ impl Viewer {
                 }
             }
 
+            Key::Space => {
+                self.print_info();
+            }
+
             _ => (),
         }
     }
@@ -248,6 +253,41 @@ impl Viewer {
             write!(s, "No Pattern === ").unwrap()
         }
         write!(s, "{:5.2}fps", self.fps_counter.fps()).unwrap();
+    }
+
+    pub fn print_info(&self) {
+        println!("=============");
+        println!("Model: {:?} [{}/{}]",
+            self.cur_model().name,
+            self.model_id,
+            self.db.models.len());
+        println!("Found in file: {}", self.db.file_paths[self.db.models_found_in[self.model_id]].display());
+
+        if let Some(anim_id) = self.animation_id() {
+            let anim = self.cur_animation(&self.db).unwrap();
+            println!("Animation: {:?} [{}/{}]",
+                anim.name,
+                anim_id,
+                self.db.animations.len(),
+            );
+            println!("Found in file: {}", self.db.file_paths[self.db.animations_found_in[anim_id]].display());
+        } else {
+            println!("No Animation Playing");
+        }
+
+        if let Some(pat_id) = self.pattern_id() {
+            let pat = self.cur_pattern().unwrap();
+            println!("Pattern Animation: {:?} [{}/{}]",
+                pat.name,
+                pat_id,
+                self.db.patterns.len(),
+            );
+            println!("Found in file: {}", self.db.file_paths[self.db.patterns_found_in[pat_id]].display());
+        } else {
+            println!("No Pattern Animation Playing")
+        }
+
+        println!();
     }
 
     /// Changes to a new model.
