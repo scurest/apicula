@@ -10,16 +10,15 @@ Rip models from DS games.
 
 -----
 
-Many Nintendo DS games used [Nitro
-files](https://wiki.vg-resource.com/wiki/Nintendo_DS#NITRO_File_Formats) for
-assets, like NSBMD files for 3D models. apicula can extract these models and
-their associated textures and animations from a ROM or memory dump, display them
-in its model viewer, and convert them to the common 3D formats COLLADA and glTF
-for importing into content-creation tools like Blender.
+apicula works with the [NSBMD 3D model
+files](https://wiki.vg-resource.com/wiki/Nintendo_DS#NITRO_File_Formats) found
+in many Nintendo DS games. Models can be extracted from ROMs, viewed, and
+converted to COLLADA. Animation (NSBCA) and texture files (NSBTX) are also
+supported.
 
 * [Tutorial](https://github.com/scurest/apicula/wiki/TUTORIAL)
 * [Hallow's tutorial on VG Resource](https://www.vg-resource.com/thread-32332.html)
-* [Common Blender issues](https://github.com/scurest/apicula/wiki/BLENDER)
+* [Common Blender issues](https://github.com/scurest/apicula/wiki/IMPORT:-Blender)
 
 
 ### Downloads
@@ -86,22 +85,11 @@ apicula recognized these file formats
 * `.nsbtp`, `.BTP`, or `.BTP0` contain pattern animations, which change the
   textures in a material
 
-Pattern animations are supported in the viewer and extractor, but not in the
-converter (neither COLLADA nor glTF support animations that change a material's
-textures).
+Pattern animations are supported in the viewer (currently buggy) and extractor,
+but not in the converter (neither COLLADA nor glTF support animations that
+change a material's textures).
 
-Exporting is primarily tested with the following games:
-
-* Kingdom Hearts: 358/2 Days
-* Ore ga Omae o Mamoru
-* Rune Factory 3: A Fantasy Harvest Moon
-
-Importing the resultant COLLADA files has been tested in the following programs:
-
-* Blender 2.79
-* Godot
-
-If you can test in others (Maya, 3DS Max), that would be appreciated :)
+Importing apicula's COLLADA files has been tested in Blender and Maya.
 
 
 ### Special Thanks
@@ -112,8 +100,10 @@ If you can test in others (Maya, 3DS Max), that would be appreciated :)
 * **Gericom and [MKDS Course Modifier](https://gbatemp.net/threads/mkds-course-modifier.299444/)**,
   for animation information, especially for the meaning of the basis rotations.
 
-* **Lowlines and [Console Tool](http://llref.emutalk.net/projects/ctool/)**, for animations and
-  documentation for Nitro formats. I also use Console Tool for extracting files from DS ROMs.
+* **Lowlines and [Console
+  Tool](https://web.archive.org/web/20180319005030/http://llref.emutalk.net/projects/ctool/)**,
+  for animations and documentation for Nitro formats. I also used Console Tool
+  for extracting files from ROMs.
 
 * **Barubary's [DSDecmp](https://github.com/Barubary/dsdecmp)** for NDS
   decompression algorithms.
