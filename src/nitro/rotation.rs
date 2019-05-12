@@ -5,7 +5,7 @@
 //! matrices on the fly). This also means that a "rotation" matrix might not
 //! actually be a rotation (ie. orthogonal of determinant +1).
 
-use cgmath::{Matrix3, vec3};
+use cgmath::{vec3, Matrix3};
 use util::bits::BitField;
 use util::fixed::fix16;
 
@@ -13,37 +13,33 @@ pub fn pivot_mat(select: u16, neg: u16, a: f64, b: f64) -> Matrix3<f64> {
     if select >= 9 {
         // Does this actually happen?
         debug!("pivot with select={} actually happened! :O", select);
-        return Matrix3::new(
-            -a,  0.0, 0.0,
-            0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0,
-        );
+        return Matrix3::new(-a, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     }
 
-    let o = if neg.bits(0,1) == 0 { 1.0 } else { -1.0 };
-    let c = if neg.bits(1,2) == 0 { b } else { -b };
-    let d = if neg.bits(2,3) == 0 { a } else { -a };
+    let o = if neg.bits(0, 1) == 0 { 1.0 } else { -1.0 };
+    let c = if neg.bits(1, 2) == 0 { b } else { -b };
+    let d = if neg.bits(2, 3) == 0 { a } else { -a };
 
     // Consider eg. a = cos θ, b = sin θ.
     // Nb. the pattern here.
     match select {
-        0 => Matrix3::new( o , 0.0, 0.0,  0.0,  a ,  b ,  0.0,  c ,  d ),
-        1 => Matrix3::new(0.0,  o , 0.0,   a , 0.0,  b ,   c , 0.0,  d ),
-        2 => Matrix3::new(0.0, 0.0,  o ,   a ,  b , 0.0,   c ,  d , 0.0),
+        0 => Matrix3::new(o, 0.0, 0.0, 0.0, a, b, 0.0, c, d),
+        1 => Matrix3::new(0.0, o, 0.0, a, 0.0, b, c, 0.0, d),
+        2 => Matrix3::new(0.0, 0.0, o, a, b, 0.0, c, d, 0.0),
 
-        3 => Matrix3::new(0.0,  a ,  b ,   o , 0.0, 0.0,  0.0,  c ,  d ),
-        4 => Matrix3::new( a , 0.0,  b ,  0.0,  o , 0.0,   c , 0.0,  d ),
-        5 => Matrix3::new( a ,  b , 0.0,  0.0, 0.0,  o ,   c ,  d , 0.0),
+        3 => Matrix3::new(0.0, a, b, o, 0.0, 0.0, 0.0, c, d),
+        4 => Matrix3::new(a, 0.0, b, 0.0, o, 0.0, c, 0.0, d),
+        5 => Matrix3::new(a, b, 0.0, 0.0, 0.0, o, c, d, 0.0),
 
-        6 => Matrix3::new(0.0,  a ,  b ,  0.0,  c ,  d ,   o , 0.0, 0.0),
-        7 => Matrix3::new( a , 0.0,  b ,   c , 0.0,  d ,  0.0,  o , 0.0),
-        8 => Matrix3::new( a ,  b , 0.0,   c ,  d , 0.0,  0.0, 0.0,  o ),
+        6 => Matrix3::new(0.0, a, b, 0.0, c, d, o, 0.0, 0.0),
+        7 => Matrix3::new(a, 0.0, b, c, 0.0, d, 0.0, o, 0.0),
+        8 => Matrix3::new(a, b, 0.0, c, d, 0.0, 0.0, 0.0, o),
 
         _ => unreachable!(),
     }
 }
 
-pub fn basis_mat((in0,in1,in2,in3,in4): (u16,u16,u16,u16,u16)) -> Matrix3<f64> {
+pub fn basis_mat((in0, in1, in2, in3, in4): (u16, u16, u16, u16, u16)) -> Matrix3<f64> {
     // Credit for figuring this out goes to MKDS Course Modifier.
     //
     // Braindump for this function follows:
@@ -76,8 +72,8 @@ pub fn basis_mat((in0,in1,in2,in3,in4): (u16,u16,u16,u16,u16)) -> Matrix3<f64> {
     let mut out = [0u16; 6];
 
     for i in 0..5 {
-        out[i] = input[i].bits(3,16);
-        out[5] = (out[5] << 3) | input[i].bits(0,3);
+        out[i] = input[i].bits(3, 16);
+        out[5] = (out[5] << 3) | input[i].bits(0, 3);
     }
 
     let f = |x| fix16(x, 1, 0, 12);

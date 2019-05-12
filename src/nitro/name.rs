@@ -6,7 +6,6 @@ use util::view::Viewable;
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Name(pub [u8; 16]);
 
-
 impl Name {
     pub fn from_bytes(buf: &[u8]) -> Name {
         let mut name = Name([0; 16]);
@@ -22,7 +21,9 @@ impl Name {
 }
 
 impl Viewable for Name {
-    fn size() -> usize { 16 }
+    fn size() -> usize {
+        16
+    }
     fn view(buf: &[u8]) -> Name {
         Name::from_bytes(buf)
     }
@@ -45,14 +46,13 @@ impl fmt::Debug for Name {
 
         // Print "normal" strings without quotes or escaping.
 
-        let normal =
-            !trimmed.is_empty() &&
-            trimmed.iter().all(|&b| {
-                let is_letter_or_digit =
-                    (b >= b'a' && b <= b'z') ||
-                    (b >= b'A' && b <= b'Z') ||
-                    (b >= b'0' && b <= b'9') ||
-                    b == b'_' || b == b'-';
+        let normal = !trimmed.is_empty()
+            && trimmed.iter().all(|&b| {
+                let is_letter_or_digit = (b >= b'a' && b <= b'z')
+                    || (b >= b'A' && b <= b'Z')
+                    || (b >= b'0' && b <= b'9')
+                    || b == b'_'
+                    || b == b'-';
                 is_letter_or_digit
             });
 
@@ -87,9 +87,7 @@ impl<'a> fmt::Display for NameSafePrinter<'a> {
 
         for &b in trimmed {
             let is_letter_or_digit =
-                (b >= b'a' && b <= b'z') ||
-                (b >= b'A' && b <= b'Z') ||
-                (b >= b'0' && b <= b'9');
+                (b >= b'a' && b <= b'z') || (b >= b'A' && b <= b'Z') || (b >= b'0' && b <= b'9');
             let c = if is_letter_or_digit { b as char } else { '_' };
             f.write_char(c)?;
         }

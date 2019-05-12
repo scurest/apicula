@@ -1,9 +1,9 @@
-use cgmath::{Matrix3, Matrix4, One, vec3, Vector3};
+use cgmath::{vec3, Matrix3, Matrix4, One, Vector3};
 use errors::Result;
-use nitro::info_block;
-use nitro::Name;
 use nds::TextureParams;
+use nitro::info_block;
 use nitro::render_cmds::Op;
+use nitro::Name;
 use util::bits::BitField;
 use util::cur::Cur;
 use util::fixed::{fix16, fix32};
@@ -24,32 +24,35 @@ pub struct Model {
 pub fn read_model(cur: Cur, name: Name) -> Result<Model> {
     debug!("model: {:?}", name);
 
-    fields!(cur, model {
-        section_size: u32,
-        render_cmds_off: u32,
-        materials_off: u32,
-        mesh_off: u32,
-        inv_binds_off: u32,
-        unknown1: [u8; 3],
-        num_objects: u8,
-        num_materials: u8,
-        num_meshes: u8,
-        unknown2: [u8; 2],
-        up_scale: (fix32(1,19,12)),
-        down_scale: (fix32(1,19,12)),
-        num_verts: u16,
-        num_surfs: u16,
-        num_tris: u16,
-        num_quads: u16,
-        bounding_box_x_min: (fix16(1,3,12)),
-        bounding_box_y_min: (fix16(1,3,12)),
-        bounding_box_z_min: (fix16(1,3,12)),
-        bounding_box_x_max: (fix16(1,3,12)),
-        bounding_box_y_max: (fix16(1,3,12)),
-        bounding_box_z_max: (fix16(1,3,12)),
-        unknown3: [u8; 8],
-        objects_cur: Cur,
-    });
+    fields!(
+        cur,
+        model {
+            section_size: u32,
+            render_cmds_off: u32,
+            materials_off: u32,
+            mesh_off: u32,
+            inv_binds_off: u32,
+            unknown1: [u8; 3],
+            num_objects: u8,
+            num_materials: u8,
+            num_meshes: u8,
+            unknown2: [u8; 2],
+            up_scale: (fix32(1, 19, 12)),
+            down_scale: (fix32(1, 19, 12)),
+            num_verts: u16,
+            num_surfs: u16,
+            num_tris: u16,
+            num_quads: u16,
+            bounding_box_x_min: (fix16(1, 3, 12)),
+            bounding_box_y_min: (fix16(1, 3, 12)),
+            bounding_box_z_min: (fix16(1, 3, 12)),
+            bounding_box_x_max: (fix16(1, 3, 12)),
+            bounding_box_y_max: (fix16(1, 3, 12)),
+            bounding_box_z_max: (fix16(1, 3, 12)),
+            unknown3: [u8; 8],
+            objects_cur: Cur,
+        }
+    );
 
     use super::render_cmds::parse_render_cmds;
     let render_ops = parse_render_cmds(cur + render_cmds_off)?;
@@ -60,8 +63,14 @@ pub fn read_model(cur: Cur, name: Name) -> Result<Model> {
     let inv_binds = read_inv_binds(cur + inv_binds_off, num_objects as usize);
 
     let model = Model {
-        name, materials, meshes, objects, inv_binds,
-        render_ops, up_scale, down_scale,
+        name,
+        materials,
+        meshes,
+        objects,
+        inv_binds,
+        render_ops,
+        up_scale,
+        down_scale,
     };
 
     validate_render_ops(&model)?;
@@ -76,11 +85,9 @@ fn validate_render_ops(model: &Model) -> Result<()> {
             Op::MulObject { object_idx } => (object_idx as usize) < model.objects.len(),
             Op::BindMaterial { material_idx } => (material_idx as usize) < model.materials.len(),
             Op::Draw { mesh_idx } => (mesh_idx as usize) < model.meshes.len(),
-            Op::Skin { ref terms } => {
-                terms.iter().all(|term| {
-                    (term.inv_bind_idx as usize) < model.inv_binds.len()
-                })
-            }
+            Op::Skin { ref terms } => terms
+                .iter()
+                .all(|term| (term.inv_bind_idx as usize) < model.inv_binds.len()),
             _ => true,
         };
         if !good {
@@ -107,20 +114,21 @@ fn read_meshes(cur: Cur) -> Result<Vec<Mesh>> {
 fn read_mesh(cur: Cur, name: Name) -> Result<Mesh> {
     debug!("mesh: {:?}", name);
 
-    fields!(cur, mesh {
-        dummy: u16,
-        section_size: u16,
-        unknown: u32,
-        cmds_off: u32,
-        cmds_len: u32,
-    });
+    fields!(
+        cur,
+        mesh {
+            dummy: u16,
+            section_size: u16,
+            unknown: u32,
+            cmds_off: u32,
+            cmds_len: u32,
+        }
+    );
 
     check!(section_size == 16)?;
     check!(cmds_len % 4 == 0)?;
 
-    let gpu_commands = (cur + cmds_off)
-        .next_n_u8s(cmds_len as usize)?
-        .to_vec();
+    let gpu_commands = (cur + cmds_off).next_n_u8s(cmds_len as usize)?.to_vec();
 
     Ok(Mesh { name, gpu_commands })
 }
@@ -150,11 +158,14 @@ pub struct Material {
 }
 
 fn read_materials(cur: Cur) -> Result<Vec<Material>> {
-    fields!(cur, materials {
-        texture_pairing_off: u16,
-        palette_pairing_off: u16,
-        end: Cur,
-    });
+    fields!(
+        cur,
+        materials {
+            texture_pairing_off: u16,
+            palette_pairing_off: u16,
+            end: Cur,
+        }
+    );
 
     let mut materials = info_block::read::<u32>(end)?
         .map(|(off, name)| read_material(cur + off, name))
@@ -164,9 +175,12 @@ fn read_materials(cur: Cur) -> Result<Vec<Material>> {
     let tex_cur = cur + texture_pairing_off;
     for ((off, num, _), name) in info_block::read::<(u16, u8, u8)>(tex_cur)? {
         trace!("texture pairing: {}", name);
-        fields!(cur + off, texture_pairings {
-            material_ids: [u8; num],
-        });
+        fields!(
+            cur + off,
+            texture_pairings {
+                material_ids: [u8; num],
+            }
+        );
         for &mat_id in material_ids {
             materials[mat_id as usize].texture_name = Some(name);
         }
@@ -176,9 +190,12 @@ fn read_materials(cur: Cur) -> Result<Vec<Material>> {
     let pal_cur = cur + palette_pairing_off;
     for ((off, num, _), name) in info_block::read::<(u16, u8, u8)>(pal_cur)? {
         trace!("palette pairing: {}", name);
-        fields!(cur + off, palette_pairings {
-            material_ids: [u8; num],
-        });
+        fields!(
+            cur + off,
+            palette_pairings {
+                material_ids: [u8; num],
+            }
+        );
         for &mat_id in material_ids {
             materials[mat_id as usize].palette_name = Some(name);
         }
@@ -195,48 +212,58 @@ fn read_materials(cur: Cur) -> Result<Vec<Material>> {
 fn read_material(cur: Cur, name: Name) -> Result<Material> {
     debug!("material: {:?}", name);
 
-    fields!(cur, material {
-        dummy: u16,
-        section_size: u16,
-        dif_amb: u32,
-        spe_emi: u32,
-        polygon_attr: u32,
-        unknown2: u32, // possibly SHININESS?
-        params: u32,
-        unknown3: u32,
-        unknown4: u32, // flag for texture matrix?
-        width: u16,
-        height: u16,
-        unknown5: (fix32(1,19,12)), // always 1?
-        unknown6: (fix32(1,19,12)), // always 1?
-        end: Cur,
-    });
+    fields!(
+        cur,
+        material {
+            dummy: u16,
+            section_size: u16,
+            dif_amb: u32,
+            spe_emi: u32,
+            polygon_attr: u32,
+            unknown2: u32, // possibly SHININESS?
+            params: u32,
+            unknown3: u32,
+            unknown4: u32, // flag for texture matrix?
+            width: u16,
+            height: u16,
+            unknown5: (fix32(1, 19, 12)), // always 1?
+            unknown6: (fix32(1, 19, 12)), // always 1?
+            end: Cur,
+        }
+    );
 
     let params = TextureParams(params);
 
     fn rgb(x: u32) -> [f32; 3] {
-        [x.bits(0,5) as f32 / 31.0, x.bits(5,10) as f32 / 31.0, x.bits(10,15) as f32 / 31.0]
+        [
+            x.bits(0, 5) as f32 / 31.0,
+            x.bits(5, 10) as f32 / 31.0,
+            x.bits(10, 15) as f32 / 31.0,
+        ]
     }
 
-    let diffuse = rgb(dif_amb.bits(0,15));
-    let diffuse_is_default_vertex_color = dif_amb.bits(15,16) != 0;
-    let ambient = rgb(dif_amb.bits(16,31));
-    let specular = rgb(spe_emi.bits(0,15));
-    let enable_shininess_table = spe_emi.bits(15,16) != 0;
-    let emission = rgb(spe_emi.bits(16,31));
-    let alpha = polygon_attr.bits(16,21) as f32 / 31.0;
+    let diffuse = rgb(dif_amb.bits(0, 15));
+    let diffuse_is_default_vertex_color = dif_amb.bits(15, 16) != 0;
+    let ambient = rgb(dif_amb.bits(16, 31));
+    let specular = rgb(spe_emi.bits(0, 15));
+    let enable_shininess_table = spe_emi.bits(15, 16) != 0;
+    let emission = rgb(spe_emi.bits(16, 31));
+    let alpha = polygon_attr.bits(16, 21) as f32 / 31.0;
 
-    let cull_backface = polygon_attr.bits(6,7) == 0;
-    let cull_frontface = polygon_attr.bits(7,8) == 0;
+    let cull_backface = polygon_attr.bits(6, 7) == 0;
+    let cull_frontface = polygon_attr.bits(7, 8) == 0;
 
     // For now, use the section size to determine whether there
     // is texture matrix data.
     let texture_mat = match section_size {
         60 => {
-            fields!(end, texcoord_matrix {
-                a: (fix32(1,19,12)),
-                b: (fix32(1,19,12)),
-            });
+            fields!(
+                end,
+                texcoord_matrix {
+                    a: (fix32(1, 19, 12)),
+                    b: (fix32(1, 19, 12)),
+                }
+            );
             Matrix4::from_nonuniform_scale(a, b, 1.0)
         }
         _ => Matrix4::from_scale(1.0),
@@ -288,10 +315,10 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
     trace!("object: {}", name);
 
     let flags = cur.next::<u16>()?;
-    let t = flags.bits(0,1);
-    let r = flags.bits(1,2);
-    let s = flags.bits(2,3);
-    let p = flags.bits(3,4);
+    let t = flags.bits(0, 1);
+    let r = flags.bits(1, 2);
+    let s = flags.bits(2, 3);
+    let p = flags.bits(3, 4);
     trace!("t={}, r={}, s={}, p={}", t, r, s, p);
 
     // Why in God's name is this here instead of with the
@@ -313,16 +340,22 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
     if p == 1 {
         let a = fx16(cur.next::<u16>()?);
         let b = fx16(cur.next::<u16>()?);
-        let select = flags.bits(4,8);
-        let neg = flags.bits(8,12);
+        let select = flags.bits(4, 8);
+        let neg = flags.bits(8, 12);
         use nitro::rotation::pivot_mat;
         rot = Some(pivot_mat(select, neg, a, b));
     } else if r == 0 {
         let m = cur.next_n::<u16>(8)?;
         rot = Some(Matrix3::new(
-            fx16(m0), fx16(m.nth(0)), fx16(m.nth(1)),
-            fx16(m.nth(2)), fx16(m.nth(3)), fx16(m.nth(4)),
-            fx16(m.nth(5)), fx16(m.nth(6)), fx16(m.nth(7)),
+            fx16(m0),
+            fx16(m.nth(0)),
+            fx16(m.nth(1)),
+            fx16(m.nth(2)),
+            fx16(m.nth(3)),
+            fx16(m.nth(4)),
+            fx16(m.nth(5)),
+            fx16(m.nth(6)),
+            fx16(m.nth(7)),
         ));
     }
     trace!("rot: {:?}", rot);
@@ -346,9 +379,14 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
         matrix = Matrix4::from_translation(t) * matrix;
     }
 
-    Ok(Object { name, trans, rot, scale, matrix })
+    Ok(Object {
+        name,
+        trans,
+        rot,
+        scale,
+        matrix,
+    })
 }
-
 
 /// Read inverse bind matrices. Each seems to be the inverse bind matrix for the
 /// corresponding object (=bone) in the skeleton. A model only needs them if it
@@ -363,21 +401,35 @@ fn read_inv_binds(mut cur: Cur, num_objects: usize) -> Vec<Matrix4<f64>> {
     //  transform; this is the one we care about
     // * one 3 x 3 matrix, possibly for normals(?) that we ignore
     // Each matrix entry is a 4-byte fixed point number.
-    let elem_size = (4*3 + 3*3) * 4;
+    let elem_size = (4 * 3 + 3 * 3) * 4;
 
     let mut inv_binds = Vec::<Matrix4<f64>>::with_capacity(num_objects);
     for _ in 0..num_objects {
-        if cur.bytes_remaining() < elem_size { break; }
+        if cur.bytes_remaining() < elem_size {
+            break;
+        }
 
-        let entries = cur.next_n::<u32>(4*3).unwrap();
+        let entries = cur.next_n::<u32>(4 * 3).unwrap();
         let m = |i| fix32(entries.nth(i), 1, 19, 12);
         inv_binds.push(Matrix4::new(
-            m(0), m(1), m(2), 0.0,
-            m(3), m(4), m(5), 0.0,
-            m(6), m(7), m(8), 0.0,
-            m(9), m(10), m(11), 1.0,
+            m(0),
+            m(1),
+            m(2),
+            0.0,
+            m(3),
+            m(4),
+            m(5),
+            0.0,
+            m(6),
+            m(7),
+            m(8),
+            0.0,
+            m(9),
+            m(10),
+            m(11),
+            1.0,
         ));
-        cur.jump_forward(3*3*4);
+        cur.jump_forward(3 * 3 * 4);
     }
     inv_binds
 }

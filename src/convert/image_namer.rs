@@ -1,11 +1,11 @@
 //! Discovers images in a Connection and assigns them names. We use these for
 //! image filenames so that models know what the path to a specific image it
 //! uses will be.
-use db::{Database, TextureId, PaletteId};
+use connection::Connection;
+use db::{Database, PaletteId, TextureId};
 use nitro::Name;
 use std::collections::HashMap;
 use util::namers::UniqueNamer;
-use connection::Connection;
 
 type ImageId = (TextureId, Option<PaletteId>);
 
@@ -27,8 +27,7 @@ impl ImageNamer {
         for mdl_conn in &conn.models {
             for mat_conn in &mdl_conn.materials {
                 match mat_conn.image_id() {
-                    Ok(Some(image_id)) =>
-                        image_namer.insert_image_id(db, image_id),
+                    Ok(Some(image_id)) => image_namer.insert_image_id(db, image_id),
                     _ => continue,
                 }
             }
@@ -63,9 +62,9 @@ impl ImageNamer {
     pub fn insert_image_id(&mut self, db: &Database, image_id: ImageId) {
         let texture_name = db.textures[image_id.0].name;
         let namer = &mut self.namer;
-        self.names.entry(image_id).or_insert_with(|| {
-            namer.get_fresh_name(texture_name.print_safe().to_string())
-        });
+        self.names
+            .entry(image_id)
+            .or_insert_with(|| namer.get_fresh_name(texture_name.print_safe().to_string()));
         self.used_texture_ids[image_id.0] = true;
     }
 
@@ -123,13 +122,18 @@ fn append_pl(name: &Name) -> Name {
     let mut res = name.clone();
 
     // Find the index of the first NUL byte in the suffix of NUL bytes.
-    let mut idx = res.0.iter().rposition(|&x| x != b'\0')
+    let mut idx = res
+        .0
+        .iter()
+        .rposition(|&x| x != b'\0')
         .map(|pos| pos + 1)
         .unwrap_or(0);
 
     // Append as much of b"_pl" as will fit.
     for &b in b"_pl" {
-        if idx == res.0.len() { break; }
+        if idx == res.0.len() {
+            break;
+        }
         res.0[idx] = b;
         idx += 1;
     }

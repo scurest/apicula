@@ -1,6 +1,5 @@
-
-use std::hash::Hash;
 use std::collections::HashMap;
+use std::hash::Hash;
 
 /// Bijective mapping between a set of Ks (on the left) and a set of Vs (on the
 /// right).

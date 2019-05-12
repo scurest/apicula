@@ -66,15 +66,21 @@ pub fn parse_render_cmds(mut cur: Cur) -> Result<Vec<Op>> {
             }
             0x03 => {
                 // Load a matrix from the stack
-                ops.push(Op::LoadMatrix { stack_pos: params[0] });
+                ops.push(Op::LoadMatrix {
+                    stack_pos: params[0],
+                });
             }
             0x04 | 0x24 | 0x44 => {
                 // Bind a material
-                ops.push(Op::BindMaterial { material_idx: params[0] });
+                ops.push(Op::BindMaterial {
+                    material_idx: params[0],
+                });
             }
             0x05 => {
                 // Draw a mesh
-                ops.push(Op::Draw { mesh_idx: params[0] });
+                ops.push(Op::Draw {
+                    mesh_idx: params[0],
+                });
             }
             0x06 | 0x26 | 0x46 | 0x66 => {
                 // Multiply the current matrix by an object matrix, possibly
@@ -123,13 +129,19 @@ pub fn parse_render_cmds(mut cur: Cur) -> Result<Vec<Op>> {
                         let weight = params[i + 2] as f32 / 256.0; // denormalize
                         i += 3;
 
-                        SkinTerm { weight, stack_pos, inv_bind_idx }
+                        SkinTerm {
+                            weight,
+                            stack_pos,
+                            inv_bind_idx,
+                        }
                     })
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
 
                 ops.push(Op::Skin { terms });
-                ops.push(Op::StoreMatrix { stack_pos: store_pos });
+                ops.push(Op::StoreMatrix {
+                    stack_pos: store_pos,
+                });
             }
             0x0b => {
                 // Scale up by a per-model constant.

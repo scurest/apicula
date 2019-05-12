@@ -1,22 +1,22 @@
+mod curve;
 mod gltf;
 mod object_trs;
-mod curve;
 
-use nitro::Model;
-use db::{Database, ModelId};
-use connection::Connection;
-use primitives::{Primitives, PolyType};
-use skeleton::{Skeleton, Transform, SMatrix};
+use self::curve::{CurveDomain, GlTFObjectCurves};
+use self::gltf::{Buffer, ByteVec, GlTF, VecExt};
+use self::object_trs::ObjectTRSes;
 use super::image_namer::ImageNamer;
 use cgmath::Matrix4;
+use connection::Connection;
+use db::{Database, ModelId};
 use json::JsonValue;
-use self::gltf::{GlTF, Buffer, ByteVec, VecExt};
-use self::object_trs::ObjectTRSes;
-use util::{BiList, BiMap};
-use self::curve::{GlTFObjectCurves, CurveDomain};
-use nitro::animation::Curve;
-use std::collections::HashMap;
 use nds::Alpha;
+use nitro::animation::Curve;
+use nitro::Model;
+use primitives::{PolyType, Primitives};
+use skeleton::{SMatrix, Skeleton, Transform};
+use std::collections::HashMap;
+use util::{BiList, BiMap};
 
 static FRAME_LENGTH: f32 = 1.0 / 60.0; // 60 fps
 
@@ -40,19 +40,30 @@ pub fn to_gltf(
     let model = &db.models[model_id];
 
     let rest_trses = ObjectTRSes::for_model_at_rest(model);
-    let objects = rest_trses.objects.iter()
+    let objects = rest_trses
+        .objects
+        .iter()
         .map(|trs| Matrix4::from(trs))
         .collect::<Vec<_>>();
     let prims = &Primitives::build(model, PolyType::Tris, &objects);
     let skel = &Skeleton::build(model, &objects);
 
-    let ctx = Ctx { model_id, model, db, conn, image_namer, rest_trses, prims, skel };
+    let ctx = Ctx {
+        model_id,
+        model,
+        db,
+        conn,
+        image_namer,
+        rest_trses,
+        prims,
+        skel,
+    };
 
     let mut gltf = GlTF::new();
 
     mesh(&ctx, &mut gltf);
     nodes(&ctx, &mut gltf);
-    animations(&ctx, & mut gltf);
+    animations(&ctx, &mut gltf);
     materials(&ctx, &mut gltf);
 
     gltf
@@ -127,7 +138,11 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
     };
 
     // Color
-    let has_colors = ctx.prims.draw_calls.iter().any(|call| call.used_vertex_color);
+    let has_colors = ctx
+        .prims
+        .draw_calls
+        .iter()
+        .any(|call| call.used_vertex_color);
     let color_accessor = if has_colors {
         let buf = gltf.buffers.add(Buffer {
             alignment: 4,
@@ -214,20 +229,22 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
             }
             dat.len()
         };
-        (0..num_sets).map(|set_num| {
-            let buf_view = gltf.json["bufferViews"].add(object!(
-                "buffer" => buf,
-                "byteOffset" => 4 * set_num,
-                "byteStride" => 4 * num_sets,
-                "byteLength" => dat_len - 4 * set_num,
-            ));
-            gltf.json["accessors"].add(object!(
-                "bufferView" => buf_view,
-                "type" => "VEC4",
-                "componentType" => UNSIGNED_BYTE,
-                "count" => verts.len(),
-            ))
-        }).collect::<Vec<_>>()
+        (0..num_sets)
+            .map(|set_num| {
+                let buf_view = gltf.json["bufferViews"].add(object!(
+                    "buffer" => buf,
+                    "byteOffset" => 4 * set_num,
+                    "byteStride" => 4 * num_sets,
+                    "byteLength" => dat_len - 4 * set_num,
+                ));
+                gltf.json["accessors"].add(object!(
+                    "bufferView" => buf_view,
+                    "type" => "VEC4",
+                    "componentType" => UNSIGNED_BYTE,
+                    "count" => verts.len(),
+                ))
+            })
+            .collect::<Vec<_>>()
     };
 
     // Weights
@@ -251,21 +268,23 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
             }
             dat.len()
         };
-        (0..num_sets).map(|set_num| {
-            let buf_view = gltf.json["bufferViews"].add(object!(
-                "buffer" => buf,
-                "byteOffset" => 4 * set_num,
-                "byteStride" => 4 * num_sets,
-                "byteLength" => dat_len - 4 * set_num,
-            ));
-            gltf.json["accessors"].add(object!(
-                "bufferView" => buf_view,
-                "type" => "VEC4",
-                "componentType" => UNSIGNED_BYTE,
-                "normalized" => true,
-                "count" => verts.len(),
-            ))
-        }).collect::<Vec<_>>()
+        (0..num_sets)
+            .map(|set_num| {
+                let buf_view = gltf.json["bufferViews"].add(object!(
+                    "buffer" => buf,
+                    "byteOffset" => 4 * set_num,
+                    "byteStride" => 4 * num_sets,
+                    "byteLength" => dat_len - 4 * set_num,
+                ));
+                gltf.json["accessors"].add(object!(
+                    "bufferView" => buf_view,
+                    "type" => "VEC4",
+                    "componentType" => UNSIGNED_BYTE,
+                    "normalized" => true,
+                    "count" => verts.len(),
+                ))
+            })
+            .collect::<Vec<_>>()
     };
 
     // Put the indices into a buffer view
@@ -285,102 +304,114 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
     };
 
     // One glTF primitive per draw call
-    let primitives = ctx.prims.draw_calls.iter().map(|call| {
-        let indices_accessor = gltf.json["accessors"].add(object!(
-            "bufferView" => index_buf_view,
-            "type" => "SCALAR",
-            "byteOffset" => 2 * call.index_range.start,
-            "componentType" => UNSIGNED_SHORT,
-            "count" => call.index_range.len(),
-        ));
-        let mut primitive = object!(
-            "attributes" => object!(
-                "POSITION" => pos_accessor,
-            ),
-            "material" => call.mat_id,
-            "indices" => indices_accessor,
-        );
-        if let Some(tex_accessor) = tex_accessor {
-            primitive["attributes"]["TEXCOORD_0"] = tex_accessor.into();
-        }
-        if let Some(color_accessor) = color_accessor {
-            primitive["attributes"]["COLOR_0"] = color_accessor.into();
-        }
-        if let Some(normal_accessor) = normal_accessor {
-            primitive["attributes"]["NORMAL"] = normal_accessor.into();
-        }
-        for (set_num, &joints_accessor) in joints_accessors.iter().enumerate() {
-            primitive["attributes"][format!("JOINTS_{}", set_num)] = joints_accessor.into();
-        }
-        for (set_num, &weights_accessor) in weights_accessors.iter().enumerate() {
-            primitive["attributes"][format!("WEIGHTS_{}", set_num)] = weights_accessor.into();
-        }
-        primitive
-    }).collect::<Vec<JsonValue>>();
+    let primitives = ctx
+        .prims
+        .draw_calls
+        .iter()
+        .map(|call| {
+            let indices_accessor = gltf.json["accessors"].add(object!(
+                "bufferView" => index_buf_view,
+                "type" => "SCALAR",
+                "byteOffset" => 2 * call.index_range.start,
+                "componentType" => UNSIGNED_SHORT,
+                "count" => call.index_range.len(),
+            ));
+            let mut primitive = object!(
+                "attributes" => object!(
+                    "POSITION" => pos_accessor,
+                ),
+                "material" => call.mat_id,
+                "indices" => indices_accessor,
+            );
+            if let Some(tex_accessor) = tex_accessor {
+                primitive["attributes"]["TEXCOORD_0"] = tex_accessor.into();
+            }
+            if let Some(color_accessor) = color_accessor {
+                primitive["attributes"]["COLOR_0"] = color_accessor.into();
+            }
+            if let Some(normal_accessor) = normal_accessor {
+                primitive["attributes"]["NORMAL"] = normal_accessor.into();
+            }
+            for (set_num, &joints_accessor) in joints_accessors.iter().enumerate() {
+                primitive["attributes"][format!("JOINTS_{}", set_num)] = joints_accessor.into();
+            }
+            for (set_num, &weights_accessor) in weights_accessors.iter().enumerate() {
+                primitive["attributes"][format!("WEIGHTS_{}", set_num)] = weights_accessor.into();
+            }
+            primitive
+        })
+        .collect::<Vec<JsonValue>>();
 
-    gltf.json["meshes"] = array!(
-        object!(
-            "primitives" => primitives,
-            "name" => ctx.model.name.to_string(),
-        )
-    );
+    gltf.json["meshes"] = array!(object!(
+        "primitives" => primitives,
+        "name" => ctx.model.name.to_string(),
+    ));
 }
 
 fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
     // NOTE: the NodeIndices for skel.tree are the same as the indices into the
     // glTF nodes array
 
-    gltf.json["nodes"] = ctx.skel.tree.node_indices().map(|idx| {
-        use petgraph::Direction;
-        use skeleton::{Transform, SMatrix};
-        let mut node = object!();
+    gltf.json["nodes"] = ctx
+        .skel
+        .tree
+        .node_indices()
+        .map(|idx| {
+            use petgraph::Direction;
+            use skeleton::{SMatrix, Transform};
+            let mut node = object!();
 
-        let children = ctx.skel.tree
-            .neighbors_directed(idx, Direction::Outgoing)
-            .map(|child_idx| child_idx.index())
-            .collect::<Vec<_>>();
-        if !children.is_empty() {
-            node["children"] = children.into();
-        }
+            let children = ctx
+                .skel
+                .tree
+                .neighbors_directed(idx, Direction::Outgoing)
+                .map(|child_idx| child_idx.index())
+                .collect::<Vec<_>>();
+            if !children.is_empty() {
+                node["children"] = children.into();
+            }
 
-        match ctx.skel.tree[idx].local_to_parent {
-            Transform::Root => {
-                node["name"] = "<ROOT>".into();
-            }
-            Transform::SMatrix(SMatrix::Object { object_idx }) => {
-                node["name"] = ctx.model
-                    .objects[object_idx as usize]
-                    .name
-                    .to_string()
-                    .into();
-                let trs = &ctx.rest_trses.objects[object_idx as usize];
-                if let Some(t) = trs.translation {
-                    node["translation"] = array!(t.x, t.y, t.z);
+            match ctx.skel.tree[idx].local_to_parent {
+                Transform::Root => {
+                    node["name"] = "<ROOT>".into();
                 }
-                if let Some(r) = trs.rotation_quaternion {
-                    node["rotation"] = array!(r.v.x, r.v.y, r.v.z, r.s);
+                Transform::SMatrix(SMatrix::Object { object_idx }) => {
+                    node["name"] = ctx.model.objects[object_idx as usize]
+                        .name
+                        .to_string()
+                        .into();
+                    let trs = &ctx.rest_trses.objects[object_idx as usize];
+                    if let Some(t) = trs.translation {
+                        node["translation"] = array!(t.x, t.y, t.z);
+                    }
+                    if let Some(r) = trs.rotation_quaternion {
+                        node["rotation"] = array!(r.v.x, r.v.y, r.v.z, r.s);
+                    }
+                    if let Some(s) = trs.scale {
+                        node["scale"] = array!(s.x, s.y, s.z);
+                    }
                 }
-                if let Some(s) = trs.scale {
-                    node["scale"] = array!(s.x, s.y, s.z);
+                Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) => {
+                    node["name"] = format!("<INV BIND #{}>", inv_bind_idx).into();
+                    // TODO
+                }
+                Transform::SMatrix(SMatrix::Uninitialized { stack_pos }) => {
+                    node["name"] = format!("<UNINITIALIZED #{}>", stack_pos).into();
                 }
             }
-            Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) => {
-                node["name"] = format!("<INV BIND #{}>", inv_bind_idx).into();
-                // TODO
-            }
-            Transform::SMatrix(SMatrix::Uninitialized { stack_pos }) => {
-                node["name"] = format!("<UNINITIALIZED #{}>", stack_pos).into();
-            }
-        }
 
-        node
-    }).collect::<Vec<_>>().into();
+            node
+        })
+        .collect::<Vec<_>>()
+        .into();
 
     // Insert a node in a separate tree to instantiate the mesh at
-    gltf.json["nodes"].push(object!(
-        "mesh" => 0,
-        "skin" => 0,
-    )).unwrap();
+    gltf.json["nodes"]
+        .push(object!(
+            "mesh" => 0,
+            "skin" => 0,
+        ))
+        .unwrap();
 
     // Make the skin
 
@@ -411,24 +442,20 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
         ))
     };
 
-    gltf.json["skins"] = array!(
-        object!(
-            "skeleton" => skel.root.index(),
-            "joints" => (0..skel.tree.node_count()).collect::<Vec<_>>(),
-            "inverseBindMatrices" => inv_bind_accessor,
-        )
-    );
+    gltf.json["skins"] = array!(object!(
+        "skeleton" => skel.root.index(),
+        "joints" => (0..skel.tree.node_count()).collect::<Vec<_>>(),
+        "inverseBindMatrices" => inv_bind_accessor,
+    ));
 
-    gltf.json["scenes"] = array!(
-        object!(
-            "nodes" => array!(
-                // Root of the joint tree
-                skel.root.index(),
-                // The mesh node
-                skel.tree.node_count()
-            )
+    gltf.json["scenes"] = array!(object!(
+        "nodes" => array!(
+            // Root of the joint tree
+            skel.root.index(),
+            // The mesh node
+            skel.tree.node_count()
         )
-    );
+    ));
     gltf.json["scene"] = 0.into();
 }
 
@@ -461,13 +488,14 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
         // NOTE: must fill out byte length when we finish writing to data_buffer
     ));
 
-    let animations =
-        models_animations.iter()
+    let animations = models_animations
+        .iter()
         .map(|&animation_id| {
             let anim = &ctx.db.animations[animation_id];
 
-            let object_curves =
-                anim.objects_curves.iter()
+            let object_curves = anim
+                .objects_curves
+                .iter()
                 .map(|c| GlTFObjectCurves::for_trs_curves(c))
                 .collect::<Vec<GlTFObjectCurves>>();
 
@@ -549,94 +577,100 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
             }
 
             // Now use the sampler descriptions to write the actual samplers
-            let samplers = sampler_descs.iter().map(|desc| {
-                let &SamplerDescriptor { object_idx, path } = desc;
-                let curves = &object_curves[object_idx as usize];
+            let samplers = sampler_descs
+                .iter()
+                .map(|desc| {
+                    let &SamplerDescriptor { object_idx, path } = desc;
+                    let curves = &object_curves[object_idx as usize];
 
-                let domain = match path {
-                    SamplerPath::Translation => curves.translation.domain(),
-                    SamplerPath::Rotation => curves.rotation.domain(),
-                    SamplerPath::Scale => curves.scale.domain(),
-                };
-                let (start_frame, end_frame, sampling_rate) = match domain {
-                    CurveDomain::None => unreachable!(),
-                    CurveDomain::Sampled { start_frame, end_frame, sampling_rate } =>
-                        (start_frame, end_frame, sampling_rate),
-                };
-                let timeline_descriptor = TimelineDescriptor {
-                    start_frame, end_frame, sampling_rate,
-                };
+                    let domain = match path {
+                        SamplerPath::Translation => curves.translation.domain(),
+                        SamplerPath::Rotation => curves.rotation.domain(),
+                        SamplerPath::Scale => curves.scale.domain(),
+                    };
+                    let (start_frame, end_frame, sampling_rate) = match domain {
+                        CurveDomain::None => unreachable!(),
+                        CurveDomain::Sampled {
+                            start_frame,
+                            end_frame,
+                            sampling_rate,
+                        } => (start_frame, end_frame, sampling_rate),
+                    };
+                    let timeline_descriptor = TimelineDescriptor {
+                        start_frame,
+                        end_frame,
+                        sampling_rate,
+                    };
 
-                // Reserve the input accessor
-                if !timeline_descs.right_contains(&timeline_descriptor) {
-                    let accessor = gltf.json["accessors"].add(
-                        JsonValue::new_object()
-                    );
-                    timeline_descs.insert((accessor, timeline_descriptor));
-                };
-                let &input = timeline_descs.backward(&timeline_descriptor);
+                    // Reserve the input accessor
+                    if !timeline_descs.right_contains(&timeline_descriptor) {
+                        let accessor = gltf.json["accessors"].add(JsonValue::new_object());
+                        timeline_descs.insert((accessor, timeline_descriptor));
+                    };
+                    let &input = timeline_descs.backward(&timeline_descriptor);
 
-                // Make the output accessor
-                let data = &mut gltf.buffers[data_buffer].bytes;
-                let output = match path {
-                    SamplerPath::Translation | SamplerPath::Scale => {
-                        let values = match path {
-                            SamplerPath::Translation => match curves.translation {
+                    // Make the output accessor
+                    let data = &mut gltf.buffers[data_buffer].bytes;
+                    let output = match path {
+                        SamplerPath::Translation | SamplerPath::Scale => {
+                            let values = match path {
+                                SamplerPath::Translation => match curves.translation {
+                                    Curve::Samples { ref values, .. } => values,
+                                    _ => unreachable!(),
+                                },
+                                SamplerPath::Scale => match curves.scale {
+                                    Curve::Samples { ref values, .. } => values,
+                                    _ => unreachable!(),
+                                },
+                                _ => unreachable!(),
+                            };
+                            let byte_offset = data.len();
+                            data.reserve(3 * values.len() * 4);
+                            for v in values {
+                                data.push_f32(v.x as f32);
+                                data.push_f32(v.y as f32);
+                                data.push_f32(v.z as f32);
+                            }
+                            gltf.json["accessors"].add(object!(
+                                "bufferView" => data_buf_view,
+                                "type" => "VEC3",
+                                "componentType" => FLOAT,
+                                "byteOffset" => byte_offset,
+                                "count" => values.len(),
+                            ))
+                        }
+
+                        SamplerPath::Rotation => {
+                            let values = match curves.rotation {
                                 Curve::Samples { ref values, .. } => values,
                                 _ => unreachable!(),
-                            },
-                            SamplerPath::Scale => match curves.scale {
-                                Curve::Samples { ref values, .. } => values,
-                                _ => unreachable!(),
-                            },
-                            _ => unreachable!(),
-                        };
-                        let byte_offset = data.len();
-                        data.reserve(3 * values.len() * 4);
-                        for v in values {
-                            data.push_f32(v.x as f32);
-                            data.push_f32(v.y as f32);
-                            data.push_f32(v.z as f32);
+                            };
+                            let byte_offset = data.len();
+                            data.reserve(4 * values.len() * 4);
+                            for quat in values {
+                                data.push_f32(quat.v.x as f32);
+                                data.push_f32(quat.v.y as f32);
+                                data.push_f32(quat.v.z as f32);
+                                data.push_f32(quat.s as f32);
+                            }
+                            gltf.json["accessors"].add(object!(
+                                "bufferView" => data_buf_view,
+                                "type" => "VEC4",
+                                "componentType" => FLOAT,
+                                "byteOffset" => byte_offset,
+                                "count" => values.len(),
+                            ))
+                            // IDEA: would probably be okay to emit normalized i16s
+                            // instead of floats...
                         }
-                        gltf.json["accessors"].add(object!(
-                            "bufferView" => data_buf_view,
-                            "type" => "VEC3",
-                            "componentType" => FLOAT,
-                            "byteOffset" => byte_offset,
-                            "count" => values.len(),
-                        ))
-                    }
+                    };
 
-                    SamplerPath::Rotation => {
-                        let values = match curves.rotation {
-                            Curve::Samples { ref values, .. } => values,
-                            _ => unreachable!(),
-                        };
-                        let byte_offset = data.len();
-                        data.reserve(4 * values.len() * 4);
-                        for quat in values {
-                            data.push_f32(quat.v.x as f32);
-                            data.push_f32(quat.v.y as f32);
-                            data.push_f32(quat.v.z as f32);
-                            data.push_f32(quat.s as f32);
-                        }
-                        gltf.json["accessors"].add(object!(
-                            "bufferView" => data_buf_view,
-                            "type" => "VEC4",
-                            "componentType" => FLOAT,
-                            "byteOffset" => byte_offset,
-                            "count" => values.len(),
-                        ))
-                        // IDEA: would probably be okay to emit normalized i16s
-                        // instead of floats...
-                    }
-                };
-
-                object!(
-                    "input" => input,
-                    "output" => output,
-                )
-            }).collect::<Vec<JsonValue>>();
+                    object!(
+                        "input" => input,
+                        "output" => output,
+                    )
+                })
+                .collect::<Vec<JsonValue>>();
 
             object!(
                 "name" => anim.name.to_string(),
@@ -668,10 +702,13 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
     let mut rate_to_buf_view = HashMap::<u16, usize>::new();
 
     for (_, &timeline_desc) in timeline_descs.iter() {
-        let TimelineDescriptor { start_frame, end_frame, sampling_rate } =
-            timeline_desc;
-        let range =
-            rate_to_range.entry(sampling_rate)
+        let TimelineDescriptor {
+            start_frame,
+            end_frame,
+            sampling_rate,
+        } = timeline_desc;
+        let range = rate_to_range
+            .entry(sampling_rate)
             .or_insert(start_frame..end_frame);
         range.start = range.start.min(start_frame);
         range.end = range.end.max(end_frame);
@@ -701,8 +738,11 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
     }
 
     for (&accessor_idx, &timeline_desc) in timeline_descs.iter() {
-        let TimelineDescriptor { start_frame, end_frame, sampling_rate } =
-            timeline_desc;
+        let TimelineDescriptor {
+            start_frame,
+            end_frame,
+            sampling_rate,
+        } = timeline_desc;
 
         let range = rate_to_range[&sampling_rate].clone();
         let buf_view = rate_to_buf_view[&sampling_rate];
@@ -754,130 +794,142 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
     // Maps a texture index to the sampler and image it will use.
     let mut texture_descs = BiList::<TextureDescriptor>::new();
 
-    let materials = ctx.model.materials.iter().enumerate()
+    let materials = ctx
+        .model
+        .materials
+        .iter()
+        .enumerate()
         .map(|(material_idx, material)| {
-        let mut mat = object!(
-            "name" => material.name.to_string(),
-            "pbrMetallicRoughness" => JsonValue::new_object(),
-            "extensions" => object!(
-                "KHR_materials_unlit" => JsonValue::new_object(),
-            )
-        );
+            let mut mat = object!(
+                "name" => material.name.to_string(),
+                "pbrMetallicRoughness" => JsonValue::new_object(),
+                "extensions" => object!(
+                    "KHR_materials_unlit" => JsonValue::new_object(),
+                )
+            );
 
-        let image_id =
-            ctx.conn.models[ctx.model_id]
-            .materials[material_idx].image_id();
-        match image_id {
-            Ok(Some(image_id)) => {
-                let params = ctx.db.textures[image_id.0].params;
-                match params.format().alpha_type(params) {
-                    Alpha::Opaque => (),
-                    Alpha::Transparent =>
-                        mat["alphaMode"] = "MASK".into(),
-                    Alpha::Translucent =>
-                        mat["alphaMode"] = "BLEND".into(),
-                }
+            let image_id = ctx.conn.models[ctx.model_id].materials[material_idx].image_id();
+            match image_id {
+                Ok(Some(image_id)) => {
+                    let params = ctx.db.textures[image_id.0].params;
+                    match params.format().alpha_type(params) {
+                        Alpha::Opaque => (),
+                        Alpha::Transparent => mat["alphaMode"] = "MASK".into(),
+                        Alpha::Translucent => mat["alphaMode"] = "BLEND".into(),
+                    }
 
-                let wrap = |repeat, mirror| {
-                    match (repeat, mirror) {
+                    let wrap = |repeat, mirror| match (repeat, mirror) {
                         (false, _) => WrapMode::Clamp,
                         (true, false) => WrapMode::Repeat,
                         (true, true) => WrapMode::MirroredRepeat,
-                    }
-                };
-                let params = material.params;
-                let sampler_desc = SamplerDescriptor {
-                    wrap_s: wrap(params.repeat_s(), params.mirror_s()),
-                    wrap_t: wrap(params.repeat_t(), params.mirror_t()),
-                };
-                let sampler = sampler_descs.push(sampler_desc);
+                    };
+                    let params = material.params;
+                    let sampler_desc = SamplerDescriptor {
+                        wrap_s: wrap(params.repeat_s(), params.mirror_s()),
+                        wrap_t: wrap(params.repeat_t(), params.mirror_t()),
+                    };
+                    let sampler = sampler_descs.push(sampler_desc);
 
-                let image_name = ctx.image_namer.names.get(&image_id).unwrap();
-                let image = image_descs.push(image_name.clone());
+                    let image_name = ctx.image_namer.names.get(&image_id).unwrap();
+                    let image = image_descs.push(image_name.clone());
 
-                let texture_desc = TextureDescriptor { sampler, image };
-                let texture = texture_descs.push(texture_desc);
+                    let texture_desc = TextureDescriptor { sampler, image };
+                    let texture = texture_descs.push(texture_desc);
 
-                mat["pbrMetallicRoughness"]["baseColorTexture"] =
-                    object!("index" => texture);
-                mat["pbrMetallicRoughness"]["metallicFactor"] = 0.into();
-
+                    mat["pbrMetallicRoughness"]["baseColorTexture"] = object!("index" => texture);
+                    mat["pbrMetallicRoughness"]["metallicFactor"] = 0.into();
+                }
+                _ => (),
             }
-            _ => (),
-        }
 
-        let has_diffuse =
-            !material.diffuse_is_default_vertex_color &&
-            material.diffuse != [1.0, 1.0, 1.0];
-        if has_diffuse || material.alpha != 1.0 {
-            let [r, g, b] = if has_diffuse {
-                material.diffuse
-            } else {
-                [1.0, 1.0, 1.0]
-            };
-            mat["pbrMetallicRoughness"]["baseColorFactor"] = array!(r, g, b, material.alpha);
-        }
+            let has_diffuse =
+                !material.diffuse_is_default_vertex_color && material.diffuse != [1.0, 1.0, 1.0];
+            if has_diffuse || material.alpha != 1.0 {
+                let [r, g, b] = if has_diffuse {
+                    material.diffuse
+                } else {
+                    [1.0, 1.0, 1.0]
+                };
+                mat["pbrMetallicRoughness"]["baseColorFactor"] = array!(r, g, b, material.alpha);
+            }
 
-        if material.alpha == 0.0 {
-            mat["alphaMode"] = "MASK".into();
-        } else if material.alpha != 1.0 {
-            mat["alphaMode"] = "BLEND".into();
-        }
+            if material.alpha == 0.0 {
+                mat["alphaMode"] = "MASK".into();
+            } else if material.alpha != 1.0 {
+                mat["alphaMode"] = "BLEND".into();
+            }
 
-        if material.emission != [0.0, 0.0, 0.0] {
-            // Does nothing since we use KHR_materials_unlit
-            mat["emissiveFactor"] = material.emission.to_vec().into();
-        }
+            if material.emission != [0.0, 0.0, 0.0] {
+                // Does nothing since we use KHR_materials_unlit
+                mat["emissiveFactor"] = material.emission.to_vec().into();
+            }
 
-        if !material.cull_backface {
-            mat["doubleSided"] = true.into();
-        }
-        // TODO: handle cull frontfacing
+            if !material.cull_backface {
+                mat["doubleSided"] = true.into();
+            }
+            // TODO: handle cull frontfacing
 
-        if mat["pbrMetallicRoughness"].is_empty() {
-            mat.remove("pbrMetallicRoughness");
-        }
+            if mat["pbrMetallicRoughness"].is_empty() {
+                mat.remove("pbrMetallicRoughness");
+            }
 
-        mat
-    }).collect::<Vec<JsonValue>>();
+            mat
+        })
+        .collect::<Vec<JsonValue>>();
 
-    let wrap = |wrap_mode| {
-        match wrap_mode {
-            WrapMode::Clamp => 33071,
-            WrapMode::MirroredRepeat => 33648,
-            WrapMode::Repeat => 10497,
-        }
+    let wrap = |wrap_mode| match wrap_mode {
+        WrapMode::Clamp => 33071,
+        WrapMode::MirroredRepeat => 33648,
+        WrapMode::Repeat => 10497,
     };
-    gltf.json["samplers"] = sampler_descs.iter().map(|desc| {
-        object!(
-            "wrapS" => wrap(desc.wrap_s),
-            "wrapT" => wrap(desc.wrap_t),
-        )
-    }).collect::<Vec<JsonValue>>().into();
+    gltf.json["samplers"] = sampler_descs
+        .iter()
+        .map(|desc| {
+            object!(
+                "wrapS" => wrap(desc.wrap_s),
+                "wrapT" => wrap(desc.wrap_t),
+            )
+        })
+        .collect::<Vec<JsonValue>>()
+        .into();
 
-    gltf.json["images"] = image_descs.iter().map(|name| {
-        object!(
-            "uri" => format!("{}.png", name),
-        )
-    }).collect::<Vec<JsonValue>>().into();
+    gltf.json["images"] = image_descs
+        .iter()
+        .map(|name| {
+            object!(
+                "uri" => format!("{}.png", name),
+            )
+        })
+        .collect::<Vec<JsonValue>>()
+        .into();
 
-    gltf.json["textures"] = texture_descs.iter().map(|desc| {
-        object!(
-            "source" => desc.image,
-            "sampler" => desc.sampler,
-        )
-    }).collect::<Vec<JsonValue>>().into();
+    gltf.json["textures"] = texture_descs
+        .iter()
+        .map(|desc| {
+            object!(
+                "source" => desc.image,
+                "sampler" => desc.sampler,
+            )
+        })
+        .collect::<Vec<JsonValue>>()
+        .into();
 
     gltf.json["materials"] = materials.into();
 
-    if gltf.json["samplers"].is_empty() { gltf.json.remove("samplers"); }
-    if gltf.json["images"].is_empty() { gltf.json.remove("images"); }
-    if gltf.json["textures"].is_empty() { gltf.json.remove("textures"); }
-    if gltf.json["materials"].is_empty() { gltf.json.remove("materials"); }
+    if gltf.json["samplers"].is_empty() {
+        gltf.json.remove("samplers");
+    }
+    if gltf.json["images"].is_empty() {
+        gltf.json.remove("images");
+    }
+    if gltf.json["textures"].is_empty() {
+        gltf.json.remove("textures");
+    }
+    if gltf.json["materials"].is_empty() {
+        gltf.json.remove("materials");
+    }
 
     if gltf.json.has_key("materials") {
-        gltf.json["extensionsUsed"] = array!(
-            "KHR_materials_unlit"
-        );
+        gltf.json["extensionsUsed"] = array!("KHR_materials_unlit");
     }
 }

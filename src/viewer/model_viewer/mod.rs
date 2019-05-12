@@ -3,13 +3,13 @@ pub mod texture_cache;
 
 pub use self::eye::Eye;
 
-use cgmath::{PerspectiveFov, Rad, Matrix4};
+use self::texture_cache::{ImageId, TextureCache};
+use super::{FOV_Y, Z_FAR, Z_NEAR};
+use cgmath::{Matrix4, PerspectiveFov, Rad};
 use db::Database;
-use glium::{VertexBuffer, IndexBuffer, Frame, Surface, Program, Display};
+use glium::{Display, Frame, IndexBuffer, Program, Surface, VertexBuffer};
 use nitro::Model;
-use primitives::{Primitives, DrawCall, Vertex};
-use self::texture_cache::{TextureCache, ImageId};
-use super::{Z_NEAR, Z_FAR, FOV_Y};
+use primitives::{DrawCall, Primitives, Vertex};
 
 /// Model viewer.
 ///
@@ -48,29 +48,27 @@ impl ModelViewer {
         let unlit_vertex_shader = include_str!("shaders/vert_unlit.glsl");
         let lit_vertex_shader = include_str!("shaders/vert_lit.glsl");
         let fragment_shader = include_str!("shaders/frag.glsl");
-        let program_args =
-            glium::program::ProgramCreationInput::SourceCode {
-                vertex_shader: unlit_vertex_shader,
-                fragment_shader,
-                geometry_shader: None,
-                tessellation_control_shader: None,
-                tessellation_evaluation_shader: None,
-                transform_feedback_varyings: None,
-                outputs_srgb: true,
-                uses_point_size: false,
-            };
+        let program_args = glium::program::ProgramCreationInput::SourceCode {
+            vertex_shader: unlit_vertex_shader,
+            fragment_shader,
+            geometry_shader: None,
+            tessellation_control_shader: None,
+            tessellation_evaluation_shader: None,
+            transform_feedback_varyings: None,
+            outputs_srgb: true,
+            uses_point_size: false,
+        };
         let unlit_program = Program::new(display, program_args).unwrap();
-        let program_args =
-            glium::program::ProgramCreationInput::SourceCode {
-                vertex_shader: lit_vertex_shader,
-                fragment_shader,
-                geometry_shader: None,
-                tessellation_control_shader: None,
-                tessellation_evaluation_shader: None,
-                transform_feedback_varyings: None,
-                outputs_srgb: true,
-                uses_point_size: false,
-            };
+        let program_args = glium::program::ProgramCreationInput::SourceCode {
+            vertex_shader: lit_vertex_shader,
+            fragment_shader,
+            geometry_shader: None,
+            tessellation_control_shader: None,
+            tessellation_evaluation_shader: None,
+            transform_feedback_varyings: None,
+            outputs_srgb: true,
+            uses_point_size: false,
+        };
         let lit_program = Program::new(display, program_args).unwrap();
 
         ModelViewer {
@@ -97,10 +95,7 @@ impl ModelViewer {
         use glium::index::PrimitiveType;
 
         let vb = VertexBuffer::dynamic(display, &prim.vertices).unwrap();
-        let ib = IndexBuffer::new(
-            display,
-            PrimitiveType::TrianglesList,
-            &prim.indices).unwrap();
+        let ib = IndexBuffer::new(display, PrimitiveType::TrianglesList, &prim.indices).unwrap();
         self.vertex_buffer = Some(vb);
         self.index_buffer = Some(ib);
 
@@ -160,7 +155,8 @@ impl ModelViewer {
             aspect: self.aspect_ratio,
             near: Z_NEAR,
             far: Z_FAR,
-        }.into();
+        }
+        .into();
         let model_view_persp = persp * model_view;
         let model_view_persp: [[f32; 4]; 4] = model_view_persp.into();
 
@@ -169,12 +165,11 @@ impl ModelViewer {
             let material = &model.materials[call.mat_id as usize];
 
             let texture = match self.material_map.get(call.mat_id as usize) {
-                Some(&MaterialTextureBinding::None) =>
-                    self.texture_cache.white_texture(),
-                Some(&MaterialTextureBinding::Missing) =>
-                    self.texture_cache.error_texture(),
-                Some(&MaterialTextureBinding::ImageId(ref image_id)) =>
-                    self.texture_cache.lookup(image_id.clone()),
+                Some(&MaterialTextureBinding::None) => self.texture_cache.white_texture(),
+                Some(&MaterialTextureBinding::Missing) => self.texture_cache.error_texture(),
+                Some(&MaterialTextureBinding::ImageId(ref image_id)) => {
+                    self.texture_cache.lookup(image_id.clone())
+                }
                 None => self.texture_cache.error_texture(),
             };
             let sampler = {
@@ -185,12 +180,10 @@ impl ModelViewer {
                 s.1.magnify_filter = MagnifySamplerFilter::Nearest;
 
                 // Texture wrapping/mirroring/clamping
-                let wrap_fn = |repeat, mirror| {
-                    match (repeat, mirror) {
-                        (false, _) => SamplerWrapFunction::Clamp,
-                        (true, false) => SamplerWrapFunction::Repeat,
-                        (true, true) => SamplerWrapFunction::Mirror,
-                    }
+                let wrap_fn = |repeat, mirror| match (repeat, mirror) {
+                    (false, _) => SamplerWrapFunction::Clamp,
+                    (true, false) => SamplerWrapFunction::Repeat,
+                    (true, true) => SamplerWrapFunction::Mirror,
                 };
                 let params = &material.params;
                 s.1.wrap_function.0 = wrap_fn(params.repeat_s(), params.mirror_s());
@@ -205,7 +198,7 @@ impl ModelViewer {
                 depth: glium::Depth {
                     test: glium::draw_parameters::DepthTest::IfLess,
                     write: true,
-                    .. Default::default()
+                    ..Default::default()
                 },
                 backface_culling: {
                     use glium::draw_parameters::BackfaceCullingMode as Mode;
@@ -216,7 +209,7 @@ impl ModelViewer {
                         (true, true) => continue,
                     }
                 },
-                .. Default::default()
+                ..Default::default()
             };
 
             if !call.used_normals {
@@ -225,13 +218,15 @@ impl ModelViewer {
                     alpha: material.alpha,
                     tex: sampler,
                 };
-                target.draw(
-                    vertex_buffer,
-                    indices,
-                    &self.unlit_program,
-                    &uniforms,
-                    &draw_params,
-                ).unwrap();
+                target
+                    .draw(
+                        vertex_buffer,
+                        indices,
+                        &self.unlit_program,
+                        &uniforms,
+                        &draw_params,
+                    )
+                    .unwrap();
             } else {
                 let uniforms = uniform! {
                     matrix: model_view_persp,
@@ -243,13 +238,15 @@ impl ModelViewer {
                     alpha: material.alpha,
                     tex: sampler,
                 };
-                target.draw(
-                    vertex_buffer,
-                    indices,
-                    &self.lit_program,
-                    &uniforms,
-                    &draw_params,
-                ).unwrap();
+                target
+                    .draw(
+                        vertex_buffer,
+                        indices,
+                        &self.lit_program,
+                        &uniforms,
+                        &draw_params,
+                    )
+                    .unwrap();
             }
         }
     }

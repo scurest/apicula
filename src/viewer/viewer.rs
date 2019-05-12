@@ -1,15 +1,15 @@
-use super::model_viewer::{ModelViewer, MaterialTextureBinding};
-use db::{Database, ModelId, AnimationId, PatternId};
-use connection::Connection;
-use glium::Display;
-use glium::glutin::ElementState;
-use glium::{Frame, Surface};
-use glium::glutin::VirtualKeyCode;
-use nitro::{Model, Animation, Pattern};
-use primitives::{Primitives, PolyType};
-use cgmath::{Matrix4, InnerSpace, One, Vector3, vec3, vec2};
 use super::fps::FpsCounter;
-use super::{FRAMERATE, BG_COLOR};
+use super::model_viewer::{MaterialTextureBinding, ModelViewer};
+use super::{BG_COLOR, FRAMERATE};
+use cgmath::{vec2, vec3, InnerSpace, Matrix4, One, Vector3};
+use connection::Connection;
+use db::{AnimationId, Database, ModelId, PatternId};
+use glium::glutin::ElementState;
+use glium::glutin::VirtualKeyCode;
+use glium::Display;
+use glium::{Frame, Surface};
+use nitro::{Animation, Model, Pattern};
+use primitives::{PolyType, Primitives};
 
 pub struct Viewer {
     db: Database,
@@ -42,23 +42,21 @@ pub struct Viewer {
 static SPEEDS: [f32; 9] = [0.5, 1.0, 3.0, 15.0, 32.0, 64.0, 96.0, 200.0, 550.0];
 static DEFAULT_SPEED_IDX: usize = 1;
 
-pub static CONTROL_HELP: &'static str =
-    concat!(
-        "--------\n",
-        "Controls\n",
-        "--------\n",
-        "  WASD         Forward/Left/Back/Right\n",
-        "  EQ           Up/Down\n",
-        "  L.Shift      Increase Speed\n",
-        "  L.Ctrl       Decrease Speed\n",
-        "  L.Mouse      Free Look\n",
-        "  ,.           Prev/Next Model\n",
-        "  OP           Prev/Next Animation\n",
-        "  []           Single-step Animation\n",
-        "  KL           Prev/Next Pattern Animation\n",
-        "  Space        Print Info\n",
-    );
-
+pub static CONTROL_HELP: &'static str = concat!(
+    "--------\n",
+    "Controls\n",
+    "--------\n",
+    "  WASD         Forward/Left/Back/Right\n",
+    "  EQ           Up/Down\n",
+    "  L.Shift      Increase Speed\n",
+    "  L.Ctrl       Decrease Speed\n",
+    "  L.Mouse      Free Look\n",
+    "  ,.           Prev/Next Model\n",
+    "  OP           Prev/Next Animation\n",
+    "  []           Single-step Animation\n",
+    "  KL           Prev/Next Pattern Animation\n",
+    "  Space        Print Info\n",
+);
 
 impl Viewer {
     pub fn new(display: &Display, db: Database, conn: Connection) -> Viewer {
@@ -129,10 +127,13 @@ impl Viewer {
             (Key::E, Key::Q, 2),
         ];
         for &(forward_key, backward_key, component) in &MOVE_KEYS {
-            let x =
-                if keycode == forward_key { 1.0 }
-                else if keycode == backward_key { -1.0 }
-                else { continue; };
+            let x = if keycode == forward_key {
+                1.0
+            } else if keycode == backward_key {
+                -1.0
+            } else {
+                continue;
+            };
 
             match state {
                 ElementState::Pressed => self.move_vector[component] = x,
@@ -140,7 +141,9 @@ impl Viewer {
             }
         }
 
-        if state != ElementState::Pressed { return; }
+        if state != ElementState::Pressed {
+            return;
+        }
 
         match keycode {
             // Next/prev model
@@ -209,7 +212,9 @@ impl Viewer {
 
     /// Handle mouse drag while the LMB is clicked.
     pub fn mouse_drag(&mut self, (dx, dy): (f64, f64)) {
-        self.model_viewer.eye.free_look(0.01 * vec2(dx as f32, dy as f32));
+        self.model_viewer
+            .eye
+            .free_look(0.01 * vec2(dx as f32, dy as f32));
     }
 
     /// Handler for window blur (loss of focus).
@@ -223,32 +228,41 @@ impl Viewer {
         use std::fmt::Write;
 
         let model = self.cur_model();
-        write!(s, "{model_name}[{model_num}/{num_models}] === ",
+        write!(
+            s,
+            "{model_name}[{model_num}/{num_models}] === ",
             model_name = model.name,
             model_num = self.model_id,
             num_models = self.db.models.len(),
-        ).unwrap();
+        )
+        .unwrap();
         if let Some(anim_id) = self.animation_id() {
             let anim = self.cur_animation(&self.db).unwrap();
-            write!(s, "{anim_name}[{anim_id}/{num_anims}] ({cur_frame}/{num_frames}) === ",
+            write!(
+                s,
+                "{anim_name}[{anim_id}/{num_anims}] ({cur_frame}/{num_frames}) === ",
                 anim_name = anim.name,
                 anim_id = anim_id,
                 num_anims = self.db.animations.len(),
                 cur_frame = self.anim_frame,
                 num_frames = anim.num_frames,
-            ).unwrap()
+            )
+            .unwrap()
         } else {
             write!(s, "Rest Pose === ").unwrap()
         }
         if let Some(pat_id) = self.pattern_id() {
             let pat = self.cur_pattern().unwrap();
-            write!(s, "{pat_name}[{pat_id}/{num_pats}] ({cur_frame}/{num_frames}) === ",
+            write!(
+                s,
+                "{pat_name}[{pat_id}/{num_pats}] ({cur_frame}/{num_frames}) === ",
                 pat_name = pat.name,
                 pat_id = pat_id,
                 num_pats = self.db.patterns.len(),
                 cur_frame = self.pat_anim_frame,
                 num_frames = pat.num_frames,
-            ).unwrap()
+            )
+            .unwrap()
         } else {
             write!(s, "No Pattern === ").unwrap()
         }
@@ -257,32 +271,45 @@ impl Viewer {
 
     pub fn print_info(&self) {
         println!("=============");
-        println!("Model: {:?} [{}/{}]",
+        println!(
+            "Model: {:?} [{}/{}]",
             self.cur_model().name,
             self.model_id,
-            self.db.models.len());
-        println!("Found in file: {}", self.db.file_paths[self.db.models_found_in[self.model_id]].display());
+            self.db.models.len()
+        );
+        println!(
+            "Found in file: {}",
+            self.db.file_paths[self.db.models_found_in[self.model_id]].display()
+        );
 
         if let Some(anim_id) = self.animation_id() {
             let anim = self.cur_animation(&self.db).unwrap();
-            println!("Animation: {:?} [{}/{}]",
+            println!(
+                "Animation: {:?} [{}/{}]",
                 anim.name,
                 anim_id,
                 self.db.animations.len(),
             );
-            println!("Found in file: {}", self.db.file_paths[self.db.animations_found_in[anim_id]].display());
+            println!(
+                "Found in file: {}",
+                self.db.file_paths[self.db.animations_found_in[anim_id]].display()
+            );
         } else {
             println!("No Animation Playing");
         }
 
         if let Some(pat_id) = self.pattern_id() {
             let pat = self.cur_pattern().unwrap();
-            println!("Pattern Animation: {:?} [{}/{}]",
+            println!(
+                "Pattern Animation: {:?} [{}/{}]",
                 pat.name,
                 pat_id,
                 self.db.patterns.len(),
             );
-            println!("Found in file: {}", self.db.file_paths[self.db.patterns_found_in[pat_id]].display());
+            println!(
+                "Found in file: {}",
+                self.db.file_paths[self.db.patterns_found_in[pat_id]].display()
+            );
         } else {
             println!("No Pattern Animation Playing")
         }
@@ -299,18 +326,24 @@ impl Viewer {
         self.stop_animations();
 
         self.model_id = model_id;
-        let objects = self.cur_model().objects.iter()
+        let objects = self
+            .cur_model()
+            .objects
+            .iter()
             .map(|ob| ob.matrix)
             .collect::<Vec<Matrix4<f64>>>();
-        let material_map = self.conn.models[self.model_id].materials.iter().map(|mat_conn| {
-            match mat_conn.image_id() {
+        let material_map = self.conn.models[self.model_id]
+            .materials
+            .iter()
+            .map(|mat_conn| match mat_conn.image_id() {
                 Ok(Some(image_id)) => MaterialTextureBinding::ImageId(image_id),
                 Ok(None) => MaterialTextureBinding::None,
                 Err(_) => MaterialTextureBinding::Missing,
-            }
-        }).collect();
+            })
+            .collect();
         let prims = Primitives::build(self.cur_model(), PolyType::Tris, &objects);
-        self.model_viewer.change_model(display, &self.db, prims, material_map);
+        self.model_viewer
+            .change_model(display, &self.db, prims, material_map);
     }
 
     /// Updates the vertices of the current model (to their position in the
@@ -319,7 +352,9 @@ impl Viewer {
         let objects = match self.cur_animation(&self.db) {
             None => {
                 // Rest pose, use object values in model file
-                self.cur_model().objects.iter()
+                self.cur_model()
+                    .objects
+                    .iter()
                     .map(|ob| ob.matrix)
                     .collect::<Vec<Matrix4<f64>>>()
             }
@@ -328,7 +363,8 @@ impl Viewer {
                 let num_objects = self.cur_model().objects.len();
                 (0..num_objects)
                     .map(|i| {
-                        anim.objects_curves.get(i)
+                        anim.objects_curves
+                            .get(i)
                             .map(|curve| curve.sample_at(self.anim_frame))
                             .unwrap_or(Matrix4::one())
                     })
@@ -343,33 +379,36 @@ impl Viewer {
     /// current pattern animation frame).
     fn update_materials(&mut self, display: &Display) {
         let material_map = match self.cur_pattern() {
-            None => {
-                self.conn.models[self.model_id].materials.iter().map(|mat_conn| {
-                    match mat_conn.image_id() {
-                        Ok(Some(image_id)) => MaterialTextureBinding::ImageId(image_id),
-                        Ok(None) => MaterialTextureBinding::None,
-                        Err(_) => MaterialTextureBinding::Missing,
-                    }
-                }).collect()
-            }
+            None => self.conn.models[self.model_id]
+                .materials
+                .iter()
+                .map(|mat_conn| match mat_conn.image_id() {
+                    Ok(Some(image_id)) => MaterialTextureBinding::ImageId(image_id),
+                    Ok(None) => MaterialTextureBinding::None,
+                    Err(_) => MaterialTextureBinding::Missing,
+                })
+                .collect(),
             Some(pat) => {
                 let pat_conn = &self.conn.models[self.model_id].patterns[self.pat_idx.unwrap()];
-                pat.material_tracks.iter().map(|track| {
-                    let (texture_idx, palette_idx) = track.sample(self.pat_anim_frame);
-                    let texture_id = pat_conn.texture_ids[texture_idx as usize]?;
-                    let palette_id = pat_conn.palette_ids[palette_idx as usize]?;
-                    Some((texture_id, palette_id))
-                }).map(|result| {
-                    match result {
-                        Some((texture_id, palette_id)) =>
-                            MaterialTextureBinding::ImageId((texture_id, Some(palette_id))),
-                        None =>
-                            MaterialTextureBinding::Missing,
-                    }
-                }).collect()
+                pat.material_tracks
+                    .iter()
+                    .map(|track| {
+                        let (texture_idx, palette_idx) = track.sample(self.pat_anim_frame);
+                        let texture_id = pat_conn.texture_ids[texture_idx as usize]?;
+                        let palette_id = pat_conn.palette_ids[palette_idx as usize]?;
+                        Some((texture_id, palette_id))
+                    })
+                    .map(|result| match result {
+                        Some((texture_id, palette_id)) => {
+                            MaterialTextureBinding::ImageId((texture_id, Some(palette_id)))
+                        }
+                        None => MaterialTextureBinding::Missing,
+                    })
+                    .collect()
             }
         };
-        self.model_viewer.update_materials(display, &self.db, material_map);
+        self.model_viewer
+            .update_materials(display, &self.db, material_map);
     }
 
     fn stop_animations(&mut self) {
@@ -467,11 +506,19 @@ use std::ops::Range;
 // Goes the next/prev element of a range, wrapping around.
 
 fn next(x: usize, range: Range<usize>) -> usize {
-    if x == range.end - 1 { range.start } else { x + 1 }
+    if x == range.end - 1 {
+        range.start
+    } else {
+        x + 1
+    }
 }
 
 fn prev(x: usize, range: Range<usize>) -> usize {
-    if x == range.start { range.end - 1 } else { x - 1 }
+    if x == range.start {
+        range.end - 1
+    } else {
+        x - 1
+    }
 }
 
 // Goes to the next/prev element of a range. None is before the first element of

@@ -16,12 +16,18 @@ pub trait Viewable: Sized {
 }
 
 impl Viewable for u8 {
-    fn size() -> usize { 1 }
-    fn view(buf: &[u8]) -> u8 { buf[0] }
+    fn size() -> usize {
+        1
+    }
+    fn view(buf: &[u8]) -> u8 {
+        buf[0]
+    }
 }
 
 impl Viewable for u16 {
-    fn size() -> usize { 2 }
+    fn size() -> usize {
+        2
+    }
     fn view(buf: &[u8]) -> u16 {
         assert!(buf.len() >= 2);
         unsafe {
@@ -33,7 +39,9 @@ impl Viewable for u16 {
 }
 
 impl Viewable for u32 {
-    fn size() -> usize { 4 }
+    fn size() -> usize {
+        4
+    }
     fn view(buf: &[u8]) -> u32 {
         assert!(buf.len() >= 4);
         unsafe {
@@ -44,45 +52,53 @@ impl Viewable for u32 {
     }
 }
 
-impl<T,S> Viewable for (T,S) where
+impl<T, S> Viewable for (T, S)
+where
     T: Viewable,
-    S: Viewable
+    S: Viewable,
 {
-    fn size() -> usize { <T as Viewable>::size() + <S as Viewable>::size() }
-    fn view(buf: &[u8]) -> (T,S) {
+    fn size() -> usize {
+        <T as Viewable>::size() + <S as Viewable>::size()
+    }
+    fn view(buf: &[u8]) -> (T, S) {
         let split = <T as Viewable>::size();
         let t = <T as Viewable>::view(&buf[..split]);
         let s = <S as Viewable>::view(&buf[split..]);
-        (t,s)
+        (t, s)
     }
 }
 
-impl<T,S,P> Viewable for (T,S,P) where
+impl<T, S, P> Viewable for (T, S, P)
+where
     T: Viewable,
     S: Viewable,
     P: Viewable,
 {
-    fn size() -> usize { <(T,(S,P)) as Viewable>::size() }
-    fn view(buf: &[u8]) -> (T,S,P) {
-        let (t,(s,p)) = <(T,(S,P)) as Viewable>::view(buf);
-        (t,s,p)
+    fn size() -> usize {
+        <(T, (S, P)) as Viewable>::size()
+    }
+    fn view(buf: &[u8]) -> (T, S, P) {
+        let (t, (s, p)) = <(T, (S, P)) as Viewable>::view(buf);
+        (t, s, p)
     }
 }
 
-impl<T,S,P,Q,R> Viewable for (T,S,P,Q,R) where
+impl<T, S, P, Q, R> Viewable for (T, S, P, Q, R)
+where
     T: Viewable,
     S: Viewable,
     P: Viewable,
     Q: Viewable,
     R: Viewable,
 {
-    fn size() -> usize { <(T,S,(P,Q,R)) as Viewable>::size() }
-    fn view(buf: &[u8]) -> (T,S,P,Q,R) {
-        let (t,s,(p,q,r)) = <(T,S,(P,Q,R)) as Viewable>::view(buf);
-        (t,s,p,q,r)
+    fn size() -> usize {
+        <(T, S, (P, Q, R)) as Viewable>::size()
+    }
+    fn view(buf: &[u8]) -> (T, S, P, Q, R) {
+        let (t, s, (p, q, r)) = <(T, S, (P, Q, R)) as Viewable>::view(buf);
+        (t, s, p, q, r)
     }
 }
-
 
 /// A byte buffer interpreted as an array of Viewable elements.
 #[derive(Copy, Clone)]
@@ -101,7 +117,10 @@ impl<'a, T: Viewable> View<'a, T> {
     pub fn from_buf(buf: &[u8]) -> View<T> {
         let size = <T as Viewable>::size();
         assert!(size == 0 || buf.len() % size == 0);
-        View { buf, _marker: PhantomData }
+        View {
+            buf,
+            _marker: PhantomData,
+        }
     }
 
     /// Number of `T`s in the view.
@@ -125,8 +144,11 @@ impl<'a, T: Viewable> View<'a, T> {
         match self.get(pos) {
             Some(x) => x,
             None => {
-                panic!("index {} out of range for view of length {}",
-                    pos, self.len());
+                panic!(
+                    "index {} out of range for view of length {}",
+                    pos,
+                    self.len()
+                );
             }
         }
     }

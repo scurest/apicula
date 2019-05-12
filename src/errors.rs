@@ -15,11 +15,12 @@ error_chain! {
 macro_rules! check {
     ($b:expr) => {
         if !$b {
-            use ::errors::Error;
-            use ::errors::ErrorKind;
-            Err(Error::from_kind(
-                ErrorKind::Msg(format!("expected: {}", stringify!($b)))
-            ))
+            use errors::Error;
+            use errors::ErrorKind;
+            Err(Error::from_kind(ErrorKind::Msg(format!(
+                "expected: {}",
+                stringify!($b)
+            ))))
         } else {
             Ok(())
         }

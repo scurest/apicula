@@ -13,8 +13,8 @@
 //! enforce this. We'll read any kind of file we can get our hands on!
 
 use errors::Result;
-use nitro::{Model, Texture, Palette, Animation, Pattern};
 use nitro::info_block;
+use nitro::{Animation, Model, Palette, Pattern, Texture};
 use util::cur::Cur;
 
 const STAMPS: [&[u8]; 4] = [b"BMD0", b"BTX0", b"BCA0", b"BTP0"];
@@ -30,30 +30,39 @@ pub struct Container {
 }
 
 pub fn read_container(cur: Cur) -> Result<Container> {
-    fields!(cur, container {
-        stamp: [u8; 4],
-        bom: u16,
-        version: u16,
-        file_size: u32,
-        header_size: u16,
-        num_sections: u16,
-        section_offs: [u32; num_sections],
-    });
+    fields!(
+        cur,
+        container {
+            stamp: [u8; 4],
+            bom: u16,
+            version: u16,
+            file_size: u32,
+            header_size: u16,
+            num_sections: u16,
+            section_offs: [u32; num_sections],
+        }
+    );
 
-    let stamp =
-        match STAMPS.iter().find(|&s| s == &stamp) {
-            Some(x) => x,
-            None => bail!("unrecognized Nitro container: expected \
-                the first four bytes to be one of: BMD0, BTX0, BCA0, BTP0"),
-        };
+    let stamp = match STAMPS.iter().find(|&s| s == &stamp) {
+        Some(x) => x,
+        None => bail!(
+            "unrecognized Nitro container: expected \
+             the first four bytes to be one of: BMD0, BTX0, BCA0, BTP0"
+        ),
+    };
 
     check!(bom == 0xfeff)?;
     check!(header_size == 16)?;
     check!(file_size > 16)?;
 
     let mut cont = Container {
-        stamp, file_size, models: vec![], textures: vec![],
-        palettes: vec![], animations: vec![], patterns: vec![],
+        stamp,
+        file_size,
+        models: vec![],
+        textures: vec![],
+        palettes: vec![],
+        animations: vec![],
+        patterns: vec![],
     };
 
     for section_off in section_offs {
@@ -73,8 +82,10 @@ fn read_section(cont: &mut Container, cur: Cur) -> Result<()> {
         b"TEX0" => add_tex(cont, cur),
         b"JNT0" => add_jnt(cont, cur),
         b"PAT0" => add_pat(cont, cur),
-        _ => bail!("unrecognized Nitro format: expected the first four \
-            bytes to be one of: MDL0, TEX0, JNT0, PAT0"),
+        _ => bail!(
+            "unrecognized Nitro format: expected the first four \
+             bytes to be one of: MDL0, TEX0, JNT0, PAT0"
+        ),
     }
 }
 
@@ -82,11 +93,14 @@ fn read_section(cont: &mut Container, cur: Cur) -> Result<()> {
 fn add_mdl(cont: &mut Container, cur: Cur) -> Result<()> {
     use nitro::model::read_model;
 
-    fields!(cur, MDL0 {
-        stamp: [u8; 4],
-        section_size: u32,
-        end: Cur,
-    });
+    fields!(
+        cur,
+        MDL0 {
+            stamp: [u8; 4],
+            section_size: u32,
+            end: Cur,
+        }
+    );
     check!(stamp == b"MDL0")?;
 
     for (off, name) in info_block::read::<u32>(end)? {
@@ -110,16 +124,18 @@ fn add_tex(cont: &mut Container, cur: Cur) -> Result<()> {
     Ok(())
 }
 
-
 // A JNT is a container for animations.
 fn add_jnt(cont: &mut Container, cur: Cur) -> Result<()> {
     use nitro::animation::read_animation;
 
-    fields!(cur, JNT0 {
-        stamp: [u8; 4],
-        section_size: u32,
-        end: Cur,
-    });
+    fields!(
+        cur,
+        JNT0 {
+            stamp: [u8; 4],
+            section_size: u32,
+            end: Cur,
+        }
+    );
     check!(stamp == b"JNT0")?;
 
     for (off, name) in info_block::read::<u32>(end)? {
@@ -137,11 +153,14 @@ fn add_jnt(cont: &mut Container, cur: Cur) -> Result<()> {
 fn add_pat(cont: &mut Container, cur: Cur) -> Result<()> {
     use nitro::pattern::read_pattern;
 
-    fields!(cur, PAT0 {
-        stamp: [u8; 4],
-        section_size: u32,
-        end: Cur,
-    });
+    fields!(
+        cur,
+        PAT0 {
+            stamp: [u8; 4],
+            section_size: u32,
+            end: Cur,
+        }
+    );
     check!(stamp == b"PAT0")?;
 
     for (off, name) in info_block::read::<u32>(end)? {

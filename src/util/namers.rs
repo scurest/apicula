@@ -8,7 +8,9 @@ pub struct UniqueNamer {
 /// Returns unique names.
 impl UniqueNamer {
     pub fn new() -> UniqueNamer {
-        UniqueNamer { taken_names: HashSet::new() }
+        UniqueNamer {
+            taken_names: HashSet::new(),
+        }
     }
 
     /// Returns a name, either `desired_name` or something "close" to it, which
@@ -16,19 +18,18 @@ impl UniqueNamer {
     /// `UniqueNamer` receiver.
     pub fn get_fresh_name<S: AsRef<str>>(&mut self, desired_name: S) -> String {
         let desired_name = desired_name.as_ref();
-        let chosen_name =
-            if !self.taken_names.contains(desired_name) {
-                desired_name.to_string()
-            } else {
-                let mut name = String::new();
-                for i in 1.. {
-                    name = format!("{}{}", desired_name, i);
-                    if !self.taken_names.contains(&name) {
-                        break;
-                    }
+        let chosen_name = if !self.taken_names.contains(desired_name) {
+            desired_name.to_string()
+        } else {
+            let mut name = String::new();
+            for i in 1.. {
+                name = format!("{}{}", desired_name, i);
+                if !self.taken_names.contains(&name) {
+                    break;
                 }
-                name
-            };
+            }
+            name
+        };
         self.taken_names.insert(chosen_name.clone());
         chosen_name
     }

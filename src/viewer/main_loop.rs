@@ -1,16 +1,18 @@
-use glium::glutin::{self, EventsLoop, dpi::{LogicalSize, LogicalPosition}};
 use super::viewer::Viewer;
-use db::Database;
 use connection::Connection;
+use db::Database;
+use glium::glutin::{
+    self,
+    dpi::{LogicalPosition, LogicalSize},
+    EventsLoop,
+};
 
 pub fn main_loop(db: Database, conn: Connection) {
-    let window_builder = glutin::WindowBuilder::new()
-        .with_dimensions(LogicalSize {
-            width: super::WINDOW_WIDTH as f64,
-            height: super::WINDOW_HEIGHT as f64
-        });
-    let context_builder = glutin::ContextBuilder::new()
-        .with_depth_buffer(24);
+    let window_builder = glutin::WindowBuilder::new().with_dimensions(LogicalSize {
+        width: super::WINDOW_WIDTH as f64,
+        height: super::WINDOW_HEIGHT as f64,
+    });
+    let context_builder = glutin::ContextBuilder::new().with_depth_buffer(24);
     let mut events_loop = EventsLoop::new();
     let display = glium::Display::new(window_builder, context_builder, &events_loop)
         .expect("failed to get rendering context");
@@ -60,9 +62,9 @@ pub fn main_loop(db: Database, conn: Connection) {
 
         let mut should_close = false;
         events_loop.poll_events(|ev| {
+            use self::glutin::DeviceEvent as DEv;
             use self::glutin::Event as Ev;
             use self::glutin::WindowEvent as WEv;
-            use self::glutin::DeviceEvent as DEv;
 
             match ev {
                 Ev::WindowEvent { event, .. } => match event {
@@ -70,7 +72,9 @@ pub fn main_loop(db: Database, conn: Connection) {
                         should_close = true;
                     }
                     WEv::KeyboardInput { input, .. } => {
-                        if input.virtual_keycode.is_none() { return; }
+                        if input.virtual_keycode.is_none() {
+                            return;
+                        }
                         let keycode = input.virtual_keycode.unwrap();
                         viewer.key(&display, (input.state, keycode));
                     }
@@ -99,9 +103,10 @@ pub fn main_loop(db: Database, conn: Connection) {
                             // Warp the mouse to the center of the window to
                             // keep it inside our window to fake mouse capture.
                             let LogicalSize { width, height } =
-                                window
-                                .get_outer_size()
-                                .unwrap_or(LogicalSize { width: 0.0, height: 0.0 });
+                                window.get_outer_size().unwrap_or(LogicalSize {
+                                    width: 0.0,
+                                    height: 0.0,
+                                });
                             let center = LogicalPosition {
                                 x: width as f64 / 2.0,
                                 y: height as f64 / 2.0,
@@ -116,7 +121,7 @@ pub fn main_loop(db: Database, conn: Connection) {
                         mouse_grabbed = false;
                         grab_cursor(false);
                     }
-                    _ => ()
+                    _ => (),
                 },
                 Ev::DeviceEvent { event, .. } => match event {
                     DEv::MouseMotion { delta } => {
@@ -131,6 +136,8 @@ pub fn main_loop(db: Database, conn: Connection) {
                 _ => (),
             }
         });
-        if should_close { break; }
+        if should_close {
+            break;
+        }
     }
 }

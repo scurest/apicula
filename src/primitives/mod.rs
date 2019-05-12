@@ -7,9 +7,9 @@
 //!
 //! This is then further consumed by both the viewer and the COLLADA writer.
 
-use cgmath::{Matrix4, Point2, Transform, InnerSpace, vec4, Zero};
-use nitro::Model;
+use cgmath::{vec4, InnerSpace, Matrix4, Point2, Transform, Zero};
 use nitro::render_cmds::SkinTerm;
+use nitro::Model;
 use std::default::Default;
 use std::ops::Range;
 
@@ -139,7 +139,6 @@ struct Builder<'a, 'b> {
 
     cur_draw_call: DrawCall,
     next_vertex: Vertex,
-
 }
 
 impl<'a, 'b> Builder<'a, 'b> {
@@ -162,7 +161,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 used_vertex_color: false,
                 used_normals: false,
             },
-            cur_texture_dim: (1,1),
+            cur_texture_dim: (1, 1),
             prim_type: 0,
             first_vertex_in_prim: 0,
             next_vertex: Default::default(),
@@ -202,7 +201,12 @@ impl<'a, 'b> Builder<'a, 'b> {
         let indices = self.indices;
         let poly_type = self.poly_type;
         let draw_calls = self.draw_calls;
-        Primitives { vertices, indices, poly_type, draw_calls }
+        Primitives {
+            vertices,
+            indices,
+            poly_type,
+            draw_calls,
+        }
     }
 
     fn load_matrix(&mut self, stack_pos: u8) {
@@ -219,7 +223,12 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     fn blend(&mut self, terms: &[SkinTerm]) {
         let mut mat = Matrix4::zero();
-        for &SkinTerm { weight, stack_pos, inv_bind_idx } in terms {
+        for &SkinTerm {
+            weight,
+            stack_pos,
+            inv_bind_idx,
+        } in terms
+        {
             let stack_matrix = self.gpu.matrix_stack[stack_pos as usize];
             let inv_bind_matrix = self.model.inv_binds[inv_bind_idx as usize];
             mat += weight as f64 * stack_matrix * inv_bind_matrix;
@@ -228,11 +237,13 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     fn scale_up(&mut self) {
-        self.gpu.mul_matrix(&Matrix4::from_scale(self.model.up_scale));
+        self.gpu
+            .mul_matrix(&Matrix4::from_scale(self.model.up_scale));
     }
 
     fn scale_down(&mut self) {
-        self.gpu.mul_matrix(&Matrix4::from_scale(self.model.down_scale));
+        self.gpu
+            .mul_matrix(&Matrix4::from_scale(self.model.down_scale));
     }
 
     fn bind_material(&mut self, material_idx: u8) {
@@ -276,7 +287,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 //  1---2  3---4
                 let mut i = start;
                 while i + 2 < end {
-                    self.tri(i, i+1, i+2);
+                    self.tri(i, i + 1, i + 2);
                     i += 3;
                 }
             }
@@ -288,7 +299,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 //  1---2  7---4
                 let mut i = start;
                 while i + 3 < end {
-                    self.quad(i, i+1, i+2, i+3);
+                    self.quad(i, i + 1, i + 2, i + 3);
                     i += 4;
                 }
             }
@@ -302,8 +313,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                 let mut odd = false;
                 while i + 2 < end {
                     match odd {
-                        false => self.tri(i, i+1, i+2),
-                        true => self.tri(i, i+2, i+1),
+                        false => self.tri(i, i + 1, i + 2),
+                        true => self.tri(i, i + 2, i + 1),
                     };
                     i += 1;
                     odd = !odd;
@@ -317,7 +328,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 //  1---3---5
                 let mut i = start;
                 while i + 3 < end {
-                    self.quad(i, i+1, i+3, i+2);
+                    self.quad(i, i + 1, i + 3, i + 2);
                     i += 2;
                 }
             }
@@ -330,10 +341,8 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     fn tri(&mut self, i0: u16, i1: u16, i2: u16) {
         match self.poly_type {
-            PolyType::Tris =>
-                self.indices.extend_from_slice(&[i0, i1, i2]),
-            PolyType::TrisAndQuads =>
-                self.indices.extend_from_slice(&[i0, i1, i2, 0xffff])
+            PolyType::Tris => self.indices.extend_from_slice(&[i0, i1, i2]),
+            PolyType::TrisAndQuads => self.indices.extend_from_slice(&[i0, i1, i2, 0xffff]),
         }
     }
 
@@ -345,8 +354,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 // 1--2   1--2  2
                 self.indices.extend_from_slice(&[i0, i1, i2, i0, i2, i3])
             }
-            PolyType::TrisAndQuads =>
-                self.indices.extend_from_slice(&[i0, i1, i2, i3]),
+            PolyType::TrisAndQuads => self.indices.extend_from_slice(&[i0, i1, i2, i3]),
         }
     }
 }
@@ -356,13 +364,17 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
     let interpreter = CmdParser::new(commands);
 
     for cmd_res in interpreter {
-        if cmd_res.is_err() { break; }
+        if cmd_res.is_err() {
+            break;
+        }
         match cmd_res.unwrap() {
             GpuCmd::Nop => (),
             GpuCmd::Restore { idx } => b.gpu.restore(idx as u8),
-            GpuCmd::Scale { scale: (sx, sy, sz) } => {
-                b.gpu.mul_matrix(&Matrix4::from_nonuniform_scale(sx, sy, sz))
-            }
+            GpuCmd::Scale {
+                scale: (sx, sy, sz),
+            } => b
+                .gpu
+                .mul_matrix(&Matrix4::from_nonuniform_scale(sx, sy, sz)),
             GpuCmd::Begin { prim_type } => b.begin_prim(prim_type),
             GpuCmd::End => b.end_prim(),
             GpuCmd::TexCoord { texcoord } => {

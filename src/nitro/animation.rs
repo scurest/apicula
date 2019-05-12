@@ -1,11 +1,11 @@
 use cgmath::{Matrix3, Matrix4};
+use errors::Result;
+use nitro::rotation::{basis_mat, pivot_mat};
+use nitro::Name;
+use std::ops::{Add, Mul};
 use util::bits::BitField;
 use util::cur::Cur;
 use util::fixed::{fix16, fix32};
-use nitro::Name;
-use nitro::rotation::{pivot_mat, basis_mat};
-use std::ops::{Mul, Add};
-use errors::Result;
 
 pub struct Animation {
     pub name: Name,
@@ -47,20 +47,22 @@ pub enum Curve<T> {
         start_frame: u16,
         end_frame: u16,
         values: Vec<T>,
-    }
+    },
 }
 
-
 pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
-    fields!(base_cur, animation {
-        stamp: [u8; 4],
-        num_frames: u16,
-        num_objects: u16,
-        unknown: u32,
-        pivot_data_off: u32,
-        basis_data_off: u32,
-        object_offs: [u16; num_objects],
-    });
+    fields!(
+        base_cur,
+        animation {
+            stamp: [u8; 4],
+            num_frames: u16,
+            num_objects: u16,
+            unknown: u32,
+            pivot_data_off: u32,
+            basis_data_off: u32,
+            object_offs: [u16; num_objects],
+        }
+    );
 
     check!(stamp == b"J\0AC")?; // wtf NUL
 
@@ -71,206 +73,215 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
     let pivot_data = base_cur + pivot_data_off;
     let basis_data = base_cur + basis_data_off;
 
-    let objects_curves = object_offs.map(|curves_off| {
-        let mut cur = base_cur + curves_off;
-        fields!(cur, object_curves {
-            flags: u16,
-            dummy: u8,
-            index: u8,
-            end: Cur,
-        });
-        cur = end;
-
-        // The flags tells us if anything is anything, which of the TRS
-        // properties are animated, and for each animated property, whether its
-        // curve is constant or not.
-
-        #[derive(Debug)]
-        struct AnimationFlags {
-            animated: bool,
-            trans_animated: bool,
-            trans_xyz_const: [bool; 3],
-            rot_animated: bool,
-            rot_const: bool,
-            scale_animated: bool,
-            scale_xyz_const: [bool; 3],
-        }
-
-        let flags = AnimationFlags {
-            animated: flags.bits(0,1) == 0,
-            trans_animated: flags.bits(1,3) == 0,
-            trans_xyz_const: [
-                flags.bits(3,4) != 0,
-                flags.bits(4,5) != 0,
-                flags.bits(5,6) != 0,
-            ],
-            rot_animated: flags.bits(6,8) == 0,
-            rot_const: flags.bits(8,9) != 0,
-            scale_animated: flags.bits(9,11) == 0,
-            scale_xyz_const: [
-                flags.bits(11,12) != 0,
-                flags.bits(12,13) != 0,
-                flags.bits(13,14) != 0,
-            ]
-        };
-
-        trace!("flags: {:?}", flags);
-
-        let mut trs_curves = TRSCurves {
-            trans: [Curve::None, Curve::None, Curve::None],
-            rotation: Curve::None,
-            scale: [Curve::None, Curve::None, Curve::None],
-        };
-
-        if !flags.animated {
-            return Ok(trs_curves);
-        }
-
-        ////////////////
-        // Translation
-        ////////////////
-
-        if flags.trans_animated {
-            for i in 0..3 {
-                let is_const = flags.trans_xyz_const[i];
-                if is_const {
-                    let v = fix32(cur.next::<u32>()?, 1, 19, 12);
-                    trs_curves.trans[i as usize] = Curve::Constant(v);
-                } else {
-                    let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
-                    let off = cur.next::<u32>()?;
-
-                    let start_frame = info.start_frame;
-                    let end_frame = info.end_frame;
-                    let values = match info.data_width {
-                        0 => (base_cur + off)
-                            .next_n::<u32>(info.num_samples())?
-                            .map(|x| fix32(x, 1, 19, 12))
-                            .collect::<Vec<f64>>(),
-
-                        _ => (base_cur + off)
-                            .next_n::<u16>(info.num_samples())?
-                            .map(|x| fix16(x, 1, 3, 12))
-                            .collect::<Vec<f64>>(),
-                    };
-
-                    trs_curves.trans[i as usize] = Curve::Samples {
-                        start_frame, end_frame, values,
-                    };
+    let objects_curves = object_offs
+        .map(|curves_off| {
+            let mut cur = base_cur + curves_off;
+            fields!(
+                cur,
+                object_curves {
+                    flags: u16,
+                    dummy: u8,
+                    index: u8,
+                    end: Cur,
                 }
+            );
+            cur = end;
+
+            // The flags tells us if anything is anything, which of the TRS
+            // properties are animated, and for each animated property, whether its
+            // curve is constant or not.
+
+            #[derive(Debug)]
+            struct AnimationFlags {
+                animated: bool,
+                trans_animated: bool,
+                trans_xyz_const: [bool; 3],
+                rot_animated: bool,
+                rot_const: bool,
+                scale_animated: bool,
+                scale_xyz_const: [bool; 3],
             }
-        }
 
+            let flags = AnimationFlags {
+                animated: flags.bits(0, 1) == 0,
+                trans_animated: flags.bits(1, 3) == 0,
+                trans_xyz_const: [
+                    flags.bits(3, 4) != 0,
+                    flags.bits(4, 5) != 0,
+                    flags.bits(5, 6) != 0,
+                ],
+                rot_animated: flags.bits(6, 8) == 0,
+                rot_const: flags.bits(8, 9) != 0,
+                scale_animated: flags.bits(9, 11) == 0,
+                scale_xyz_const: [
+                    flags.bits(11, 12) != 0,
+                    flags.bits(12, 13) != 0,
+                    flags.bits(13, 14) != 0,
+                ],
+            };
 
-        /////////////
-        // Rotation
-        /////////////
+            trace!("flags: {:?}", flags);
 
-        // In this case, the data at base_cur + off doesn't store the actual
-        // curve values, it stores references into pivot_data and basis_data
-        // (see above, these were stored in the parent J0AC) where the values
-        // are located. This lambda is used to get the actual values.
-        let fetch_matrix = |x: u16| -> Result<Matrix3<f64>> {
-            let mode = x.bits(15, 16);
-            let idx = x.bits(0, 15) as usize;
-            Ok(match mode {
-                1 => {
-                    // Pivot data, just like in the MDL model files.
-                    let (selneg, a, b) = pivot_data.nth::<(u16, u16, u16)>(idx)?;
-                    let sel = selneg.bits(0, 4);
-                    let neg = selneg.bits(4, 8);
-                    let a = fix16(a, 1, 3, 12);
-                    let b = fix16(b, 1, 3, 12);
-                    pivot_mat(sel, neg, a, b)
-                }
-                _ => {
-                    let d = basis_data.nth::<(u16, u16, u16, u16, u16)>(idx as usize)?;
-                    basis_mat(d)
-                }
-            })
+            let mut trs_curves = TRSCurves {
+                trans: [Curve::None, Curve::None, Curve::None],
+                rotation: Curve::None,
+                scale: [Curve::None, Curve::None, Curve::None],
+            };
 
-        };
+            if !flags.animated {
+                return Ok(trs_curves);
+            }
 
-        if flags.rot_animated {
-            if flags.rot_const {
-                let v = cur.next::<u16>()?;
-                let _ = cur.next::<u16>()?; // Skipped? For alignment?
-                trs_curves.rotation = Curve::Constant(fetch_matrix(v)?);
-            } else {
-                let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
-                let off = cur.next::<u32>()?;
+            ////////////////
+            // Translation
+            ////////////////
 
-                let start_frame = info.start_frame;
-                let end_frame = info.end_frame;
-                let values = {
-                    // Do this with an explicit with_capacity + push loop
-                    // because collecting an iterator into a Result doesn't
-                    // reserve the capacity in advance.
-                    // See rust-lang/rust/#48994.
-                    let num_samples = info.num_samples();
-                    let mut samples: Vec<Matrix3<f64>> =
-                        Vec::with_capacity(num_samples);
-                    for v in (base_cur + off).next_n::<u16>(num_samples)? {
-                        samples.push(fetch_matrix(v)?);
+            if flags.trans_animated {
+                for i in 0..3 {
+                    let is_const = flags.trans_xyz_const[i];
+                    if is_const {
+                        let v = fix32(cur.next::<u32>()?, 1, 19, 12);
+                        trs_curves.trans[i as usize] = Curve::Constant(v);
+                    } else {
+                        let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
+                        let off = cur.next::<u32>()?;
+
+                        let start_frame = info.start_frame;
+                        let end_frame = info.end_frame;
+                        let values = match info.data_width {
+                            0 => (base_cur + off)
+                                .next_n::<u32>(info.num_samples())?
+                                .map(|x| fix32(x, 1, 19, 12))
+                                .collect::<Vec<f64>>(),
+
+                            _ => (base_cur + off)
+                                .next_n::<u16>(info.num_samples())?
+                                .map(|x| fix16(x, 1, 3, 12))
+                                .collect::<Vec<f64>>(),
+                        };
+
+                        trs_curves.trans[i as usize] = Curve::Samples {
+                            start_frame,
+                            end_frame,
+                            values,
+                        };
                     }
-                    samples
-                };
-
-                trs_curves.rotation = Curve::Samples {
-                    start_frame, end_frame, values,
-                };
+                }
             }
-        }
 
+            /////////////
+            // Rotation
+            /////////////
 
-        //////////
-        // Scale
-        //////////
+            // In this case, the data at base_cur + off doesn't store the actual
+            // curve values, it stores references into pivot_data and basis_data
+            // (see above, these were stored in the parent J0AC) where the values
+            // are located. This lambda is used to get the actual values.
+            let fetch_matrix = |x: u16| -> Result<Matrix3<f64>> {
+                let mode = x.bits(15, 16);
+                let idx = x.bits(0, 15) as usize;
+                Ok(match mode {
+                    1 => {
+                        // Pivot data, just like in the MDL model files.
+                        let (selneg, a, b) = pivot_data.nth::<(u16, u16, u16)>(idx)?;
+                        let sel = selneg.bits(0, 4);
+                        let neg = selneg.bits(4, 8);
+                        let a = fix16(a, 1, 3, 12);
+                        let b = fix16(b, 1, 3, 12);
+                        pivot_mat(sel, neg, a, b)
+                    }
+                    _ => {
+                        let d = basis_data.nth::<(u16, u16, u16, u16, u16)>(idx as usize)?;
+                        basis_mat(d)
+                    }
+                })
+            };
 
-        // These are just like translations except there are two values per
-        // curve instead of one. I ignore the second one because I don't know
-        // what it's for.
-
-        if flags.scale_animated {
-            for i in 0..3 {
-                let is_const = flags.scale_xyz_const[i];
-                if is_const {
-                    let v = fix32(cur.next::<(u32, u32)>()?.0, 1, 19, 12);
-                    trs_curves.scale[i as usize] = Curve::Constant(v);
+            if flags.rot_animated {
+                if flags.rot_const {
+                    let v = cur.next::<u16>()?;
+                    let _ = cur.next::<u16>()?; // Skipped? For alignment?
+                    trs_curves.rotation = Curve::Constant(fetch_matrix(v)?);
                 } else {
                     let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
                     let off = cur.next::<u32>()?;
 
                     let start_frame = info.start_frame;
                     let end_frame = info.end_frame;
-                    let values = match info.data_width {
-                        0 => (base_cur + off)
-                            .next_n::<(u32, u32)>(info.num_samples())?
-                            .map(|(x, _)| fix32(x, 1, 19, 12))
-                            .collect::<Vec<f64>>(),
-
-                        _ => (base_cur + off)
-                            .next_n::<(u16, u16)>(info.num_samples())?
-                            .map(|(x, _)| fix16(x, 1, 3, 12))
-                            .collect::<Vec<f64>>(),
+                    let values = {
+                        // Do this with an explicit with_capacity + push loop
+                        // because collecting an iterator into a Result doesn't
+                        // reserve the capacity in advance.
+                        // See rust-lang/rust/#48994.
+                        let num_samples = info.num_samples();
+                        let mut samples: Vec<Matrix3<f64>> = Vec::with_capacity(num_samples);
+                        for v in (base_cur + off).next_n::<u16>(num_samples)? {
+                            samples.push(fetch_matrix(v)?);
+                        }
+                        samples
                     };
 
-                    trs_curves.scale[i as usize] = Curve::Samples {
-                        start_frame, end_frame, values,
+                    trs_curves.rotation = Curve::Samples {
+                        start_frame,
+                        end_frame,
+                        values,
                     };
                 }
             }
-        }
 
-        // Finally finished! TT_TT
+            //////////
+            // Scale
+            //////////
 
-        Ok(trs_curves)
+            // These are just like translations except there are two values per
+            // curve instead of one. I ignore the second one because I don't know
+            // what it's for.
 
-    }).collect::<Result<Vec<TRSCurves>>>()?;
+            if flags.scale_animated {
+                for i in 0..3 {
+                    let is_const = flags.scale_xyz_const[i];
+                    if is_const {
+                        let v = fix32(cur.next::<(u32, u32)>()?.0, 1, 19, 12);
+                        trs_curves.scale[i as usize] = Curve::Constant(v);
+                    } else {
+                        let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
+                        let off = cur.next::<u32>()?;
 
-    Ok(Animation { name, num_frames, objects_curves })
+                        let start_frame = info.start_frame;
+                        let end_frame = info.end_frame;
+                        let values = match info.data_width {
+                            0 => (base_cur + off)
+                                .next_n::<(u32, u32)>(info.num_samples())?
+                                .map(|(x, _)| fix32(x, 1, 19, 12))
+                                .collect::<Vec<f64>>(),
+
+                            _ => (base_cur + off)
+                                .next_n::<(u16, u16)>(info.num_samples())?
+                                .map(|(x, _)| fix16(x, 1, 3, 12))
+                                .collect::<Vec<f64>>(),
+                        };
+
+                        trs_curves.scale[i as usize] = Curve::Samples {
+                            start_frame,
+                            end_frame,
+                            values,
+                        };
+                    }
+                }
+            }
+
+            // Finally finished! TT_TT
+
+            Ok(trs_curves)
+        })
+        .collect::<Result<Vec<TRSCurves>>>()?;
+
+    Ok(Animation {
+        name,
+        num_frames,
+        objects_curves,
+    })
 }
-
 
 struct CurveInfo {
     start_frame: u16,
@@ -288,7 +299,12 @@ impl CurveInfo {
 
         check!(start_frame < end_frame)?;
 
-        Ok(CurveInfo { start_frame, end_frame, rate, data_width })
+        Ok(CurveInfo {
+            start_frame,
+            end_frame,
+            rate,
+            data_width,
+        })
     }
 
     fn num_samples(&self) -> usize {
@@ -297,21 +313,32 @@ impl CurveInfo {
     }
 }
 
-
 impl<T> Curve<T>
-where T: Copy + Mul<f64, Output=T> + Add<T, Output=T> {
+where
+    T: Copy + Mul<f64, Output = T> + Add<T, Output = T>,
+{
     pub fn sample_at(&self, default: T, frame: u16) -> T {
         match *self {
             Curve::None => default,
-            Curve::Constant(v) => { v },
-            Curve::Samples { start_frame, end_frame, ref values } => {
-                if values.is_empty() { return default; }
+            Curve::Constant(v) => v,
+            Curve::Samples {
+                start_frame,
+                end_frame,
+                ref values,
+            } => {
+                if values.is_empty() {
+                    return default;
+                }
 
                 // XXX what's the behavior outside the defined bounds?
                 // We're currently using "hold value".
                 // TODO Worry about end_frame == 0?
-                if frame <= start_frame { return values[0]; }
-                if frame >= end_frame - 1 { return values[values.len() - 1]; }
+                if frame <= start_frame {
+                    return values[0];
+                }
+                if frame >= end_frame - 1 {
+                    return values[values.len() - 1];
+                }
 
                 // Linearly interpolate between the two nearest values
                 // XXX I made this up too :b
@@ -326,10 +353,9 @@ where T: Copy + Mul<f64, Output=T> + Add<T, Output=T> {
     }
 }
 
-
 impl TRSCurves {
     pub fn sample_at(&self, frame: u16) -> Matrix4<f64> {
-        use cgmath::{One, vec3};
+        use cgmath::{vec3, One};
 
         let tx = self.trans[0].sample_at(0.0, frame);
         let ty = self.trans[1].sample_at(0.0, frame);

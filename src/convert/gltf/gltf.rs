@@ -21,7 +21,7 @@ impl GlTF {
                 ),
                 "bufferViews" => array!(),
                 "accessors" => array!(),
-            )
+            ),
         }
     }
 
@@ -52,11 +52,9 @@ impl GlTF {
         };
 
         // Add the glTF buffer
-        self.json["buffers"] = array!(
-            object!(
-                "byteLength" => buf_byte_len,
-            )
-        );
+        self.json["buffers"] = array!(object!(
+            "byteLength" => buf_byte_len,
+        ));
 
         // Fixup bufferView pointers
         for buf_view in self.json["bufferViews"].members_mut() {
@@ -107,8 +105,7 @@ impl GlTF {
         }
 
         // Calculate total filesize
-        let filesize =
-            12 + // GLB Header
+        let filesize = 12 + // GLB Header
             8 + // JSON Chunk Header
             s.len() + // JSON Chunk Data
             8 + // BIN Chunk Header
@@ -151,7 +148,6 @@ impl GlTF {
         Ok(())
     }
 }
-
 
 pub trait ByteVec {
     fn push_u16(&mut self, x: u16);

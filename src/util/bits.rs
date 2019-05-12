@@ -25,7 +25,7 @@ macro_rules! def_bitfield {
                 (self >> lo) & (!0 >> ($bitwidth - (hi - lo) as $t))
             }
         }
-    }
+    };
 }
 
 def_bitfield!(u8, 8);

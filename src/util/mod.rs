@@ -8,8 +8,8 @@ pub mod bilist;
 pub mod bimap;
 pub mod fixed;
 pub mod namers;
-pub mod view;
 pub mod out_dir;
+pub mod view;
 
 pub use self::bilist::BiList;
 pub use self::bimap::BiMap;

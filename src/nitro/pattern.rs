@@ -1,7 +1,7 @@
-use util::cur::Cur;
-use nitro::Name;
-use errors::Result;
 use super::info_block;
+use errors::Result;
+use nitro::Name;
+use util::cur::Cur;
 
 /// A pattern animation changes the images that the materials of a model use as
 /// it plays.
@@ -30,15 +30,18 @@ pub struct PatternKeyframe {
 pub fn read_pattern(cur: Cur, name: Name) -> Result<Pattern> {
     debug!("pattern: {:?}", name);
 
-    fields!(cur, pattern {
-        _unknown: [u8; 4],
-        num_frames: u16,
-        num_texture_names: u8,
-        num_palette_names: u8,
-        texture_names_off: u16,
-        palette_names_off: u16,
-        end: Cur,
-    });
+    fields!(
+        cur,
+        pattern {
+            _unknown: [u8; 4],
+            num_frames: u16,
+            num_texture_names: u8,
+            num_palette_names: u8,
+            texture_names_off: u16,
+            palette_names_off: u16,
+            end: Cur,
+        }
+    );
 
     let texture_names = (cur + texture_names_off)
         .next_n::<Name>(num_texture_names as usize)?
@@ -50,11 +53,12 @@ pub fn read_pattern(cur: Cur, name: Name) -> Result<Pattern> {
 
     let material_tracks = info_block::read::<(u32, u16, u16)>(end)?
         .map(|((num_keyframes, _, off), name)| {
-            let keyframes =
-                (cur + off)
+            let keyframes = (cur + off)
                 .next_n::<(u16, u8, u8)>(num_keyframes as usize)?
-                .map(|(frame, texture_idx, palette_idx)| {
-                    PatternKeyframe { frame, texture_idx, palette_idx }
+                .map(|(frame, texture_idx, palette_idx)| PatternKeyframe {
+                    frame,
+                    texture_idx,
+                    palette_idx,
                 })
                 .collect();
 

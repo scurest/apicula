@@ -49,11 +49,11 @@
 //! This is the simplest case. A more detailed analysis of the math is in
 //! joint_tree.rs.
 
+mod joint_tree;
 pub mod symbolic_matrix;
 mod vertex_record;
-mod joint_tree;
 
-pub use self::symbolic_matrix::{SMatrix, CMatrix, AMatrix, ATerm};
+pub use self::symbolic_matrix::{AMatrix, ATerm, CMatrix, SMatrix};
 pub use petgraph::graph::NodeIndex;
 
 use cgmath::Matrix4;

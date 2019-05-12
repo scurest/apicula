@@ -1,12 +1,11 @@
+use cgmath::{vec3, InnerSpace, Matrix3, Quaternion, Vector3};
 /// Converts a set of Nitro TRS curves into a form suitable for glTF.
 ///
 /// Nitro files contain one curve for each translation/scale component, while
 /// glTF contains one curve for the whole 3-vector, so we need to resample the
 /// three component curve onto their common domain and join them together. And
 /// we need to convert the curve of rotation matrices to a curve of quaternions.
-
-use nitro::animation::{TRSCurves, Curve};
-use cgmath::{Vector3, Matrix3, Quaternion, InnerSpace, vec3};
+use nitro::animation::{Curve, TRSCurves};
 
 /// Represents the domain of a Curve.
 ///
@@ -20,7 +19,7 @@ pub enum CurveDomain {
         start_frame: u16,
         end_frame: u16,
         sampling_rate: u16,
-    }
+    },
 }
 
 impl<T> Curve<T> {
@@ -35,12 +34,12 @@ impl<T> Curve<T> {
             Curve::Samples {
                 start_frame,
                 end_frame,
-                ref values
+                ref values,
             } => CurveDomain::Sampled {
                 start_frame,
                 end_frame,
                 sampling_rate: (end_frame - start_frame) / values.len() as u16,
-            }
+            },
         }
     }
 }
@@ -51,13 +50,21 @@ impl CurveDomain {
             (CurveDomain::None, d) => d,
             (d, CurveDomain::None) => d,
             (
-                CurveDomain::Sampled { start_frame: s1, end_frame: e1, sampling_rate: r1 },
-                CurveDomain::Sampled { start_frame: s2, end_frame: e2, sampling_rate: r2 },
+                CurveDomain::Sampled {
+                    start_frame: s1,
+                    end_frame: e1,
+                    sampling_rate: r1,
+                },
+                CurveDomain::Sampled {
+                    start_frame: s2,
+                    end_frame: e2,
+                    sampling_rate: r2,
+                },
             ) => CurveDomain::Sampled {
                 start_frame: s1.min(s2),
                 end_frame: e1.max(e2),
                 sampling_rate: r1.min(r2),
-            }
+            },
         }
     }
 }
@@ -74,21 +81,29 @@ impl GlTFObjectCurves {
         let rotation = rotation_curve(&trs_curves.rotation);
         let scale = resample_vec3(&trs_curves.scale, 1.0);
 
-        GlTFObjectCurves { translation, rotation, scale }
+        GlTFObjectCurves {
+            translation,
+            rotation,
+            scale,
+        }
     }
 }
 
 /// Turns an array of three curves of reals into one curve of 3-vectors by
 /// re-sampling the curves onto their common domain.
 fn resample_vec3(curves: &[Curve<f64>; 3], default_value: f64) -> Curve<Vector3<f64>> {
-    let resampled_domain =
-        curves[0].domain()
+    let resampled_domain = curves[0]
+        .domain()
         .union(curves[1].domain())
         .union(curves[2].domain());
 
     match resampled_domain {
         CurveDomain::None => Curve::None,
-        CurveDomain::Sampled { start_frame, end_frame, sampling_rate } => {
+        CurveDomain::Sampled {
+            start_frame,
+            end_frame,
+            sampling_rate,
+        } => {
             let num_samples = (end_frame - start_frame) / sampling_rate;
             let mut values = Vec::with_capacity(num_samples as usize);
 
@@ -102,7 +117,11 @@ fn resample_vec3(curves: &[Curve<f64>; 3], default_value: f64) -> Curve<Vector3<
                 frame += sampling_rate;
             }
 
-            Curve::Samples { start_frame, end_frame, values }
+            Curve::Samples {
+                start_frame,
+                end_frame,
+                values,
+            }
         }
     }
 }
@@ -120,20 +139,29 @@ fn rotation_curve(matrix_curve: &Curve<Matrix3<f64>>) -> Curve<Quaternion<f64>> 
             end_frame: 1,
             values: vec![to_quat(m)],
         },
-        Curve::Samples { start_frame, end_frame, ref values } => {
-            let mut quats = values.iter()
+        Curve::Samples {
+            start_frame,
+            end_frame,
+            ref values,
+        } => {
+            let mut quats = values
+                .iter()
                 .map(|&m| to_quat(m))
                 .collect::<Vec<Quaternion<f64>>>();
 
             // Ensure the quaternions go on the shortest path through the
             // hypersphere
             for i in 1..quats.len() {
-                if quats[i].dot(quats[i-1]) < 0.0 {
+                if quats[i].dot(quats[i - 1]) < 0.0 {
                     quats[i] = -quats[i];
                 }
             }
 
-            Curve::Samples { start_frame, end_frame, values: quats }
+            Curve::Samples {
+                start_frame,
+                end_frame,
+                values: quats,
+            }
         }
     }
 }

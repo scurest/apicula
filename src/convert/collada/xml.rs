@@ -5,7 +5,7 @@ use std::fmt::{Display, Write};
 
 pub struct Xml {
     s: String,
-    cur_indent: u32
+    cur_indent: u32,
 }
 
 static INDENT_SIZE: u32 = 2;
@@ -69,12 +69,27 @@ impl Xml {
     pub fn matrix(&mut self, m: &Matrix4<f64>) {
         let m: &[f64; 16] = m.as_ref();
         // COLLADA wants row-major order
-        write!(&mut self.s, "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-            m[0], m[4], m[8], m[12],
-            m[1], m[5], m[9], m[13],
-            m[2], m[6], m[10], m[14],
-            m[3], m[7], m[11], m[15],
-        ).unwrap();
+        write!(
+            &mut self.s,
+            "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+            m[0],
+            m[4],
+            m[8],
+            m[12],
+            m[1],
+            m[5],
+            m[9],
+            m[13],
+            m[2],
+            m[6],
+            m[10],
+            m[14],
+            m[3],
+            m[7],
+            m[11],
+            m[15],
+        )
+        .unwrap();
     }
 }
 

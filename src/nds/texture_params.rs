@@ -5,17 +5,39 @@ use util::bits::BitField;
 pub struct TextureParams(pub u32);
 
 impl TextureParams {
-    pub fn offset(self) -> u32 { self.0.bits(0,16) << 3 }
-    pub fn repeat_s(self) -> bool { self.0.bits(16,17) != 0 }
-    pub fn repeat_t(self) -> bool { self.0.bits(17,18) != 0 }
-    pub fn mirror_s(self) -> bool { self.0.bits(18,19) != 0 }
-    pub fn mirror_t(self) -> bool { self.0.bits(19,20) != 0 }
-    pub fn width(self) -> u32 { 8 << self.0.bits(20,23) }
-    pub fn height(self) -> u32 { 8 << self.0.bits(23,26) }
-    pub fn dim(self) -> (u32, u32) { (self.width(), self.height()) }
-    pub fn format(self) -> TextureFormat { TextureFormat(self.0.bits(26,29) as u8) }
-    pub fn is_color0_transparent(self) -> bool { self.0.bits(29,30) != 0 }
-    pub fn texcoord_transform_mode(self) -> u8 { self.0.bits(30,32) as u8 }
+    pub fn offset(self) -> u32 {
+        self.0.bits(0, 16) << 3
+    }
+    pub fn repeat_s(self) -> bool {
+        self.0.bits(16, 17) != 0
+    }
+    pub fn repeat_t(self) -> bool {
+        self.0.bits(17, 18) != 0
+    }
+    pub fn mirror_s(self) -> bool {
+        self.0.bits(18, 19) != 0
+    }
+    pub fn mirror_t(self) -> bool {
+        self.0.bits(19, 20) != 0
+    }
+    pub fn width(self) -> u32 {
+        8 << self.0.bits(20, 23)
+    }
+    pub fn height(self) -> u32 {
+        8 << self.0.bits(23, 26)
+    }
+    pub fn dim(self) -> (u32, u32) {
+        (self.width(), self.height())
+    }
+    pub fn format(self) -> TextureFormat {
+        TextureFormat(self.0.bits(26, 29) as u8)
+    }
+    pub fn is_color0_transparent(self) -> bool {
+        self.0.bits(29, 30) != 0
+    }
+    pub fn texcoord_transform_mode(self) -> u8 {
+        self.0.bits(30, 32) as u8
+    }
 }
 
 // NOTE: there is a u32 for texture parameters stored in both the texture itself

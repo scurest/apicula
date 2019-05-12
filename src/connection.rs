@@ -7,7 +7,7 @@
 //! out for ourselves. This modules contains the heuristics for that.
 
 use clap::ArgMatches;
-use db::{Database, AnimationId, TextureId, PaletteId, ModelId, PatternId};
+use db::{AnimationId, Database, ModelId, PaletteId, PatternId, TextureId};
 use errors::Result;
 
 /// A Connection records interrelationships between Nitro resources, namely how
@@ -36,7 +36,7 @@ pub enum MaterialConnection {
     },
     TextureOkPaletteMissing {
         texture: Match<TextureId>,
-     },
+    },
     TextureOkPaletteOk {
         texture: Match<TextureId>,
         palette: Match<PaletteId>,
@@ -55,13 +55,10 @@ pub struct Match<T: Copy> {
 impl MaterialConnection {
     pub fn texture(&self) -> Option<Match<TextureId>> {
         match *self {
-            MaterialConnection::NoTexture |
-            MaterialConnection::TextureMissing =>
-                None,
-            MaterialConnection::TextureOkNoPalette { texture } |
-            MaterialConnection::TextureOkPaletteMissing { texture } |
-            MaterialConnection::TextureOkPaletteOk { texture, .. } =>
-                Some(texture)
+            MaterialConnection::NoTexture | MaterialConnection::TextureMissing => None,
+            MaterialConnection::TextureOkNoPalette { texture }
+            | MaterialConnection::TextureOkPaletteMissing { texture }
+            | MaterialConnection::TextureOkPaletteOk { texture, .. } => Some(texture),
         }
     }
 
@@ -70,16 +67,13 @@ impl MaterialConnection {
     /// resolving error.
     pub fn image_id(&self) -> Result<Option<(TextureId, Option<PaletteId>)>> {
         match *self {
-            MaterialConnection::NoTexture =>
-                Ok(None),
-            MaterialConnection::TextureMissing =>
-                bail!("texture missing"),
-            MaterialConnection::TextureOkNoPalette { texture } =>
-                Ok(Some((texture.id, None))),
-            MaterialConnection::TextureOkPaletteMissing { .. } =>
-                bail!("palette missing"),
-            MaterialConnection::TextureOkPaletteOk { texture, palette } =>
-                Ok(Some((texture.id, Some(palette.id)))),
+            MaterialConnection::NoTexture => Ok(None),
+            MaterialConnection::TextureMissing => bail!("texture missing"),
+            MaterialConnection::TextureOkNoPalette { texture } => Ok(Some((texture.id, None))),
+            MaterialConnection::TextureOkPaletteMissing { .. } => bail!("palette missing"),
+            MaterialConnection::TextureOkPaletteOk { texture, palette } => {
+                Ok(Some((texture.id, Some(palette.id))))
+            }
         }
     }
 }
@@ -104,22 +98,32 @@ impl Connection {
         // Record whether we failed to resolve any materials so we can warn
         let mut missing_textures = false;
 
-        let models = db.models.iter().enumerate().map(|(model_id, model)| {
-            let materials = (0..model.materials.len())
-                .map(|material_id| {
-                    let mat_conn = resolve_material(db, model_id, material_id);
+        let models = db
+            .models
+            .iter()
+            .enumerate()
+            .map(|(model_id, model)| {
+                let materials = (0..model.materials.len())
+                    .map(|material_id| {
+                        let mat_conn = resolve_material(db, model_id, material_id);
 
-                    if mat_conn.image_id().is_err() {
-                        missing_textures = true;
-                    }
+                        if mat_conn.image_id().is_err() {
+                            missing_textures = true;
+                        }
 
-                    mat_conn
-                }).collect();
+                        mat_conn
+                    })
+                    .collect();
 
-            let animations = find_applicable_animations(db, model_id, options);
-            let patterns = find_applicable_patterns(db, model_id);
-            ModelConnection { materials, animations, patterns }
-        }).collect();
+                let animations = find_applicable_animations(db, model_id, options);
+                let patterns = find_applicable_patterns(db, model_id);
+                ModelConnection {
+                    materials,
+                    animations,
+                    patterns,
+                }
+            })
+            .collect();
 
         if missing_textures {
             warn!("A matching texture/palette couldn't be found for some materials!");
@@ -129,7 +133,6 @@ impl Connection {
         Connection { models }
     }
 }
-
 
 // HEURISTICS:
 
@@ -155,29 +158,33 @@ fn resolve_material(db: &Database, model_id: ModelId, material_idx: usize) -> Ma
     let has_palette = material.palette_name.is_some();
 
     // Resolve the texture name. Start with all textures with the right name.
-    let mut candidates = db.textures_by_name.get(texture_name)
-        .cloned().unwrap_or(vec![]);
+    let mut candidates = db
+        .textures_by_name
+        .get(texture_name)
+        .cloned()
+        .unwrap_or(vec![]);
 
     // If the material specifies a palette, discard candidates that don't use
     // one, and conversely.
     candidates.retain(|&tex_id| {
-        let requires_palette = db.textures[tex_id].params
-            .format().desc().requires_palette;
+        let requires_palette = db.textures[tex_id].params.format().desc().requires_palette;
         requires_palette == has_palette
     });
 
     // If there are candidates in the same file as the model we prefer them;
     // discard the others.
-    let is_in_model_file = |&tex_id: &TextureId| {
-        db.textures_found_in[tex_id] == db.models_found_in[model_id]
-    };
+    let is_in_model_file =
+        |&tex_id: &TextureId| db.textures_found_in[tex_id] == db.models_found_in[model_id];
     if candidates.iter().any(is_in_model_file) {
         candidates.retain(is_in_model_file)
     }
 
     let texture_match = match candidates.len() {
         0 => return MaterialConnection::TextureMissing,
-        n => Match { id: candidates[0], best: n == 1 },
+        n => Match {
+            id: candidates[0],
+            best: n == 1,
+        },
     };
 
     // If there was no palette, we're done!
@@ -190,22 +197,30 @@ fn resolve_material(db: &Database, model_id: ModelId, material_idx: usize) -> Ma
     // Otherwise, resolve the palette. Start with candidates that have the right
     // name.
     let palette_name = material.palette_name.as_ref().unwrap();
-    let mut candidates = db.palettes_by_name.get(palette_name)
-        .cloned().unwrap_or(vec![]);
+    let mut candidates = db
+        .palettes_by_name
+        .get(palette_name)
+        .cloned()
+        .unwrap_or(vec![]);
 
     // If there are candidates in the same file as the texture we prefer them;
     // discard the others.
     let texture_file = db.textures_found_in[texture_match.id];
-    let is_in_tex_file = |&pal_id: &PaletteId| {
-        db.palettes_found_in[pal_id] == texture_file
-    };
+    let is_in_tex_file = |&pal_id: &PaletteId| db.palettes_found_in[pal_id] == texture_file;
     if candidates.iter().any(is_in_tex_file) {
         candidates.retain(is_in_tex_file)
     }
 
     let palette_match = match candidates.len() {
-        0 => return MaterialConnection::TextureOkPaletteMissing { texture: texture_match },
-        n => Match { id: candidates[0], best: n == 1 },
+        0 => {
+            return MaterialConnection::TextureOkPaletteMissing {
+                texture: texture_match,
+            }
+        }
+        n => Match {
+            id: candidates[0],
+            best: n == 1,
+        },
     };
 
     MaterialConnection::TextureOkPaletteOk {
@@ -227,8 +242,11 @@ fn resolve_material(db: &Database, model_id: ModelId, material_idx: usize) -> Ma
 /// heuristic and applying applying all the animations to every model. This,
 /// together with the first issue, is the main impediment to batch-converting
 /// whole games.
-fn find_applicable_animations(db: &Database, model_id: ModelId, options: ConnectionOptions)
--> Vec<AnimationId> {
+fn find_applicable_animations(
+    db: &Database,
+    model_id: ModelId,
+    options: ConnectionOptions,
+) -> Vec<AnimationId> {
     if options.all_animations {
         // Let's try not to worry about how big this is :o
         return (0..db.animations.len()).collect();
@@ -256,20 +274,32 @@ pub struct PatternConnection {
 /// TO DETERMINE WHICH PATTERNS APPLY: Currently we just use all of them for
 /// every model.
 fn find_applicable_patterns(db: &Database, _model_id: ModelId) -> Vec<PatternConnection> {
-    db.patterns.iter().enumerate().filter_map(|(pattern_id, pattern)| {
-        let texture_ids = pattern.texture_names.iter().map(|name| {
-            let ids = db.textures_by_name.get(name)?;
-            Some(ids[0])
-        }).collect();
-        let palette_ids = pattern.palette_names.iter().map(|name| {
-            let ids = db.palettes_by_name.get(name)?;
-            Some(ids[0])
-        }).collect();
+    db.patterns
+        .iter()
+        .enumerate()
+        .filter_map(|(pattern_id, pattern)| {
+            let texture_ids = pattern
+                .texture_names
+                .iter()
+                .map(|name| {
+                    let ids = db.textures_by_name.get(name)?;
+                    Some(ids[0])
+                })
+                .collect();
+            let palette_ids = pattern
+                .palette_names
+                .iter()
+                .map(|name| {
+                    let ids = db.palettes_by_name.get(name)?;
+                    Some(ids[0])
+                })
+                .collect();
 
-        Some(PatternConnection {
-            pattern_id,
-            texture_ids,
-            palette_ids,
+            Some(PatternConnection {
+                pattern_id,
+                texture_ids,
+                palette_ids,
+            })
         })
-    }).collect()
+        .collect()
 }

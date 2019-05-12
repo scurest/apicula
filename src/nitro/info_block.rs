@@ -14,25 +14,29 @@ use util::view::{View, Viewable};
 pub type Iterator<'a, T> = Zip<View<'a, T>, View<'a, Name>>;
 
 /// Returns an iterator over (`T`, name) pairs in an info block.
-pub fn read<T>(cur: Cur) -> Result<Iterator<T>> where
-    T: Viewable + Debug
+pub fn read<T>(cur: Cur) -> Result<Iterator<T>>
+where
+    T: Viewable + Debug,
 {
-    fields!(cur, info_block {
-        dummy: u8,
-        count: u8,
-        header_size: u16,
+    fields!(
+        cur,
+        info_block {
+            dummy: u8,
+            count: u8,
+            header_size: u16,
 
-        unknown_subheader_size: u16,
-        unknown_section_size: u16,
-        unknown_constant: u32,
-        unknown_data: [u32; count],
+            unknown_subheader_size: u16,
+            unknown_section_size: u16,
+            unknown_constant: u32,
+            unknown_data: [u32; count],
 
-        size_of_datum: u16,
-        data_section_size: u16,
-        data: [T; count],
+            size_of_datum: u16,
+            data_section_size: u16,
+            data: [T; count],
 
-        names: [Name; count],
-    });
+            names: [Name; count],
+        }
+    );
 
     check!(dummy == 0)?;
     check!(size_of_datum as usize == <T as Viewable>::size())?;

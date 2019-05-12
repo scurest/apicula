@@ -1,5 +1,4 @@
-use cgmath::{EuclideanSpace, Matrix4, Point3,
-    Rad, Transform, vec3, Vector2, Vector3};
+use cgmath::{vec3, EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, Vector3};
 use std::default::Default;
 use std::f32::consts::PI;
 
@@ -13,10 +12,9 @@ pub struct Eye {
 impl Eye {
     /// Model-view matrix.
     pub fn model_view(&self) -> Matrix4<f32> {
-        let mv =
-            Matrix4::from_angle_x(Rad(-self.altitude)) *
-            Matrix4::from_angle_y(Rad(-self.azimuth)) *
-            Matrix4::from_translation(-self.position.to_vec());
+        let mv = Matrix4::from_angle_x(Rad(-self.altitude))
+            * Matrix4::from_angle_y(Rad(-self.azimuth))
+            * Matrix4::from_translation(-self.position.to_vec());
         mv
     }
 
@@ -49,10 +47,13 @@ impl Eye {
         // at the poles.
         let max_alt = 0.499 * PI;
         let min_alt = -max_alt;
-        self.altitude =
-            if self.altitude < min_alt { min_alt }
-            else if self.altitude > max_alt { max_alt }
-            else { self.altitude };
+        self.altitude = if self.altitude < min_alt {
+            min_alt
+        } else if self.altitude > max_alt {
+            max_alt
+        } else {
+            self.altitude
+        };
     }
 }
 

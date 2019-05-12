@@ -1,17 +1,17 @@
 mod collada;
-mod image_namer;
 mod gltf;
+mod image_namer;
 
 use clap::ArgMatches;
+use connection::{Connection, ConnectionOptions};
+use convert::image_namer::ImageNamer;
+use db::Database;
 use errors::Result;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use util::namers::UniqueNamer;
 use util::OutDir;
-use db::Database;
-use convert::image_namer::ImageNamer;
-use connection::{Connection, ConnectionOptions};
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let out_dir_path = PathBuf::from(matches.value_of("OUTPUT").unwrap());
@@ -62,7 +62,9 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         };
 
         match res {
-            Ok(()) => { models_written += 1; },
+            Ok(()) => {
+                models_written += 1;
+            }
             Err(e) => error!("failed to write {}: {}", name, e),
         }
     }
@@ -84,7 +86,9 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         let dim = (texture.params.width(), texture.params.height());
         let mut png_file = out_dir.create_file(&format!("{}.png", image_name))?;
         match write_rgba(&mut png_file, &rgba.0[..], dim) {
-            Ok(()) => { pngs_written += 1; }
+            Ok(()) => {
+                pngs_written += 1;
+            }
             Err(e) => error!("failed writing PNG: {}", e),
         }
     }
@@ -97,19 +101,22 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         "gltf" => "glTF",
         _ => unreachable!(),
     };
-    println!("Wrote {} {}{}, {} PNG{}.",
-        models_written, model_file_name, plural(models_written),
-        pngs_written, plural(pngs_written));
+    println!(
+        "Wrote {} {}{}, {} PNG{}.",
+        models_written,
+        model_file_name,
+        plural(models_written),
+        pngs_written,
+        plural(pngs_written)
+    );
 
     Ok(())
 }
 
 pub fn write_rgba(f: &mut File, rgba: &[u8], dim: (u32, u32)) -> Result<()> {
-    use png::{Encoder, ColorType, BitDepth, HasParameters};
+    use png::{BitDepth, ColorType, Encoder, HasParameters};
     let mut encoder = Encoder::new(f, dim.0, dim.1);
-    encoder
-        .set(ColorType::RGBA)
-        .set(BitDepth::Eight);
+    encoder.set(ColorType::RGBA).set(BitDepth::Eight);
 
     let mut writer = encoder.write_header()?;
     writer.write_image_data(rgba)?;

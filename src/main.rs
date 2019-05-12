@@ -1,6 +1,6 @@
 //! apicula, NDS model viewer/converter
 
-#![recursion_limit="128"]
+#![recursion_limit = "128"]
 
 #[macro_use]
 extern crate log;
@@ -10,13 +10,13 @@ extern crate error_chain;
 extern crate glium;
 #[macro_use]
 extern crate clap;
+extern crate atty;
 extern crate cgmath;
-extern crate time;
 extern crate petgraph;
 extern crate png;
-extern crate termcolor;
-extern crate atty;
 extern crate smallvec;
+extern crate termcolor;
+extern crate time;
 #[macro_use]
 extern crate json;
 
@@ -24,18 +24,18 @@ extern crate json;
 mod errors;
 #[macro_use]
 mod util;
+mod connection;
 mod convert;
+mod db;
 mod decompress;
 mod extract;
+mod info;
+mod logger;
 mod nds;
 mod nitro;
-mod viewer;
-mod db;
-mod info;
 mod primitives;
 mod skeleton;
-mod logger;
-mod connection;
+mod viewer;
 
 use errors::Result;
 

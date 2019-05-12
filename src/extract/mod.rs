@@ -3,8 +3,8 @@
 use clap::ArgMatches;
 use decompress;
 use errors::Result;
-use nitro::Container;
 use nitro::container::read_container;
+use nitro::Container;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
@@ -62,11 +62,12 @@ fn find_next_stamp(bytes: &[u8]) -> Option<usize> {
     // find BMD0|BTX0|BCA0|BTP0
     let mut i = 0;
     while i + 3 < bytes.len() {
-        if bytes[i] == b'B' && bytes[i+3] == b'0' {
-            if (bytes[i+1] == b'M' && bytes[i+2] == b'D') ||
-               (bytes[i+1] == b'T' && bytes[i+2] == b'X') ||
-               (bytes[i+1] == b'C' && bytes[i+2] == b'A') ||
-               (bytes[i+1] == b'T' && bytes[i+2] == b'P') {
+        if bytes[i] == b'B' && bytes[i + 3] == b'0' {
+            if (bytes[i + 1] == b'M' && bytes[i + 2] == b'D')
+                || (bytes[i + 1] == b'T' && bytes[i + 2] == b'X')
+                || (bytes[i + 1] == b'C' && bytes[i + 2] == b'A')
+                || (bytes[i + 1] == b'T' && bytes[i + 2] == b'P')
+            {
                 return Some(i);
             }
         }
@@ -111,11 +112,16 @@ impl ExtractOutput {
     /// Print report on extraction results.
     fn print_report(&self) {
         let plural = |x| if x != 1 { "s" } else { "" };
-        println!("Found {} BMD{}, {} BTX{}, {} BCA{}, {} BTP{}.",
-            self.num_bmds, plural(self.num_bmds),
-            self.num_btxs, plural(self.num_btxs),
-            self.num_bcas, plural(self.num_bcas),
-            self.num_btps, plural(self.num_btps),
+        println!(
+            "Found {} BMD{}, {} BTX{}, {} BCA{}, {} BTP{}.",
+            self.num_bmds,
+            plural(self.num_bmds),
+            self.num_btxs,
+            plural(self.num_btxs),
+            self.num_bcas,
+            plural(self.num_bcas),
+            self.num_btps,
+            plural(self.num_btps),
         );
     }
 
@@ -142,19 +148,18 @@ impl ExtractOutput {
         }
         self.taken_file_names.insert(save_path.clone());
 
-        let result = self.out_dir
+        let result = self
+            .out_dir
             .create_file(&save_path)
             .and_then(|mut f| Ok(f.write_all(bytes)?));
         match result {
-            Ok(()) => {
-                match container.stamp {
-                    b"BMD0" => self.num_bmds += 1,
-                    b"BTX0" => self.num_btxs += 1,
-                    b"BCA0" => self.num_bcas += 1,
-                    b"BTP0" => self.num_btps += 1,
-                    _ => (),
-                }
-            }
+            Ok(()) => match container.stamp {
+                b"BMD0" => self.num_bmds += 1,
+                b"BTX0" => self.num_btxs += 1,
+                b"BCA0" => self.num_bcas += 1,
+                b"BTP0" => self.num_btps += 1,
+                _ => (),
+            },
             Err(e) => {
                 error!("failed to write {}: {:?}", file_name, e);
             }
@@ -181,6 +186,7 @@ fn guess_container_name(cont: &Container) -> String {
             b"BCA0" => "empty_animation_file",
             b"BTP0" => "empty_pattern_file",
             _ => "empty_unknown_file",
-        }.to_string()
+        }
+        .to_string()
     }
 }

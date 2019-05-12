@@ -6,13 +6,13 @@
 //mod state;
 mod model_viewer;
 //mod eye;
+mod fps;
 mod main_loop;
 mod viewer;
-mod fps;
 
 use clap::ArgMatches;
-use db::Database;
 use connection::{Connection, ConnectionOptions};
+use db::Database;
 use errors::Result;
 
 /// Initial window width.

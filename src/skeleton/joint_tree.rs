@@ -110,10 +110,10 @@
 //! cases? These are rare so we just use the same solution again, but we wil
 //! give a warning.
 
-use cgmath::{Matrix4, SquareMatrix, One, ApproxEq};
 use super::vertex_record::VertexRecord;
-use super::{SMatrix, AMatrix};
-use super::{Skeleton, JointTree, NodeIndex, Joint, Transform, SkinVertex, Influence};
+use super::{AMatrix, SMatrix};
+use super::{Influence, Joint, JointTree, NodeIndex, Skeleton, SkinVertex, Transform};
+use cgmath::{ApproxEq, Matrix4, One, SquareMatrix};
 use nitro::Model;
 use petgraph::Direction;
 
@@ -124,20 +124,27 @@ pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]
     let mut skin_vert_cache: Vec<Option<SkinVertex>> = vec![None; vr.matrices.len()];
     let mut max_num_influences = 0;
 
-    let vertices = vr.vertices.iter().map(|&mat_idx| {
-        if skin_vert_cache[mat_idx as usize].is_none() {
-            let mut sv = b.amatrix_to_skinvert(&vr.matrices[mat_idx as usize]);
-            simplify_skinvert(&mut sv);
-            max_num_influences = max_num_influences.max(sv.influences.len());
-            skin_vert_cache[mat_idx as usize] = Some(sv);
-        }
+    let vertices = vr
+        .vertices
+        .iter()
+        .map(|&mat_idx| {
+            if skin_vert_cache[mat_idx as usize].is_none() {
+                let mut sv = b.amatrix_to_skinvert(&vr.matrices[mat_idx as usize]);
+                simplify_skinvert(&mut sv);
+                max_num_influences = max_num_influences.max(sv.influences.len());
+                skin_vert_cache[mat_idx as usize] = Some(sv);
+            }
 
-        skin_vert_cache[mat_idx as usize].as_ref().unwrap().clone()
-    }).collect();
+            skin_vert_cache[mat_idx as usize].as_ref().unwrap().clone()
+        })
+        .collect();
 
     if b.unusual_matrices {
-        warn!("unusual matrices encountered in model {}; the skin for this \
-            model may function imperfectly", model.name);
+        warn!(
+            "unusual matrices encountered in model {}; the skin for this \
+             model may function imperfectly",
+            model.name
+        );
     }
 
     // IMPORTANT NOTE!! up until this step, the rest_world_to_local field on
@@ -187,7 +194,13 @@ impl<'a, 'b> Builder<'a, 'b> {
 
         let unusual_matrices = false;
 
-        Builder { model, objects, graph, roots, unusual_matrices }
+        Builder {
+            model,
+            objects,
+            graph,
+            roots,
+            unusual_matrices,
+        }
     }
 
     /// Add a "universal root", turning the graph into a tree.
@@ -218,11 +231,15 @@ impl<'a, 'b> Builder<'a, 'b> {
     fn amatrix_to_skinvert(&mut self, amatrix: &AMatrix) -> SkinVertex {
         self.detect_unusual_matrices(amatrix);
 
-        let influences = amatrix.terms.iter().map(|term| {
-            let weight = term.weight;
-            let joint = self.cmatrix_to_joint(&term.cmat.factors);
-            Influence { weight, joint }
-        }).collect();
+        let influences = amatrix
+            .terms
+            .iter()
+            .map(|term| {
+                let weight = term.weight;
+                let joint = self.cmatrix_to_joint(&term.cmat.factors);
+                Influence { weight, joint }
+            })
+            .collect();
         SkinVertex { influences }
     }
 
@@ -234,7 +251,9 @@ impl<'a, 'b> Builder<'a, 'b> {
                 SMatrix::InvBind { .. } => true,
                 SMatrix::Uninitialized { .. } => true,
             };
-            if !is_const { break; }
+            if !is_const {
+                break;
+            }
             factors = rest;
         }
 
@@ -262,12 +281,13 @@ impl<'a, 'b> Builder<'a, 'b> {
         }
 
         {
-            let existing_root = self.roots.iter().find(|&&idx| {
-                match self.graph[idx].local_to_parent {
-                    Transform::SMatrix(smat2) => smat == smat2,
-                    Transform::Root => false,
-                }
-            });
+            let existing_root =
+                self.roots
+                    .iter()
+                    .find(|&&idx| match self.graph[idx].local_to_parent {
+                        Transform::SMatrix(smat2) => smat == smat2,
+                        Transform::Root => false,
+                    });
 
             if let Some(&node_idx) = existing_root {
                 return node_idx;
@@ -288,7 +308,8 @@ impl<'a, 'b> Builder<'a, 'b> {
     /// Find (or create) a child of the given node whose transform is the given
     /// SMatrix.
     fn find_child(&mut self, node: NodeIndex, smat: SMatrix) -> NodeIndex {
-        let existing_child = self.graph
+        let existing_child = self
+            .graph
             .neighbors_directed(node, Direction::Outgoing)
             .find(|&idx| match self.graph[idx].local_to_parent {
                 Transform::SMatrix(smat2) => smat == smat2,
@@ -299,8 +320,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             return node_idx;
         }
 
-        let rest_world_to_local =
-            self.graph[node].rest_world_to_local * self.eval_smatrix(smat);
+        let rest_world_to_local = self.graph[node].rest_world_to_local * self.eval_smatrix(smat);
         let new_child = self.graph.add_node(Joint {
             local_to_parent: Transform::SMatrix(smat),
             rest_world_to_local,
@@ -337,20 +357,23 @@ impl<'a, 'b> Builder<'a, 'b> {
         match smat {
             SMatrix::Object { object_idx } => self.objects[object_idx as usize],
             SMatrix::InvBind { inv_bind_idx } => self.model.inv_binds[inv_bind_idx as usize],
-            SMatrix::Uninitialized { .. } => Matrix4::one()
+            SMatrix::Uninitialized { .. } => Matrix4::one(),
         }
     }
 
     /// Evaluates a CMatrix in the rest pose.
     fn eval_cmatrix(&self, factors: &[SMatrix]) -> Matrix4<f64> {
-        factors.iter().map(|&smat| self.eval_smatrix(smat)).product()
+        factors
+            .iter()
+            .map(|&smat| self.eval_smatrix(smat))
+            .product()
     }
 }
 
 fn simplify_skinvert(sv: &mut SkinVertex) {
     // Group like terms.
     for i in 0..sv.influences.len() {
-        for j in (i+1)..sv.influences.len() {
+        for j in (i + 1)..sv.influences.len() {
             if sv.influences[i].joint == sv.influences[j].joint {
                 sv.influences[i].weight += sv.influences[j].weight;
                 sv.influences[j].weight = 0.0;
@@ -360,7 +383,8 @@ fn simplify_skinvert(sv: &mut SkinVertex) {
     sv.influences.retain(|influence| influence.weight != 0.0);
 
     // Sort by weight, highest to lowest
-    sv.influences.sort_by(|in1, in2| in2.weight.partial_cmp(&in1.weight).unwrap());
+    sv.influences
+        .sort_by(|in1, in2| in2.weight.partial_cmp(&in1.weight).unwrap());
 }
 
 /// Inverts a matrix, bumping its entries slightly if necessary until it is
@@ -381,6 +405,8 @@ fn invert_matrix(mut mat: Matrix4<f64>) -> Matrix4<f64> {
         mat[1][(a + 1) % 3] += EPS[(a + 1) % EPS.len()];
         mat[2][(a + 2) % 3] += EPS[(a + 2) % EPS.len()];
 
-        rng ^= rng << 17; rng ^= rng >> 13; rng ^= rng << 5; // xorshift
+        rng ^= rng << 17;
+        rng ^= rng >> 13;
+        rng ^= rng << 5; // xorshift
     }
 }

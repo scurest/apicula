@@ -8,7 +8,7 @@
 //! See the [GBATEK documentation](http://problemkaputt.de/gbatek.htm#ds3dvideo)
 //! for a reference on the DS's GPU.
 
-use cgmath::{Point2, Point3, Vector3, vec3};
+use cgmath::{vec3, Point2, Point3, Vector3};
 use errors::Result;
 use util::bits::BitField;
 use util::fixed::fix16;
@@ -111,7 +111,7 @@ impl<'a> Iterator for CmdParser<'a> {
 
             if self.buf.len() < 4 {
                 self.done = true;
-                return Some(Err("GPU has too few opcodes".into()))
+                return Some(Err("GPU has too few opcodes".into()));
             }
 
             self.opcode_fifo = &self.buf[0..4];
@@ -131,10 +131,10 @@ impl<'a> Iterator for CmdParser<'a> {
         let num_param_bytes = 4 * num_params;
         if self.buf.len() < num_param_bytes {
             self.done = true;
-            return Some(Err("buffer too short for GPU opcode parameters".into()))
+            return Some(Err("buffer too short for GPU opcode parameters".into()));
         }
-        let params = View::from_buf(&self.buf[0 .. num_param_bytes]);
-        self.buf = &self.buf[num_param_bytes ..];
+        let params = View::from_buf(&self.buf[0..num_param_bytes]);
+        self.buf = &self.buf[num_param_bytes..];
 
         Some(parse(self, opcode, params))
     }
@@ -156,7 +156,9 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
             let sx = fix32(params.nth(0), 1, 19, 12);
             let sy = fix32(params.nth(1), 1, 19, 12);
             let sz = fix32(params.nth(2), 1, 19, 12);
-            GpuCmd::Scale { scale: (sx, sy, sz) }
+            GpuCmd::Scale {
+                scale: (sx, sy, sz),
+            }
         }
 
         // BEGIN_VTXS - Start of Vertex List
@@ -273,16 +275,13 @@ fn parse(state: &mut CmdParser, opcode: u8, params: View<u32>) -> Result<GpuCmd>
 /// Number of u32 parameters `opcode` takes.
 fn num_params(opcode: u8) -> Result<usize> {
     static SIZES: [i8; 66] = [
-         0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1,  1,  0,  1,  1,  1,  0,
-        16, 12, 16, 12,  9,  3,  3, -1, -1, -1,  1,
-         1,  1,  2,  1,  1,  1,  1,  1,  1,  1,  1,
-        -1, -1, -1, -1,  1,  1,  1,  1,  1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1,  1,  0,
+        0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 0, 1, 1, 1, 0, 16, 12,
+        16, 12, 9, 3, 3, -1, -1, -1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1,
+        1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 0,
     ];
     let opcode = opcode as usize;
     if opcode >= SIZES.len() || SIZES[opcode] == -1 {
-       bail!("unknown GPU opcode: {:#x}", opcode);
+        bail!("unknown GPU opcode: {:#x}", opcode);
     }
     Ok(SIZES[opcode] as usize)
 }

@@ -1,5 +1,5 @@
-use std::{fmt, error};
 use std::ops::Add;
+use std::{error, fmt};
 use util::view::{View, Viewable};
 
 /// A pointer into a buffer of bytes. Used for binary file parsing.
@@ -15,7 +15,10 @@ impl<'a> Cur<'a> {
     }
 
     pub fn from_buf_pos(buf: &[u8], pos: usize) -> Cur {
-        Cur { buf_: buf, pos_: pos }
+        Cur {
+            buf_: buf,
+            pos_: pos,
+        }
     }
 
     pub fn pos(&self) -> usize {
@@ -31,7 +34,9 @@ impl<'a> Cur<'a> {
         if self.bytes_remaining() < size {
             return Err(Error::TooShort);
         }
-        Ok(<T as Viewable>::view(&self.buf_[self.pos_..self.pos_ + size]))
+        Ok(<T as Viewable>::view(
+            &self.buf_[self.pos_..self.pos_ + size],
+        ))
     }
 
     pub fn next<T: Viewable>(&mut self) -> Result<T, Error> {
@@ -45,7 +50,7 @@ impl<'a> Cur<'a> {
     }
 
     pub fn nth<T: Viewable>(&self, n: usize) -> Result<T, Error> {
-        Ok(self.clone().next_n::<T>(n+1)?.nth(n))
+        Ok(self.clone().next_n::<T>(n + 1)?.nth(n))
     }
 
     pub fn next_n<T: Viewable>(&mut self, n: usize) -> Result<View<'a, T>, Error> {
@@ -64,7 +69,7 @@ impl<'a> Cur<'a> {
     }
 
     pub fn slice_from_cur_to_end(&self) -> &'a [u8] {
-        &self.buf_[self.pos_ ..]
+        &self.buf_[self.pos_..]
     }
 
     pub fn jump_forward(&mut self, amt: usize) {
@@ -89,12 +94,16 @@ impl<'a> Add<usize> for Cur<'a> {
 
 impl<'a> Add<u32> for Cur<'a> {
     type Output = Cur<'a>;
-    fn add(self, amt: u32) -> Cur<'a> { self + amt as usize }
+    fn add(self, amt: u32) -> Cur<'a> {
+        self + amt as usize
+    }
 }
 
 impl<'a> Add<u16> for Cur<'a> {
     type Output = Cur<'a>;
-    fn add(self, amt: u16) -> Cur<'a> { self + amt as usize }
+    fn add(self, amt: u16) -> Cur<'a> {
+        self + amt as usize
+    }
 }
 
 impl<'a> fmt::Debug for Cur<'a> {

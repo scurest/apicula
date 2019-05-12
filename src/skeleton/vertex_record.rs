@@ -1,9 +1,9 @@
 //! Abstract interpretation of the render commands to discover what symbolic
 //! matrix is applied to each vertex.
 
-use super::symbolic_matrix::{SMatrix, AMatrix};
-use nitro::Model;
+use super::symbolic_matrix::{AMatrix, SMatrix};
 use nitro::render_cmds::SkinTerm;
+use nitro::Model;
 
 type MatrixIdx = u16;
 
@@ -95,7 +95,9 @@ impl<'a> Builder<'a> {
             // weight * stack[stack_pos] * inv_binds[inv_bind_idx]
             let mat_idx = self.fetch_from_stack(term.stack_pos);
             let mut mat = self.vr.matrices[mat_idx as usize].clone();
-            mat *= SMatrix::InvBind { inv_bind_idx: term.inv_bind_idx };
+            mat *= SMatrix::InvBind {
+                inv_bind_idx: term.inv_bind_idx,
+            };
             mat *= term.weight;
 
             acc += mat
@@ -107,8 +109,8 @@ impl<'a> Builder<'a> {
     // NOTE: Ignored for now, which is incorrect, but they IME don't end up
     // affecting the final skeleton (because they end up in the "longest suffix
     // of constant factors"; see joint_tree) so it doesn't matter much.
-    fn scale_up(&mut self) { }
-    fn scale_down(&mut self) { }
+    fn scale_up(&mut self) {}
+    fn scale_down(&mut self) {}
 
     fn draw(&mut self, mesh_idx: u8) {
         let mesh = &self.model.meshes[mesh_idx as usize];
@@ -116,7 +118,9 @@ impl<'a> Builder<'a> {
         let interpreter = CmdParser::new(&mesh.gpu_commands);
 
         for cmd_res in interpreter {
-            if cmd_res.is_err() { break; }
+            if cmd_res.is_err() {
+                break;
+            }
             match cmd_res.unwrap() {
                 GpuCmd::Restore { idx } => self.load_matrix(idx as u8),
                 // Again, ignore scalings.

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use db::{Database, TextureId, PaletteId};
-use glium::{Display, Texture2d, texture::RawImage2d};
+use db::{Database, PaletteId, TextureId};
+use glium::{texture::RawImage2d, Display, Texture2d};
 use nds;
+use std::collections::HashMap;
 
 // TODO: move somewhere more important.
 pub type ImageId = (TextureId, Option<PaletteId>);
@@ -19,17 +19,11 @@ pub struct TextureCache {
 impl TextureCache {
     pub fn new(display: &Display) -> TextureCache {
         // 1x1 white texture
-        let white_image = RawImage2d::from_raw_rgba(
-            vec![255, 255, 255, 255u8],
-            (1, 1),
-        );
+        let white_image = RawImage2d::from_raw_rgba(vec![255, 255, 255, 255u8], (1, 1));
         let white_texture_ = Texture2d::new(display, white_image).unwrap();
 
         // 1x1 magenta texture
-        let error_image = RawImage2d::from_raw_rgba(
-            vec![255, 0, 255, 255u8],
-            (1, 1),
-        );
+        let error_image = RawImage2d::from_raw_rgba(vec![255, 0, 255, 255u8], (1, 1));
         let error_texture_ = Texture2d::new(display, error_image).unwrap();
 
         TextureCache {

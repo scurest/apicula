@@ -2,18 +2,18 @@
 mod xml;
 mod make_invertible;
 
+use self::xml::Xml;
 use cgmath::{Matrix4, One};
+use connection::Connection;
 use convert::image_namer::ImageNamer;
 use db::{Database, ModelId};
-use skeleton::{Skeleton, Transform, SMatrix};
-use primitives::{self, Primitives};
 use nitro::Model;
-use petgraph::{Direction};
 use petgraph::graph::NodeIndex;
+use petgraph::Direction;
+use primitives::{self, Primitives};
+use skeleton::{SMatrix, Skeleton, Transform};
 use time;
 use util::BiList;
-use connection::Connection;
-use self::xml::Xml;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
@@ -39,13 +39,24 @@ pub fn write(
     // We need invertible matrices since we're obliged to give values for
     // inverse bind matrices.
     use self::make_invertible::make_invertible;
-    let objects = &model.objects.iter()
+    let objects = &model
+        .objects
+        .iter()
         .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
     let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, objects);
     let skel = &Skeleton::build(model, objects);
 
-    let ctx = Ctx { model_id, model, db, conn, image_namer, objects, prims, skel };
+    let ctx = Ctx {
+        model_id,
+        model,
+        db,
+        conn,
+        image_namer,
+        objects,
+        prims,
+        skel,
+    };
 
     let mut xml = Xml::with_capacity(1024 * 1024); // 1MiB
 
@@ -134,12 +145,10 @@ fn library_effects(xml: &mut Xml, ctx: &Ctx) {
         );
 
         if let Some(name) = image_name {
-            let wrap = |repeat, mirror| {
-                match (repeat, mirror) {
-                    (false, _) => "CLAMP",
-                    (true, false) => "WRAP",
-                    (true, true) => "MIRROR",
-                }
+            let wrap = |repeat, mirror| match (repeat, mirror) {
+                (false, _) => "CLAMP",
+                (true, false) => "WRAP",
+                (true, true) => "MIRROR",
             };
             xml!(xml;
                 <newparam sid=["Image-surface"]>;
@@ -268,7 +277,11 @@ fn library_geometries(xml: &mut Xml, ctx: &Ctx) {
     }
 
     // Vertex colors
-    let has_colors = ctx.prims.draw_calls.iter().any(|call| call.used_vertex_color);
+    let has_colors = ctx
+        .prims
+        .draw_calls
+        .iter()
+        .any(|call| call.used_vertex_color);
     if has_colors {
         xml!(xml;
             <source id=["colors"]>;
@@ -464,7 +477,9 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
 
 fn library_animations(xml: &mut Xml, ctx: &Ctx) {
     let anims = &ctx.conn.models[ctx.model_id].animations;
-    if anims.is_empty() { return; }
+    if anims.is_empty() {
+        return;
+    }
 
     xml!(xml;
         <library_animations>;
@@ -561,10 +576,11 @@ fn library_animations(xml: &mut Xml, ctx: &Ctx) {
     );
 }
 
-
 fn library_animation_clips(xml: &mut Xml, ctx: &Ctx) {
     let anims = &ctx.conn.models[ctx.model_id].animations;
-    if anims.is_empty() { return ;}
+    if anims.is_empty() {
+        return;
+    }
 
     xml!(xml;
         <library_animation_clips>;
@@ -624,14 +640,17 @@ fn joint_hierarchy(xml: &mut Xml, ctx: &Ctx) {
     /// Write the name for a joint that will appear in DCC programs.
     fn joint_name(ctx: &Ctx, node: NodeIndex) -> String {
         match ctx.skel.tree[node].local_to_parent {
-            Transform::Root =>
-                format!("__ROOT__"),
-            Transform::SMatrix(SMatrix::Object { object_idx }) =>
-                format!("{}", ctx.model.objects[object_idx as usize].name.print_safe()),
-            Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) =>
-                format!("__INV_BIND{}", inv_bind_idx),
-            Transform::SMatrix(SMatrix::Uninitialized { stack_pos }) =>
-                format!("__UNINITIALIZED{}", stack_pos),
+            Transform::Root => format!("__ROOT__"),
+            Transform::SMatrix(SMatrix::Object { object_idx }) => format!(
+                "{}",
+                ctx.model.objects[object_idx as usize].name.print_safe()
+            ),
+            Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) => {
+                format!("__INV_BIND{}", inv_bind_idx)
+            }
+            Transform::SMatrix(SMatrix::Uninitialized { stack_pos }) => {
+                format!("__UNINITIALIZED{}", stack_pos)
+            }
         }
     }
 
@@ -648,14 +667,12 @@ fn joint_hierarchy(xml: &mut Xml, ctx: &Ctx) {
         );
 
         let mat = match tree[node].local_to_parent {
-            Transform::Root =>
-                Matrix4::one(),
-            Transform::SMatrix(SMatrix::Object { object_idx }) =>
-                ctx.objects[object_idx as usize],
-            Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) =>
-                ctx.model.inv_binds[inv_bind_idx as usize],
-            Transform::SMatrix(SMatrix::Uninitialized { .. }) =>
-                Matrix4::one(),
+            Transform::Root => Matrix4::one(),
+            Transform::SMatrix(SMatrix::Object { object_idx }) => ctx.objects[object_idx as usize],
+            Transform::SMatrix(SMatrix::InvBind { inv_bind_idx }) => {
+                ctx.model.inv_binds[inv_bind_idx as usize]
+            }
+            Transform::SMatrix(SMatrix::Uninitialized { .. }) => Matrix4::one(),
         };
         xml!(xml;
             <matrix sid=["transform"]>MATRIX(&mat)</matrix>;

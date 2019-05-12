@@ -5,7 +5,7 @@
 //! See: http://problemkaputt.de/gbatek.htm#biosdecompressionfunctions
 //! See: DSDecmp (https://github.com/Barubary/dsdecmp)
 
-use std::{fmt, error, result};
+use std::{error, fmt, result};
 use util::bits::BitField;
 use util::cur::{self, Cur};
 
@@ -27,7 +27,7 @@ pub fn decompress(cur: Cur) -> Result<DecompressResult> {
 
 fn de_lz77_0x10(mut cur: Cur) -> Result<DecompressResult> {
     let header = cur.next::<u32>()?;
-    let ty = header.bits(0,8);
+    let ty = header.bits(0, 8);
     if ty != 0x10 {
         return Err(Error::DecompressFailed);
     }
@@ -63,14 +63,16 @@ fn de_lz77_0x10(mut cur: Cur) -> Result<DecompressResult> {
                 };
                 let (ofs, n) = (ofs_sub_1 + 1, n_sub_3 + 3);
 
-                if out.len() + n > decompressed_size { // too much data
+                if out.len() + n > decompressed_size {
+                    // too much data
                     return Err(Error::DecompressFailed);
                 }
-                if out.len() < ofs { // not enough data
+                if out.len() < ofs {
+                    // not enough data
                     return Err(Error::DecompressFailed);
                 }
 
-                for _ in 0 .. n {
+                for _ in 0..n {
                     let x = out[out.len() - ofs];
                     out.push(x);
                 }
@@ -90,7 +92,7 @@ fn de_lz77_0x10(mut cur: Cur) -> Result<DecompressResult> {
 
 fn de_lz77_0x11(mut cur: Cur) -> Result<DecompressResult> {
     let header = cur.next::<u32>()?;
-    let ty = header.bits(0,8);
+    let ty = header.bits(0, 8);
     if ty != 0x11 {
         return Err(Error::DecompressFailed);
     }
@@ -121,15 +123,17 @@ fn de_lz77_0x11(mut cur: Cur) -> Result<DecompressResult> {
             } else {
                 let (ofs, n);
 
-                fn nibbles(x: u8) -> (u8, u8) { (x >> 4, x & 0xf) }
-                let (a,b) = nibbles(cur.next::<u8>()?);
+                fn nibbles(x: u8) -> (u8, u8) {
+                    (x >> 4, x & 0xf)
+                }
+                let (a, b) = nibbles(cur.next::<u8>()?);
                 match a {
                     0 => {
                         // ab cd ef
                         // =>
                         // n = abc + 0x11 = bc + 0x11
                         // ofs = def + 1
-                        let (c,d) = nibbles(cur.next::<u8>()?);
+                        let (c, d) = nibbles(cur.next::<u8>()?);
                         let ef = cur.next::<u8>()?;
 
                         n = (((b as usize) << 4) | (c as usize)) + 0x11;
@@ -141,7 +145,7 @@ fn de_lz77_0x11(mut cur: Cur) -> Result<DecompressResult> {
                         // n = bcde + 0x111
                         // ofs = fgh + 1
                         let cd = cur.next::<u8>()?;
-                        let (e,f) = nibbles(cur.next::<u8>()?);
+                        let (e, f) = nibbles(cur.next::<u8>()?);
                         let gh = cur.next::<u8>()?;
 
                         n = (((b as usize) << 12) | ((cd as usize) << 4) | (e as usize)) + 0x111;
@@ -159,14 +163,16 @@ fn de_lz77_0x11(mut cur: Cur) -> Result<DecompressResult> {
                     }
                 }
 
-                if out.len() + n > decompressed_size { // too much data
+                if out.len() + n > decompressed_size {
+                    // too much data
                     return Err(Error::DecompressFailed);
                 }
-                if out.len() < ofs { // not enough data
+                if out.len() < ofs {
+                    // not enough data
                     return Err(Error::DecompressFailed);
                 }
 
-                for _ in 0 .. n {
+                for _ in 0..n {
                     let x = out[out.len() - ofs];
                     out.push(x);
                 }
@@ -183,7 +189,6 @@ fn de_lz77_0x11(mut cur: Cur) -> Result<DecompressResult> {
         end_cur: cur,
     })
 }
-
 
 type Result<T> = result::Result<T, Error>;
 
@@ -208,5 +213,7 @@ impl error::Error for Error {
 }
 
 impl From<cur::Error> for Error {
-    fn from(_: cur::Error) -> Error { Error::DecompressFailed }
+    fn from(_: cur::Error) -> Error {
+        Error::DecompressFailed
+    }
 }

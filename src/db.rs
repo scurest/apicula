@@ -1,9 +1,9 @@
 use clap::ArgMatches;
-use std::path::PathBuf;
-use std::fs;
-use std::collections::HashMap;
-use nitro::{Name, Model, Texture, Palette, Animation, Pattern, Container};
 use errors::Result;
+use nitro::{Animation, Container, Model, Name, Palette, Pattern, Texture};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use util::cur::Cur;
 
 pub type FileId = usize;
@@ -35,9 +35,7 @@ pub struct Database {
 
 impl Database {
     pub fn from_arg_matches(matches: &ArgMatches) -> Result<Database> {
-        let user_paths =
-            matches.values_of_os("INPUT").unwrap()
-            .map(PathBuf::from);
+        let user_paths = matches.values_of_os("INPUT").unwrap().map(PathBuf::from);
         let file_paths = expand_directories(user_paths);
 
         use std::default::Default;
@@ -56,11 +54,16 @@ impl Database {
         let plural = |x| if x != 1 { "s" } else { "" };
         println!(
             "Got {} model{}, {} texture{}, {} palette{}, {} animation{}, {} pattern animation{}.",
-            num_models, plural(num_models),
-            num_textures, plural(num_textures),
-            num_palettes, plural(num_palettes),
-            num_animations, plural(num_animations),
-            num_patterns, plural(num_patterns),
+            num_models,
+            plural(num_models),
+            num_textures,
+            plural(num_textures),
+            num_palettes,
+            plural(num_palettes),
+            num_animations,
+            plural(num_animations),
+            num_patterns,
+            plural(num_patterns),
         );
     }
 
@@ -74,9 +77,11 @@ impl Database {
 
             let buf = match std::fs::read(&self.file_paths[file_id]) {
                 Ok(buf) => buf,
-                Err(e) =>{
-                    error!("file-system error reading {}: {}",
-                        self.file_paths[file_id].to_string_lossy(), e,
+                Err(e) => {
+                    error!(
+                        "file-system error reading {}: {}",
+                        self.file_paths[file_id].to_string_lossy(),
+                        e,
                     );
                     continue;
                 }
@@ -88,8 +93,11 @@ impl Database {
                     self.add_container(file_id, cont);
                 }
                 Err(e) => {
-                    error!("couldn't parse as a Nitro file: {}: {}",
-                        self.file_paths[file_id].to_string_lossy(), e);
+                    error!(
+                        "couldn't parse as a Nitro file: {}: {}",
+                        self.file_paths[file_id].to_string_lossy(),
+                        e
+                    );
                 }
             }
         }
@@ -119,13 +127,15 @@ impl Database {
     /// Fill out `textures_by_name` and `palettes_by_name`.
     fn build_by_name_maps(&mut self) {
         for (id, texture) in self.textures.iter().enumerate() {
-            self.textures_by_name.entry(texture.name)
+            self.textures_by_name
+                .entry(texture.name)
                 .or_insert(vec![])
                 .push(id);
         }
 
         for (id, palette) in self.palettes.iter().enumerate() {
-            self.palettes_by_name.entry(palette.name)
+            self.palettes_by_name
+                .entry(palette.name)
                 .or_insert(vec![])
                 .push(id);
         }
@@ -134,7 +144,7 @@ impl Database {
 
 /// Collects the user's provided paths, expanding any that are directories into
 /// their children (only expand once, not recursively).
-fn expand_directories<I: Iterator<Item=PathBuf>>(paths: I) -> Vec<PathBuf> {
+fn expand_directories<I: Iterator<Item = PathBuf>>(paths: I) -> Vec<PathBuf> {
     let mut file_paths = vec![];
     for path in paths {
         if path.is_dir() {

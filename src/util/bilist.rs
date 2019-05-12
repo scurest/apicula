@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use std::slice;
-use std::hash::Hash;
 use std::collections::HashMap;
+use std::hash::Hash;
+use std::slice;
 
 /// A list is a map {0, 1, ..., len - 1} -> T. A bilist is a bijective list.
 ///
@@ -18,7 +18,10 @@ pub type Iter<'a, T> = slice::Iter<'a, T>;
 
 impl<T: Eq + Hash + Clone> BiList<T> {
     pub fn new() -> BiList<T> {
-        BiList { list: vec![], reverse: HashMap::new() }
+        BiList {
+            list: vec![],
+            reverse: HashMap::new(),
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -75,9 +78,7 @@ fn test() {
     for &val in &vals {
         lut.push(val);
     }
-    let indices = vals.iter()
-        .map(|val| lut.index(val))
-        .collect::<Vec<_>>();
+    let indices = vals.iter().map(|val| lut.index(val)).collect::<Vec<_>>();
 
     for i in 0..vals.len() {
         assert_eq!(vals[i], lut[indices[i]]);

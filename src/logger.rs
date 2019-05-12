@@ -1,7 +1,7 @@
 //! Logger that prints messages like `[WARN] Lorem ipsum`.
 
 use atty;
-use log::{self, Log, Level, Metadata, Record};
+use log::{self, Level, Log, Metadata, Record};
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -26,14 +26,16 @@ impl Log for Logger {
         };
         let mut stderr = StandardStream::stderr(color_choice);
         let _ = stderr.set_color(ColorSpec::new().set_fg(Some(Color::Green)));
-        let _ = writeln!(&mut stderr, "[{}] {}",
+        let _ = writeln!(
+            &mut stderr,
+            "[{}] {}",
             record.level().to_string(),
             record.args(),
         );
         let _ = stderr.reset();
     }
 
-    fn flush(&self) { }
+    fn flush(&self) {}
 }
 
 pub fn init(level: Level) {

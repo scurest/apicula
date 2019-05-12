@@ -6,7 +6,7 @@ use cgmath::Matrix4;
 /// for some portion of an animation) this will make a new object matrix
 /// that "hides" it by making it very small.
 pub fn make_invertible(m: &Matrix4<f64>) -> Matrix4<f64> {
-    use cgmath::{SquareMatrix, One};
+    use cgmath::{One, SquareMatrix};
 
     if m.is_invertible() {
         return m.clone();
@@ -22,8 +22,10 @@ pub fn make_invertible(m: &Matrix4<f64>) -> Matrix4<f64> {
     }
 
     // Fuck this, I give up.
-    warn!("found singular object matrix (COLLADA requires an invertible \
-        matrix here); proceeding with the identity. Your model may look wrong.");
+    warn!(
+        "found singular object matrix (COLLADA requires an invertible \
+         matrix here); proceeding with the identity. Your model may look wrong."
+    );
     debug!("namely, the matrix {:#?}", m);
     Matrix4::one()
 }

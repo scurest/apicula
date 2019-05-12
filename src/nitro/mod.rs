@@ -12,20 +12,20 @@
 //!
 //! The code in this module should be more complete.
 
-pub mod model;
-pub mod tex;
 pub mod animation;
 pub mod container;
-pub mod name;
-pub mod render_cmds;
-pub mod pattern;
 mod info_block;
+pub mod model;
+pub mod name;
+pub mod pattern;
+pub mod render_cmds;
 mod rotation;
+pub mod tex;
 
-pub use self::name::Name;
+pub use self::animation::Animation;
 pub use self::container::Container;
 pub use self::model::Model;
-pub use self::tex::Texture;
-pub use self::tex::Palette;
-pub use self::animation::Animation;
+pub use self::name::Name;
 pub use self::pattern::Pattern;
+pub use self::tex::Palette;
+pub use self::tex::Texture;

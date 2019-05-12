@@ -37,14 +37,18 @@ pub struct ATerm {
 // SMatrix -> CMatrix
 impl From<SMatrix> for CMatrix {
     fn from(smat: SMatrix) -> CMatrix {
-        CMatrix { factors: vec![smat] }
+        CMatrix {
+            factors: vec![smat],
+        }
     }
 }
 
 // CMatrix -> AMatrix
 impl From<CMatrix> for AMatrix {
     fn from(cmat: CMatrix) -> AMatrix {
-        AMatrix { terms: vec![ATerm { weight: 1.0, cmat }] }
+        AMatrix {
+            terms: vec![ATerm { weight: 1.0, cmat }],
+        }
     }
 }
 
@@ -58,14 +62,20 @@ impl From<SMatrix> for AMatrix {
 
 impl CMatrix {
     /// Identity CMatrix
-    pub fn one() -> CMatrix { CMatrix { factors: vec![] } }
+    pub fn one() -> CMatrix {
+        CMatrix { factors: vec![] }
+    }
 }
 
 impl AMatrix {
     /// Identity AMatrix
-    pub fn one() -> AMatrix { CMatrix::one().into() }
+    pub fn one() -> AMatrix {
+        CMatrix::one().into()
+    }
     /// Zero AMatrix
-    pub fn zero() -> AMatrix { AMatrix { terms: vec![] } }
+    pub fn zero() -> AMatrix {
+        AMatrix { terms: vec![] }
+    }
 }
 
 // AMatrix *= SMatrix
