@@ -299,7 +299,7 @@ fn library_geometries(xml: &mut Xml, ctx: &Ctx) {
                 }
                 </float_array>;
                 <technique_common>;
-                    <accessor source=["normals-array"] count=[(verts.len())] stride=["3"]>;
+                    <accessor source=["#normals-array"] count=[(verts.len())] stride=["3"]>;
                         <param name=["X"] type=["float"]/>;
                         <param name=["Y"] type=["float"]/>;
                         <param name=["Z"] type=["float"]/>;
