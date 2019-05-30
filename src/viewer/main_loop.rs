@@ -47,7 +47,9 @@ pub fn main_loop(db: Database, conn: Connection) {
         viewer.update(&display, dt);
 
         if let Some(LogicalSize { width, height }) = window.get_inner_size() {
-            viewer.set_aspect_ratio(width / height);
+            if width > 0.0 && height > 0.0 {
+                viewer.set_aspect_ratio(width / height);
+            }
         }
 
         let mut frame = display.draw();
