@@ -14,7 +14,8 @@ use util::OutDir;
 
 pub fn main(matches: &ArgMatches) -> Result<()> {
     let input_file = matches.value_of_os("INPUT").unwrap();
-    let input = fs::read(&input_file)?;
+    let input = fs::read(&input_file)
+        .map_err(|e| errmsg!("couldn't read input file: {}", e))?;
     let cur = Cur::new(&input[..]);
 
     let out_dir_path = PathBuf::from(matches.value_of("OUTPUT").unwrap());

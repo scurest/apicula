@@ -1,25 +1,41 @@
-error_chain! {
-    foreign_links {
-        Cur(::util::cur::Error);
-        Fmt(::std::fmt::Error);
-        Io(::std::io::Error);
-        TimeFmt(::time::ParseError);
-        Png(::png::EncodingError);
-        GliumDisplayCreate(::glium::backend::glutin::DisplayCreationError);
-        GliumVertexCreate(::glium::vertex::BufferCreationError);
-        GliumIndexCreate(::glium::index::BufferCreationError);
-        GliumTextureCreate(::glium::texture::TextureCreationError);
+use std::error::Error;
+use std::fmt;
+
+pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+/// Error message.
+#[derive(Debug)]
+pub struct ErrorMsg {
+    pub msg: String,
+}
+
+impl fmt::Display for ErrorMsg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&self.msg)
     }
+}
+
+impl Error for ErrorMsg {}
+
+macro_rules! errmsg {
+    ($msg:expr) => {
+        ::errors::ErrorMsg { msg: $msg.into() }
+    };
+    ($fmt:expr, $($arg:tt)+) => {
+        ::errors::ErrorMsg { msg: format!($fmt, $($arg)+) }
+    };
+}
+
+macro_rules! bail {
+    ($($arg:tt)+) => {
+        return Err(errmsg!($($arg)+).into())
+    };
 }
 
 macro_rules! check {
     ($b:expr) => {
         if !$b {
-            use ::errors::Error;
-            use ::errors::ErrorKind;
-            Err(Error::from_kind(
-                ErrorKind::Msg(format!("expected: {}", stringify!($b)))
-            ))
+            Err(errmsg!(concat!("expected: ", stringify!($b))))
         } else {
             Ok(())
         }

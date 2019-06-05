@@ -199,13 +199,7 @@ impl fmt::Display for Error {
     }
 }
 
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::DecompressFailed => "decompress failed",
-        }
-    }
-}
+impl error::Error for Error {}
 
 impl From<cur::Error> for Error {
     fn from(_: cur::Error) -> Error { Error::DecompressFailed }

@@ -5,8 +5,6 @@
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate error_chain;
-#[macro_use]
 extern crate glium;
 #[macro_use]
 extern crate clap;
@@ -53,7 +51,7 @@ fn main() {
     let ret_code = match main2() {
         Ok(()) => 0,
         Err(e) => {
-            error!("error: {}", e);
+            error!("{}", e);
             1
         }
     };

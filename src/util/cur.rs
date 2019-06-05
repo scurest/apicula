@@ -110,14 +110,8 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "buffer too short")
+        write!(f, "ran out of data")
     }
 }
 
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::TooShort => "buffer too short",
-        }
-    }
-}
+impl error::Error for Error {}
