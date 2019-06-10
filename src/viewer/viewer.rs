@@ -342,33 +342,47 @@ impl Viewer {
     /// Update what texture to use for each material (to the values in the
     /// current pattern animation frame).
     fn update_materials(&mut self, display: &Display) {
-        let material_map = match self.cur_pattern() {
-            None => {
-                self.conn.models[self.model_id].materials.iter().map(|mat_conn| {
-                    match mat_conn.image_id() {
-                        Ok(Some(image_id)) => MaterialTextureBinding::ImageId(image_id),
-                        Ok(None) => MaterialTextureBinding::None,
-                        Err(_) => MaterialTextureBinding::Missing,
-                    }
-                }).collect()
-            }
-            Some(pat) => {
+        // First get the bindings for each material from the model file.
+        let mut material_map: Vec<MaterialTextureBinding> =
+            self.conn.models[self.model_id].materials.iter()
+            .map(|mat_conn| {
+                match mat_conn.image_id() {
+                    Ok(Some(image_id)) => MaterialTextureBinding::ImageId(image_id),
+                    Ok(None) => MaterialTextureBinding::None,
+                    Err(_) => MaterialTextureBinding::Missing,
+                }
+            })
+            .collect();
+
+        // Now update all the materials that are animated by the current
+        // pattern animation.
+        if let Some(pat) = self.cur_pattern() {
+            let mats = &self.cur_model().materials;
+            for (mat_id, mat) in mats.iter().enumerate() {
+                // Find a track for this material (with the same name)
+                let track =
+                    pat.material_tracks.iter()
+                    .find(|track| track.name == mat.name);
+                let track = match track {
+                    Some(x) => x,
+                    None => continue,
+                };
+
+                let (texture_idx, palette_idx) = track.sample(self.pat_anim_frame);
+
                 let pat_conn = &self.conn.models[self.model_id].patterns[self.pat_idx.unwrap()];
-                pat.material_tracks.iter().map(|track| {
-                    let (texture_idx, palette_idx) = track.sample(self.pat_anim_frame);
-                    let texture_id = pat_conn.texture_ids[texture_idx as usize]?;
-                    let palette_id = pat_conn.palette_ids[palette_idx as usize]?;
-                    Some((texture_id, palette_id))
-                }).map(|result| {
-                    match result {
-                        Some((texture_id, palette_id)) =>
-                            MaterialTextureBinding::ImageId((texture_id, Some(palette_id))),
-                        None =>
-                            MaterialTextureBinding::Missing,
-                    }
-                }).collect()
+                let (texture_id, palette_id) = (
+                    pat_conn.texture_ids[texture_idx as usize],
+                    pat_conn.palette_ids[palette_idx as usize],
+                );
+
+                material_map[mat_id] = match (texture_id, palette_id) {
+                    (Some(t), Some(p)) => MaterialTextureBinding::ImageId((t, Some(p))),
+                    _ => MaterialTextureBinding::Missing,
+                };
             }
-        };
+        }
+
         self.model_viewer.update_materials(display, &self.db, material_map);
     }
 
