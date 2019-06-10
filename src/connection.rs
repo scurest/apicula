@@ -253,10 +253,22 @@ pub struct PatternConnection {
     pub palette_ids: Vec<Option<PaletteId>>,
 }
 
-/// TO DETERMINE WHICH PATTERNS APPLY: Currently we just use all of them for
-/// every model.
-fn find_applicable_patterns(db: &Database, _model_id: ModelId) -> Vec<PatternConnection> {
+/// TO DETERMINE WHICH PATTERNS APPLY: A pattern track targets a material by
+/// name, so apply a pattern to a model when every track in the pattern targets
+/// a valid material in that model.
+fn find_applicable_patterns(db: &Database, model_id: ModelId) -> Vec<PatternConnection> {
+    let model = &db.models[model_id];
     db.patterns.iter().enumerate().filter_map(|(pattern_id, pattern)| {
+        // Check if all the tracks target valid materials
+        let valid = pattern.material_tracks.iter().all(|track| {
+            model.materials.iter().find(|mat| mat.name == track.name).is_some()
+        });
+        if !valid {
+            return None;
+        }
+
+        // TODO: give priority to textures/palettes in the same file as the
+        // model.
         let texture_ids = pattern.texture_names.iter().map(|name| {
             let ids = db.textures_by_name.get(name)?;
             Some(ids[0])
