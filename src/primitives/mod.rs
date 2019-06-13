@@ -21,6 +21,7 @@ pub struct Primitives {
 }
 
 /// How to interpret the data in the indices buffer.
+#[derive(PartialEq, Eq)]
 pub enum PolyType {
     /// Every three elements define a triangle.
     Tris,

@@ -1,6 +1,7 @@
 mod gltf;
 mod object_trs;
 mod curve;
+mod primitive;
 
 use nitro::Model;
 use db::{Database, ModelId};
@@ -16,6 +17,7 @@ use util::{BiList, BiMap};
 use self::curve::{GlTFObjectCurves, CurveDomain};
 use nitro::animation::Curve;
 use std::collections::HashMap;
+use self::primitive::encode_ngons;
 use nds::Alpha;
 
 static FRAME_LENGTH: f32 = 1.0 / 60.0; // 60 fps
@@ -43,7 +45,8 @@ pub fn to_gltf(
     let objects = rest_trses.objects.iter()
         .map(|trs| Matrix4::from(trs))
         .collect::<Vec<_>>();
-    let prims = &Primitives::build(model, PolyType::Tris, &objects);
+    let prims = Primitives::build(model, PolyType::TrisAndQuads, &objects);
+    let prims = &encode_ngons(prims);
     let skel = &Skeleton::build(model, &objects);
 
     let ctx = Ctx { model_id, model, db, conn, image_namer, rest_trses, prims, skel };
@@ -55,6 +58,7 @@ pub fn to_gltf(
     animations(&ctx, & mut gltf);
     materials(&ctx, &mut gltf);
 
+    gltf.cleanup();
     gltf
 }
 
@@ -299,6 +303,9 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
             ),
             "material" => call.mat_id,
             "indices" => indices_accessor,
+            "extensions" => object!(
+                "FB_ngon_encoding" => object!(),
+            ),
         );
         if let Some(tex_accessor) = tex_accessor {
             primitive["attributes"]["TEXCOORD_0"] = tex_accessor.into();
@@ -324,6 +331,8 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
             "name" => ctx.model.name.to_string(),
         )
     );
+
+    gltf.json["extensionsUsed"].push("FB_ngon_encoding").unwrap();
 }
 
 fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
@@ -876,8 +885,6 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
     if gltf.json["materials"].is_empty() { gltf.json.remove("materials"); }
 
     if gltf.json.has_key("materials") {
-        gltf.json["extensionsUsed"] = array!(
-            "KHR_materials_unlit"
-        );
+        gltf.json["extensionsUsed"].push("KHR_materials_unlit").unwrap();
     }
 }

@@ -21,7 +21,18 @@ impl GlTF {
                 ),
                 "bufferViews" => array!(),
                 "accessors" => array!(),
+                "extensionsUsed" => array!(),
+                "extensionsRequired" => array!(),
             )
+        }
+    }
+
+    /// Remove empty top-level collections from the glTF JSON.
+    pub fn cleanup(&mut self) {
+        for &key in &["accessors", "bufferViews", "extensionsUsed", "extensionsRequired"] {
+            if self.json[key].is_empty() {
+                self.json.remove(key);
+            }
         }
     }
 
