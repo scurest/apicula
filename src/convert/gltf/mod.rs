@@ -336,9 +336,12 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
 }
 
 fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
-    // NOTE: the NodeIndices for skel.tree are the same as the indices into the
-    // glTF nodes array
+    if ctx.prims.draw_calls.is_empty() {
+        return;
+    }
 
+    // Make a node tree from the skeleton tree. The NodeIndices for skel.tree
+    // are the same as the indices into the glTF nodes array.
     gltf.json["nodes"] = ctx.skel.tree.node_indices().map(|idx| {
         use petgraph::Direction;
         use skeleton::{Transform, SMatrix};
@@ -385,10 +388,14 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
         node
     }).collect::<Vec<_>>().into();
 
-    // Insert a node in a separate tree to instantiate the mesh at
+    // Add another node above the skeleton root to instantiate the mesh at
+    // (glTF-Blender-IO doesn't like it when we instantiate a mesh on a node
+    // that's also used as a joint).
     gltf.json["nodes"].push(object!(
         "mesh" => 0,
         "skin" => 0,
+        "name" => ctx.model.name.to_string(),
+        "children" => array!(ctx.skel.root.index()),
     )).unwrap();
 
     // Make the skin
@@ -430,12 +437,8 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
 
     gltf.json["scenes"] = array!(
         object!(
-            "nodes" => array!(
-                // Root of the joint tree
-                skel.root.index(),
-                // The mesh node
-                skel.tree.node_count()
-            )
+            "nodes" => array!(skel.tree.node_count()),
+            "name" => ctx.model.name.to_string(),
         )
     );
     gltf.json["scene"] = 0.into();
