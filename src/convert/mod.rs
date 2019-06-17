@@ -40,8 +40,9 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     // Gives unique names to each model file to avoid name clashes.
     let mut model_file_namer = UniqueNamer::new();
 
-    // Save each model as a COLLADA file
     for (model_id, model) in db.models.iter().enumerate() {
+        debug!("Converting model {} ({})...", model.name, model_id);
+
         let name = model_file_namer.get_fresh_name(format!("{}", model.name.print_safe()));
         let mut f = out_dir.create_file(&format!("{}.{}", name, format))?;
 

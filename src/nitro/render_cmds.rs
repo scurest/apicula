@@ -38,6 +38,8 @@ pub enum Op {
 
 /// Parses a bytestream of render commands into a list of render ops.
 pub fn parse_render_cmds(mut cur: Cur) -> Result<Vec<Op>> {
+    trace!("render commands @ {:#x}", cur.pos());
+
     let mut ops: Vec<Op> = vec![];
 
     loop {
@@ -178,7 +180,7 @@ fn next_opcode_params<'a>(cur: &mut Cur<'a>) -> Result<(u8, &'a [u8])> {
         0x40 => 0,
         0x44 => 1,
         0x46 => 4,
-        0x47 => 1,
+        0x47 => 2,
         0x66 => 5,
         0x80 => 0,
         _ => bail!("unknown render command opcode: {:#x}", opcode),
