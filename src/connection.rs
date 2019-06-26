@@ -261,7 +261,7 @@ fn find_applicable_patterns(db: &Database, model_id: ModelId) -> Vec<PatternConn
     db.patterns.iter().enumerate().filter_map(|(pattern_id, pattern)| {
         // Check if all the tracks target valid materials
         let valid = pattern.material_tracks.iter().all(|track| {
-            model.materials.iter().find(|mat| mat.name == track.name).is_some()
+            model.materials.iter().any(|mat| mat.name == track.name)
         });
         if !valid {
             return None;

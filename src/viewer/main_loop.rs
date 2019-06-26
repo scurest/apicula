@@ -30,7 +30,7 @@ pub fn main_loop(db: Database, conn: Connection) {
 
     let grab_cursor = |grab: bool| {
         let _ = window.grab_cursor(grab);
-        let _ = window.hide_cursor(grab);
+        window.hide_cursor(grab);
     };
 
     // Buffer for the window's title

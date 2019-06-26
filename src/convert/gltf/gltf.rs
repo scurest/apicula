@@ -94,16 +94,16 @@ impl GlTF {
             // Pad to alignment
             if l % buffer.alignment != 0 {
                 scratch.resize(buffer.alignment - (l % buffer.alignment), 0);
-                w.write(&scratch)?;
+                w.write_all(&scratch)?;
                 l += buffer.alignment - (l % buffer.alignment);
             }
 
-            w.write(&buffer.bytes)?;
+            w.write_all(&buffer.bytes)?;
             l += buffer.bytes.len();
         }
         if l % 4 != 0 {
             scratch.resize(4 - (l % 4), 0);
-            w.write(&scratch)?;
+            w.write_all(&scratch)?;
         }
         Ok(())
     }
@@ -135,14 +135,14 @@ impl GlTF {
         // JSON Chunk Header
         scratch.push_u32(s.len() as u32);
         scratch.extend_from_slice(b"JSON");
-        w.write(&scratch)?;
+        w.write_all(&scratch)?;
         // JSON Chunk Data
-        w.write(s.as_bytes())?;
+        w.write_all(s.as_bytes())?;
         // BIN Chunk Header
         scratch.clear();
         scratch.push_u32(bin_len as u32);
         scratch.extend_from_slice(b"BIN\0");
-        w.write(&scratch)?;
+        w.write_all(&scratch)?;
         // Write all the buffer into the BIN data
         self.write_buffer(w)?;
 

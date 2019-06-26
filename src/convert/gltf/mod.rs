@@ -43,7 +43,7 @@ pub fn to_gltf(
 
     let rest_trses = ObjectTRSes::for_model_at_rest(model);
     let objects = rest_trses.objects.iter()
-        .map(|trs| Matrix4::from(trs))
+        .map(Matrix4::from)
         .collect::<Vec<_>>();
     let prims = Primitives::build(model, PolyType::TrisAndQuads, &objects);
     let prims = &encode_ngons(prims);
@@ -804,7 +804,7 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
                 };
                 let sampler = sampler_descs.push(sampler_desc);
 
-                let image_name = ctx.image_namer.names.get(&image_id).unwrap();
+                let image_name = &ctx.image_namer.names[&image_id];
                 let image = image_descs.push(image_name.clone());
 
                 let texture_desc = TextureDescriptor { sampler, image };
