@@ -23,24 +23,18 @@ impl Viewable for u8 {
 impl Viewable for u16 {
     fn size() -> usize { 2 }
     fn view(buf: &[u8]) -> u16 {
-        assert!(buf.len() >= 2);
-        unsafe {
-            use std::ptr::read_unaligned;
-            let ptr = buf.as_ptr() as *const u8 as *const u16;
-            read_unaligned(ptr).to_le()
-        }
+        use std::convert::TryFrom;
+        let bytes = <[u8; 2]>::try_from(&buf[0..2]).unwrap();
+        u16::from_le_bytes(bytes)
     }
 }
 
 impl Viewable for u32 {
     fn size() -> usize { 4 }
     fn view(buf: &[u8]) -> u32 {
-        assert!(buf.len() >= 4);
-        unsafe {
-            use std::ptr::read_unaligned;
-            let ptr = buf.as_ptr() as *const u8 as *const u32;
-            read_unaligned(ptr).to_le()
-        }
+        use std::convert::TryFrom;
+        let bytes = <[u8; 4]>::try_from(&buf[0..4]).unwrap();
+        u32::from_le_bytes(bytes)
     }
 }
 

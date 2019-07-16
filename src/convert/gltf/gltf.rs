@@ -173,24 +173,10 @@ pub trait ByteVec {
 
 impl ByteVec for Vec<u8> {
     fn push_u16(&mut self, x: u16) {
-        use std::ptr;
-        self.reserve(2);
-        let l = self.len();
-        unsafe {
-            self.set_len(l + 2);
-            let p = &mut self[l] as *mut u8 as *mut u16;
-            ptr::write_unaligned(p, x.to_le())
-        }
+        self.extend_from_slice(&x.to_le_bytes())
     }
     fn push_u32(&mut self, x: u32) {
-        use std::ptr;
-        self.reserve(4);
-        let l = self.len();
-        unsafe {
-            self.set_len(l + 4);
-            let p = &mut self[l] as *mut u8 as *mut u32;
-            ptr::write_unaligned(p, x.to_le())
-        }
+        self.extend_from_slice(&x.to_le_bytes())
     }
     fn push_f32(&mut self, x: f32) {
         self.push_u32(x.to_bits())
