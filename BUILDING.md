@@ -1,7 +1,7 @@
 # Build Instructions
 
 apicula is written in [Rust](https://www.rust-lang.org/). Make sure it is
-[installed](https://www.rust-lang.org/en-US/install.html).
+[installed](https://www.rust-lang.org/tools/install).
 
 1. Clone the git repo
 
