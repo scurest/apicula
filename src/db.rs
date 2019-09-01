@@ -40,7 +40,6 @@ impl Database {
             .map(PathBuf::from);
         let file_paths = expand_directories(user_paths);
 
-        use std::default::Default;
         let mut db: Database = Default::default();
         db.build(file_paths)?;
         Ok(db)

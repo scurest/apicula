@@ -153,7 +153,7 @@ fn decode_format5(buf: &mut RGBABuf, tex: &Texture, pal: &Palette) {
             let pal_addr = (extra.bits(0,14) as usize) << 1;
 
             let pixel = {
-                let mut color = |n| {
+                let color = |n| {
                     let rgb = pal_cur.nth::<u16>(pal_addr+n).unwrap_or(0);
                     rgb555a5(rgb, 31)
                 };

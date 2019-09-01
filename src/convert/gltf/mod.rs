@@ -344,7 +344,6 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
     // are the same as the indices into the glTF nodes array.
     gltf.json["nodes"] = ctx.skel.tree.node_indices().map(|idx| {
         use petgraph::Direction;
-        use skeleton::{Transform, SMatrix};
         let mut node = object!();
 
         let children = ctx.skel.tree
