@@ -2,7 +2,10 @@ use clap::ArgMatches;
 use std::path::PathBuf;
 use std::fs;
 use std::collections::HashMap;
-use nitro::{Name, Model, Texture, Palette, Animation, Pattern, Container};
+use nitro::{
+    Name, Model, Texture, Palette, Animation, Pattern,
+    MaterialAnimation, Container
+};
 use errors::Result;
 use util::cur::Cur;
 
@@ -12,6 +15,7 @@ pub type TextureId = usize;
 pub type PaletteId = usize;
 pub type AnimationId = usize;
 pub type PatternId = usize;
+//pub type MatAnimId = usize;
 
 #[derive(Default)]
 pub struct Database {
@@ -22,12 +26,14 @@ pub struct Database {
     pub palettes: Vec<Palette>,
     pub animations: Vec<Animation>,
     pub patterns: Vec<Pattern>,
+    pub mat_anims: Vec<MaterialAnimation>,
 
     pub models_found_in: Vec<FileId>,
     pub textures_found_in: Vec<FileId>,
     pub palettes_found_in: Vec<FileId>,
     pub animations_found_in: Vec<FileId>,
     pub patterns_found_in: Vec<FileId>,
+    pub mat_anims_found_in: Vec<FileId>,
 
     pub textures_by_name: HashMap<Name, Vec<TextureId>>,
     pub palettes_by_name: HashMap<Name, Vec<PaletteId>>,
@@ -51,6 +57,8 @@ impl Database {
         let num_palettes = self.palettes.len();
         let num_animations = self.animations.len();
         let num_patterns = self.patterns.len();
+        // Skip until this is working.
+        // let num_mat_anims = self.mat_anims.len();
 
         let plural = |x| if x != 1 { "s" } else { "" };
         println!(
@@ -113,6 +121,7 @@ impl Database {
         move_from_cont!(palettes, palettes_found_in);
         move_from_cont!(animations, animations_found_in);
         move_from_cont!(patterns, patterns_found_in);
+        move_from_cont!(mat_anims, mat_anims_found_in);
     }
 
     /// Fill out `textures_by_name` and `palettes_by_name`.

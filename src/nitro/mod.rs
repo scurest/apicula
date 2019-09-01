@@ -19,6 +19,7 @@ pub mod container;
 pub mod name;
 pub mod render_cmds;
 pub mod pattern;
+pub mod material_animation;
 mod info_block;
 mod rotation;
 
@@ -29,3 +30,4 @@ pub use self::tex::Texture;
 pub use self::tex::Palette;
 pub use self::animation::Animation;
 pub use self::pattern::Pattern;
+pub use self::material_animation::MaterialAnimation;

@@ -60,14 +60,15 @@ fn scan_for_compressed_nitro_files(output: &mut ExtractOutput, mut cur: Cur) {
 }
 
 fn find_next_stamp(bytes: &[u8]) -> Option<usize> {
-    // find BMD0|BTX0|BCA0|BTP0
+    // find BMD0|BTX0|BCA0|BTP0|BTA0
     let mut i = 0;
     while i + 3 < bytes.len() {
         if bytes[i] == b'B' && bytes[i+3] == b'0' {
             if (bytes[i+1] == b'M' && bytes[i+2] == b'D') ||
                (bytes[i+1] == b'T' && bytes[i+2] == b'X') ||
                (bytes[i+1] == b'C' && bytes[i+2] == b'A') ||
-               (bytes[i+1] == b'T' && bytes[i+2] == b'P') {
+               (bytes[i+1] == b'T' && bytes[i+2] == b'P') ||
+               (bytes[i+1] == b'T' && bytes[i+2] == b'A') {
                 return Some(i);
             }
         }
@@ -95,6 +96,7 @@ struct ExtractOutput {
     num_btxs: u32,
     num_bcas: u32,
     num_btps: u32,
+    num_btas: u32,
 }
 
 impl ExtractOutput {
@@ -106,17 +108,19 @@ impl ExtractOutput {
             num_btxs: 0,
             num_bcas: 0,
             num_btps: 0,
+            num_btas: 0,
         }
     }
 
     /// Print report on extraction results.
     fn print_report(&self) {
         let plural = |x| if x != 1 { "s" } else { "" };
-        println!("Found {} BMD{}, {} BTX{}, {} BCA{}, {} BTP{}.",
+        println!("Found {} BMD{}, {} BTX{}, {} BCA{}, {} BTP{}, {} BTA{}.",
             self.num_bmds, plural(self.num_bmds),
             self.num_btxs, plural(self.num_btxs),
             self.num_bcas, plural(self.num_bcas),
             self.num_btps, plural(self.num_btps),
+            self.num_btas, plural(self.num_btas),
         );
     }
 
@@ -129,6 +133,7 @@ impl ExtractOutput {
             b"BTX0" => "nsbtx",
             b"BCA0" => "nsbca",
             b"BTP0" => "nsbtp",
+            b"BTA0" => "nsbta",
             _ => "nsbxx",
         };
 
@@ -153,6 +158,7 @@ impl ExtractOutput {
                     b"BTX0" => self.num_btxs += 1,
                     b"BCA0" => self.num_bcas += 1,
                     b"BTP0" => self.num_btps += 1,
+                    b"BTA0" => self.num_btas += 1,
                     _ => (),
                 }
             }
@@ -175,12 +181,15 @@ fn guess_container_name(cont: &Container) -> String {
         format!("{}", cont.animations[0].name.print_safe())
     } else if !cont.patterns.is_empty() {
         format!("{}", cont.patterns[0].name.print_safe())
+    } else if !cont.mat_anims.is_empty() {
+        format!("{}", cont.mat_anims[0].name.print_safe())
     } else {
         match cont.stamp {
             b"BMD0" => "empty_model_file",
             b"BTX0" => "empty_texture_file",
             b"BCA0" => "empty_animation_file",
             b"BTP0" => "empty_pattern_file",
+            b"BTA0" => "empty_material_anim_file",
             _ => "empty_unknown_file",
         }.to_string()
     }

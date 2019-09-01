@@ -13,11 +13,11 @@
 //! enforce this. We'll read any kind of file we can get our hands on!
 
 use errors::Result;
-use nitro::{Model, Texture, Palette, Animation, Pattern};
+use nitro::{Model, Texture, Palette, Animation, Pattern, MaterialAnimation};
 use nitro::info_block;
 use util::cur::Cur;
 
-const STAMPS: [&[u8]; 4] = [b"BMD0", b"BTX0", b"BCA0", b"BTP0"];
+const STAMPS: [&[u8]; 5] = [b"BMD0", b"BTX0", b"BCA0", b"BTP0", b"BTA0"];
 
 pub struct Container {
     pub stamp: &'static [u8],
@@ -27,6 +27,7 @@ pub struct Container {
     pub palettes: Vec<Palette>,
     pub animations: Vec<Animation>,
     pub patterns: Vec<Pattern>,
+    pub mat_anims: Vec<MaterialAnimation>,
 }
 
 pub fn read_container(cur: Cur) -> Result<Container> {
@@ -44,7 +45,7 @@ pub fn read_container(cur: Cur) -> Result<Container> {
         match STAMPS.iter().find(|&s| s == &stamp) {
             Some(x) => x,
             None => bail!("unrecognized Nitro container: expected \
-                the first four bytes to be one of: BMD0, BTX0, BCA0, BTP0"),
+                the first four bytes to be one of: BMD0, BTX0, BCA0, BTP0, BTA0"),
         };
 
     check!(bom == 0xfeff)?;
@@ -54,6 +55,7 @@ pub fn read_container(cur: Cur) -> Result<Container> {
     let mut cont = Container {
         stamp, file_size, models: vec![], textures: vec![],
         palettes: vec![], animations: vec![], patterns: vec![],
+        mat_anims: vec![],
     };
 
     for section_off in section_offs {
@@ -73,8 +75,9 @@ fn read_section(cont: &mut Container, cur: Cur) -> Result<()> {
         b"TEX0" => add_tex(cont, cur),
         b"JNT0" => add_jnt(cont, cur),
         b"PAT0" => add_pat(cont, cur),
+        b"SRT0" => add_srt(cont, cur),
         _ => bail!("unrecognized Nitro format: expected the first four \
-            bytes to be one of: MDL0, TEX0, JNT0, PAT0"),
+            bytes to be one of: MDL0, TEX0, JNT0, PAT0, SRT0"),
     }
 }
 
@@ -149,6 +152,28 @@ fn add_pat(cont: &mut Container, cur: Cur) -> Result<()> {
             Ok(pattern) => cont.patterns.push(pattern),
             Err(e) => {
                 error!("error on pattern {}: {}", name, e);
+            }
+        }
+    }
+    Ok(())
+}
+
+// An SRT is a container for material animations.
+fn add_srt(cont: &mut Container, cur: Cur) -> Result<()> {
+    use nitro::material_animation::read_mat_anim;
+
+    fields!(cur, SRT0 {
+        stamp: [u8; 4],
+        section_size: u32,
+        end: Cur,
+    });
+    check!(stamp == b"SRT0")?;
+
+    for (off, name) in info_block::read::<u32>(end)? {
+        match read_mat_anim(cur + off, name) {
+            Ok(mat_anim) => cont.mat_anims.push(mat_anim),
+            Err(e) => {
+                error!("error on material animation {}: {}", name, e);
             }
         }
     }

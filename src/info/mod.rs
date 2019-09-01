@@ -28,6 +28,9 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
     for pattern_id in 0..db.patterns.len() {
         pattern_info(&db, pattern_id);
     }
+    for mat_anim_id in 0..db.mat_anims.len() {
+        mat_anim_info(&db, mat_anim_id);
+    }
 
     Ok(())
 }
@@ -203,3 +206,18 @@ fn pattern_info(db: &Database, pat_id: usize) {
     println!();
 }
 
+fn mat_anim_info(db: &Database, mat_anim_id: usize) {
+    let mat_anim = &db.mat_anims[mat_anim_id];
+    println!("Material Animation {}:", mat_anim_id);
+    println!("  Name: {:?}", mat_anim.name);
+    println!("  Found In: {}",
+        db.file_paths[db.mat_anims_found_in[mat_anim_id]].to_string_lossy());
+    println!("  Frames: {}", mat_anim.num_frames);
+    println!("  Tracks ({} total):", mat_anim.tracks.len());
+    for (i, track) in mat_anim.tracks.iter().enumerate() {
+        println!("    Track {}:", i);
+        println!("      Name: {}", track.name);
+        println!("      Frames: {}", track.num_frames);
+    }
+    println!();
+}
