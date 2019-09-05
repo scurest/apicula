@@ -6,7 +6,7 @@ use cgmath::{Matrix4, One};
 use convert::image_namer::ImageNamer;
 use db::{Database, ModelId};
 use skeleton::{Skeleton, Transform, SMatrix};
-use primitives::{self, Primitives};
+use primitives::{self, Primitives, DynamicState};
 use nitro::Model;
 use petgraph::{Direction};
 use petgraph::graph::NodeIndex;
@@ -42,7 +42,17 @@ pub fn write(
     let objects = &model.objects.iter()
         .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
-    let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, objects);
+    let uv_mats = &model.materials.iter()
+        .map(|mat| {
+            if mat.params.texcoord_transform_mode() == 1 {
+                mat.texture_mat
+            } else {
+                Matrix4::one()
+            }
+        })
+        .collect::<Vec<_>>();
+    let state = DynamicState { objects, uv_mats };
+    let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, state);
     let skel = &Skeleton::build(model, objects);
 
     let ctx = Ctx { model_id, model, db, conn, image_namer, objects, prims, skel };

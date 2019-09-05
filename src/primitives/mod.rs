@@ -31,6 +31,15 @@ pub enum PolyType {
     TrisAndQuads,
 }
 
+/// Dynamic state for a model (ie. stuff that changes during an animation, as
+/// opposed to static state in the Model object).
+pub struct DynamicState<'a> {
+    /// Object matrices to use.
+    pub objects: &'a [Matrix4<f64>],
+    /// UV-transform matrices to use for each material.
+    pub uv_mats: &'a [Matrix4<f64>],
+}
+
 /// Info about the result of a draw call, ie. the result of drawing a mesh (a set
 /// of GPU commands) while in a particular GPU state (matrix stack, bound material,
 /// etc.).
@@ -78,8 +87,8 @@ impl Default for Vertex {
 implement_vertex!(Vertex, position, texcoord, color, normal);
 
 impl Primitives {
-    pub fn build(model: &Model, poly_type: PolyType, objects: &[Matrix4<f64>]) -> Primitives {
-        let mut b = Builder::new(model, poly_type, objects);
+    pub fn build(model: &Model, poly_type: PolyType, state: DynamicState) -> Primitives {
+        let mut b = Builder::new(model, poly_type, state);
         use nitro::render_cmds::Op;
         for op in &model.render_ops {
             match *op {
@@ -125,7 +134,7 @@ impl GpuState {
 
 struct Builder<'a, 'b> {
     model: &'a Model,
-    objects: &'b [Matrix4<f64>],
+    state: DynamicState<'b>,
     poly_type: PolyType,
 
     gpu: GpuState,
@@ -140,14 +149,13 @@ struct Builder<'a, 'b> {
 
     cur_draw_call: DrawCall,
     next_vertex: Vertex,
-
 }
 
 impl<'a, 'b> Builder<'a, 'b> {
-    fn new(model: &'a Model, poly_type: PolyType, objects: &'b [Matrix4<f64>]) -> Builder<'a, 'b> {
+    fn new(model: &'a Model, poly_type: PolyType, state: DynamicState<'b>) -> Builder<'a, 'b> {
         Builder {
             model,
-            objects,
+            state,
             poly_type,
             gpu: GpuState::new(),
             vertices: vec![],
@@ -173,6 +181,9 @@ impl<'a, 'b> Builder<'a, 'b> {
     fn begin_draw_call(&mut self, mesh_id: u8, mat_id: u8) {
         let vert_len = self.vertices.len() as u16;
         let ind_len = self.indices.len();
+
+        // Bind material
+        self.gpu.texture_matrix = self.state.uv_mats[mat_id as usize];
 
         self.cur_draw_call = DrawCall {
             vertex_range: vert_len..vert_len,
@@ -215,7 +226,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     fn mul_by_object(&mut self, object_id: u8) {
-        self.gpu.mul_matrix(&self.objects[object_id as usize]);
+        self.gpu.mul_matrix(&self.state.objects[object_id as usize]);
     }
 
     fn blend(&mut self, terms: &[SkinTerm]) {
@@ -369,12 +380,14 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
             GpuCmd::TexCoord { texcoord } => {
                 b.cur_draw_call.used_texcoords = true;
 
+                // Apply texture matrix
+                let texcoord = b.gpu.texture_matrix * vec4(texcoord.x, texcoord.y, 0.0, 1.0);
+
                 // Transform into OpenGL-type [0,1]x[0,1] texture space.
                 let texcoord = Point2::new(
                     texcoord.x / b.cur_texture_dim.0 as f64,
                     1.0 - texcoord.y / b.cur_texture_dim.1 as f64, // y-down to y-up
                 );
-                let texcoord = b.gpu.texture_matrix * vec4(texcoord.x, texcoord.y, 0.0, 0.0);
                 b.next_vertex.texcoord = [texcoord.x as f32, texcoord.y as f32];
             }
             GpuCmd::Color { color } => {

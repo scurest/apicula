@@ -7,7 +7,7 @@
 //! out for ourselves. This modules contains the heuristics for that.
 
 use clap::ArgMatches;
-use db::{Database, AnimationId, TextureId, PaletteId, ModelId, PatternId};
+use db::{Database, AnimationId, TextureId, PaletteId, ModelId, PatternId, MatAnimId};
 use errors::Result;
 
 /// A Connection records interrelationships between Nitro resources, namely how
@@ -25,6 +25,8 @@ pub struct ModelConnection {
     /// List of patterns that can be applied to the model (and how to apply
     /// them).
     pub patterns: Vec<PatternConnection>,
+    /// List of material animations that can be applied to the model.
+    pub mat_anims: Vec<MatAnimConnection>,
 }
 
 /// Result of resolving which texture/palette a material should use.
@@ -118,7 +120,8 @@ impl Connection {
 
             let animations = find_applicable_animations(db, model_id, options);
             let patterns = find_applicable_patterns(db, model_id);
-            ModelConnection { materials, animations, patterns }
+            let mat_anims = find_applicable_mat_anims(db, model_id);
+            ModelConnection { materials, animations, patterns, mat_anims }
         }).collect();
 
         if missing_textures {
@@ -283,5 +286,22 @@ fn find_applicable_patterns(db: &Database, model_id: ModelId) -> Vec<PatternConn
             texture_ids,
             palette_ids,
         })
+    }).collect()
+}
+
+/// Indicates that a model can have the specified material animations applied to
+/// it.
+pub struct MatAnimConnection {
+    pub mat_anim_id: MatAnimId,
+}
+
+fn find_applicable_mat_anims(db: &Database, model_id: ModelId) -> Vec<MatAnimConnection> {
+    let model = &db.models[model_id];
+    db.mat_anims.iter().enumerate().filter_map(|(mat_anim_id, mat_anim)| {
+        // Check if all the tracks target valid materials
+        let valid = mat_anim.tracks.iter().all(|track| {
+            model.materials.iter().any(|mat| mat.name == track.name)
+        });
+        if !valid { None } else { Some(MatAnimConnection { mat_anim_id }) }
     }).collect()
 }

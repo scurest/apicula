@@ -6,10 +6,10 @@ mod primitive;
 use nitro::Model;
 use db::{Database, ModelId};
 use connection::Connection;
-use primitives::{Primitives, PolyType};
+use primitives::{Primitives, PolyType, DynamicState};
 use skeleton::{Skeleton, Transform, SMatrix};
 use super::image_namer::ImageNamer;
-use cgmath::Matrix4;
+use cgmath::{Matrix4, One};
 use json::JsonValue;
 use self::gltf::{GlTF, Buffer, ByteVec, VecExt};
 use self::object_trs::ObjectTRSes;
@@ -45,7 +45,17 @@ pub fn to_gltf(
     let objects = rest_trses.objects.iter()
         .map(Matrix4::from)
         .collect::<Vec<_>>();
-    let prims = Primitives::build(model, PolyType::TrisAndQuads, &objects);
+    let uv_mats = model.materials.iter()
+        .map(|mat| {
+            if mat.params.texcoord_transform_mode() == 1 {
+                mat.texture_mat
+            } else {
+                Matrix4::one()
+            }
+        })
+        .collect::<Vec<Matrix4<f64>>>();
+    let state = DynamicState { objects: &objects, uv_mats: &uv_mats };
+    let prims = Primitives::build(model, PolyType::TrisAndQuads, state);
     let prims = &encode_ngons(prims);
     let skel = &Skeleton::build(model, &objects);
 

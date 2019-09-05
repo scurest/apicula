@@ -15,7 +15,7 @@ pub type TextureId = usize;
 pub type PaletteId = usize;
 pub type AnimationId = usize;
 pub type PatternId = usize;
-//pub type MatAnimId = usize;
+pub type MatAnimId = usize;
 
 #[derive(Default)]
 pub struct Database {
