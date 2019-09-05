@@ -38,6 +38,22 @@ impl Viewable for u32 {
     }
 }
 
+impl<T> Viewable for [T; 5] where
+    T: Viewable,
+{
+    fn size() -> usize { 5 * <T as Viewable>::size() }
+    fn view(buf: &[u8]) -> [T; 5] {
+        let sz = <T as Viewable>::size();
+
+        let t0 = <T as Viewable>::view(&buf[0*sz..1*sz]);
+        let t1 = <T as Viewable>::view(&buf[1*sz..2*sz]);
+        let t2 = <T as Viewable>::view(&buf[2*sz..3*sz]);
+        let t3 = <T as Viewable>::view(&buf[3*sz..4*sz]);
+        let t4 = <T as Viewable>::view(&buf[4*sz..5*sz]);
+        [t0, t1, t2, t3, t4]
+    }
+}
+
 impl<T,S> Viewable for (T,S) where
     T: Viewable,
     S: Viewable

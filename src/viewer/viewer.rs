@@ -394,7 +394,9 @@ impl Viewer {
                     .collect::<Vec<Matrix4<f64>>>()
             }
         };
-        let uv_mats = self.cur_model().materials.iter()
+
+        // Eval material anim
+        let mut uv_mats = self.cur_model().materials.iter()
             .map(|mat| {
                 if mat.params.texcoord_transform_mode() == 1 {
                     mat.texture_mat
@@ -403,6 +405,17 @@ impl Viewer {
                 }
             })
             .collect::<Vec<Matrix4<f64>>>();
+        if let Some(mat_anim) = self.cur_mat_anim() {
+            for track in &mat_anim.tracks {
+                for (i, mat) in self.cur_model().materials.iter().enumerate() {
+                    if mat.name == track.name {
+                        uv_mats[i] = track.eval_uv_mat(self.mat_anim_frame);
+                        break;
+                    }
+                }
+            }
+        }
+
         let state = DynamicState { objects: &objects, uv_mats: &uv_mats };
         let prims = Primitives::build(self.cur_model(), PolyType::Tris, state);
         self.model_viewer.update_vertices(&prims.vertices);
@@ -461,6 +474,8 @@ impl Viewer {
         self.single_stepping = false;
         self.pat_idx = None;
         self.pat_anim_frame = 0;
+        self.mat_anim_idx = None;
+        self.mat_anim_frame = 0;
     }
 
     fn change_anim_idx(&mut self, anim_idx: Option<usize>) {

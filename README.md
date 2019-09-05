@@ -85,10 +85,15 @@ apicula recognized these file formats
 * `.nsbtx`, `.BTX`, or `.BTX0` contain textures and palettes
 * `.nsbtp`, `.BTP`, or `.BTP0` contain pattern animations, which change the
   textures in a material
+* `.nsbta`, `.BTA`, or `.BTA0` contain material animations, for eg. texture
+  scrolling effects (EXPERIMENTAL!!)
 
 Pattern animations are supported in the viewer and extractor, but not in the
 converter (neither COLLADA nor glTF support animations that change a material's
 textures).
+
+Material animations are supported in the viewer and extractor, but not in the
+converter.
 
 Importing apicula's COLLADA files has been tested in Blender and Maya.
 

@@ -217,7 +217,6 @@ fn mat_anim_info(db: &Database, mat_anim_id: usize) {
     for (i, track) in mat_anim.tracks.iter().enumerate() {
         println!("    Track {}:", i);
         println!("      Name: {}", track.name);
-        println!("      Frames: {}", track.num_frames);
     }
     println!();
 }

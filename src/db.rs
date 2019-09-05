@@ -57,18 +57,22 @@ impl Database {
         let num_palettes = self.palettes.len();
         let num_animations = self.animations.len();
         let num_patterns = self.patterns.len();
-        // Skip until this is working.
-        // let num_mat_anims = self.mat_anims.len();
+        let num_mat_anims = self.mat_anims.len();
 
         let plural = |x| if x != 1 { "s" } else { "" };
         println!(
-            "Got {} model{}, {} texture{}, {} palette{}, {} animation{}, {} pattern animation{}.",
+            "Got {} model{}, {} texture{}, {} palette{}, {} animation{}, {} pattern animation{}, {} material animation{}.",
             num_models, plural(num_models),
             num_textures, plural(num_textures),
             num_palettes, plural(num_palettes),
             num_animations, plural(num_animations),
             num_patterns, plural(num_patterns),
+            num_mat_anims, plural(num_mat_anims),
         );
+
+        if num_mat_anims > 0 {
+            info!("Material animation support is experimental!")
+        }
     }
 
     fn build(&mut self, file_paths: Vec<PathBuf>) -> Result<()> {
