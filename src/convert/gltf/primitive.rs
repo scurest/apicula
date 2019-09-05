@@ -28,7 +28,7 @@ pub fn encode_ngons(mut prims: Primitives) -> Primitives {
                     tris.push(face[3]);
                 }
             } else {
-                last_face_index = face[1];
+                last_face_index = face[2];
 
                 tris.push(face[2]);
                 tris.push(face[0]);
