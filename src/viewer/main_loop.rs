@@ -74,7 +74,7 @@ pub fn main_loop(db: Database, conn: Connection) {
                     WEv::KeyboardInput { input, .. } => {
                         if input.virtual_keycode.is_none() { return; }
                         let keycode = input.virtual_keycode.unwrap();
-                        viewer.key(&display, (input.state, keycode));
+                        viewer.key(&display, (input.state, keycode, input.modifiers));
                     }
                     WEv::MouseInput { state, button, .. } => {
                         use self::glutin::ElementState as Es;

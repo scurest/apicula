@@ -1,8 +1,9 @@
+use std::ops::Range;
 use super::model_viewer::{ModelViewer, MaterialTextureBinding};
 use db::{Database, ModelId, AnimationId, PatternId, MatAnimId};
 use connection::Connection;
 use glium::Display;
-use glium::glutin::ElementState;
+use glium::glutin::{ElementState, ModifiersState};
 use glium::{Frame, Surface};
 use glium::glutin::VirtualKeyCode;
 use nitro::{Model, Animation, Pattern, MaterialAnimation};
@@ -16,35 +17,90 @@ pub struct Viewer {
     conn: Connection,
     model_viewer: ModelViewer,
 
-    /// ID of the viewed model.
+    /// ID of the current model.
     model_id: ModelId,
+    /// Current object matrices (changed as Animations play).
+    object_mats: Vec<Matrix4<f64>>,
+    /// Current texture binding for each material (changed as Pattern plays).
+    material_map: Vec<MaterialTextureBinding>,
+    /// Current UV transform matrices for each material (changed as
+    /// MaterialAnimation plays).
+    uv_mats: Vec<Matrix4<f64>>,
 
-    /// The connection has a list of all the animations that can be applied to
-    /// this model. This is the index of the current animation in that list (or
-    /// None if no animation is selected).
-    anim_idx: Option<usize>,
-    /// Current animation frame.
-    anim_frame: u16,
+    // States for each different kind of animation.
+    anim_state: AnimState,
+    pat_state: AnimState,
+    mat_anim_state: AnimState,
 
-    pat_idx: Option<usize>,
-    pat_anim_frame: u16,
-
-    mat_anim_idx: Option<usize>,
-    mat_anim_frame: u16,
-    // TODO: refactor this
-
-    /// When single-stepping is enabled, the user advanced the animation
-    /// manually. When disabled, the animation advanced with time (ie. plays
-    /// normally).
-    single_stepping: bool,
     /// Accumulator for time.
     time_acc: f64,
+    /// Keeps track of the FPS.
     fps_counter: FpsCounter,
-    /// Direction of motion.
+    /// Direction of motion (for the WASD controls).
     move_vector: Vector3<f32>,
-    /// Index of the current speed in SPEEDS.
+    /// Movement speed (for WASD) as an index into the SPEEDS array.
     speed_idx: usize,
 }
+
+struct AnimState {
+    /// Index into the current model's connection array.
+    connection_idx: Option<usize>,
+    /// Current frame
+    frame: u16,
+    /// When single-stepping is enabled, the user advances the animation
+    /// manually instead of it advancing automatically with time.
+    single_stepping: bool,
+}
+
+impl AnimState {
+    fn none() -> AnimState {
+        AnimState {
+            connection_idx: None,
+            frame: 0,
+            single_stepping: false,
+        }
+    }
+
+    fn next(&mut self, num: usize) {
+        let new_idx = match self.connection_idx {
+            None if num == 0 => None,
+            None => Some(0),
+            Some(x) if x == num - 1 => None,
+            Some(x) => Some(x + 1),
+        };
+        self.connection_idx = new_idx;
+        self.frame = 0;
+        self.single_stepping = false;
+    }
+
+    fn prev(&mut self, num: usize) {
+        let new_idx = match self.connection_idx {
+            None if num == 0 => None,
+            None => Some(num - 1),
+            Some(0) => None,
+            Some(x) => Some(x - 1),
+        };
+        self.connection_idx = new_idx;
+        self.frame = 0;
+        self.single_stepping = false;
+    }
+}
+
+// Goes the next/prev element of a range, wrapping around.
+fn next(x: usize, range: Range<usize>) -> usize {
+    if x == range.end - 1 { range.start } else { x + 1 }
+}
+fn prev(x: usize, range: Range<usize>) -> usize {
+    if x == range.start { range.end - 1 } else { x - 1 }
+}
+// grumble grumble
+fn next_u16(x: u16, range: Range<u16>) -> u16 {
+    if x == range.end - 1 { range.start } else { x + 1 }
+}
+fn prev_u16(x: u16, range: Range<u16>) -> u16 {
+    if x == range.start { range.end - 1 } else { x - 1 }
+}
+
 
 static SPEEDS: [f32; 9] = [0.5, 1.0, 3.0, 15.0, 32.0, 64.0, 96.0, 200.0, 550.0];
 static DEFAULT_SPEED_IDX: usize = 1;
@@ -60,10 +116,9 @@ pub static CONTROL_HELP: &'static str =
         "  L.Ctrl       Decrease Speed\n",
         "  L.Mouse      Free Look\n",
         "  ,.           Prev/Next Model\n",
-        "  OP           Prev/Next Animation\n",
-        "  []           Single-step Animation\n",
-        "  KL           Prev/Next Pattern Animation\n",
-        "  ;'           Prev/Next Material Animation\n",
+        "  OP           Prev/Next Animation           (+Alt to single-step instead)\n",
+        "  KL           Prev/Next Pattern Animation   (+Alt to single-step instead)\n",
+        "  ;'           Prev/Next Material Animation  (+Alt to single-step instead)\n",
         "  Space        Print Info\n",
     );
 
@@ -78,18 +133,17 @@ impl Viewer {
             db,
             conn,
             model_viewer,
-            model_id: 9999, // arbitrary; we're about to set it to 0
-            anim_idx: None,
-            anim_frame: 0,
-            pat_idx: None,
-            pat_anim_frame: 0,
-            mat_anim_idx: None,
-            mat_anim_frame: 0,
-            single_stepping: false,
-            move_vector: vec3(0.0, 0.0, 0.0),
-            speed_idx: DEFAULT_SPEED_IDX,
+            model_id: 9999, // anything non-zero is okay, we're about to change it
+            object_mats: vec![],
+            material_map: vec![],
+            uv_mats: vec![],
+            anim_state: AnimState::none(),
+            pat_state: AnimState::none(),
+            mat_anim_state: AnimState::none(),
             time_acc: 0.0,
             fps_counter: FpsCounter::new(),
+            move_vector: vec3(0.0, 0.0, 0.0),
+            speed_idx: DEFAULT_SPEED_IDX,
         };
         viewer.change_model(display, 0);
         viewer
@@ -114,22 +168,30 @@ impl Viewer {
         }
 
         while self.time_acc > FRAMERATE {
-            if !self.single_stepping {
-                self.next_frame();
+            if !self.anim_state.single_stepping {
+                self.next_anim_frame();
             }
-            self.next_pattern_frame(display);
-            self.next_mat_anim_frame();
+            if !self.pat_state.single_stepping {
+                self.next_pattern_frame(display);
+            }
+            if !self.mat_anim_state.single_stepping {
+                self.next_mat_anim_frame();
+            }
             self.time_acc -= FRAMERATE;
         }
     }
 
     pub fn draw(&self, frame: &mut Frame) {
         frame.clear_color_srgb_and_depth(BG_COLOR, 1.0);
-        self.model_viewer.draw(frame, self.cur_model())
+        self.model_viewer.draw(frame, self.cur_model(&self.db))
     }
 
     /// Handle key press/release events.
-    pub fn key(&mut self, display: &Display, (state, keycode): (ElementState, VirtualKeyCode)) {
+    pub fn key(
+        &mut self,
+        display: &Display,
+        (state, keycode, modifiers): (ElementState, VirtualKeyCode, ModifiersState),
+    ) {
         use self::VirtualKeyCode as Key;
 
         // Use WASD controls to update the move_vector.
@@ -153,6 +215,8 @@ impl Viewer {
 
         if state != ElementState::Pressed { return; }
 
+        let alt = modifiers.alt;
+
         match keycode {
             // Next/prev model
             Key::Period => {
@@ -165,49 +229,69 @@ impl Viewer {
             }
 
             // Next/prev animation
-            Key::P => {
+            Key::P if !alt => {
                 let num_anims = self.conn.models[self.model_id].animations.len();
-                let new_anim_idx = maybe_next(self.anim_idx, 0..num_anims);
-                self.change_anim_idx(new_anim_idx);
+                self.anim_state.next(num_anims);
+                self.update_object_mats();
             }
-            Key::O => {
+            Key::O if !alt => {
                 let num_anims = self.conn.models[self.model_id].animations.len();
-                let new_anim_idx = maybe_prev(self.anim_idx, 0..num_anims);
-                self.change_anim_idx(new_anim_idx);
+                self.anim_state.prev(num_anims);
+                self.update_object_mats();
             }
 
             // Single-step forward/backward in animation
-            Key::RBracket => {
-                self.single_stepping = true;
-                self.next_frame();
+            Key::P if alt => {
+                self.anim_state.single_stepping = true;
+                self.next_anim_frame();
             }
-            Key::LBracket => {
-                self.single_stepping = true;
-                self.prev_frame();
+            Key::O if alt => {
+                self.anim_state.single_stepping = true;
+                self.prev_anim_frame();
             }
 
             // Next/prev pattern animation
-            Key::L => {
+            Key::L if !alt => {
                 let num_pats = self.conn.models[self.model_id].patterns.len();
-                let new_pat_idx = maybe_next(self.pat_idx, 0..num_pats);
-                self.change_pat_idx(display, new_pat_idx);
+                self.pat_state.next(num_pats);
+                self.update_material_map(display);
             }
-            Key::K => {
+            Key::K if !alt => {
                 let num_pats = self.conn.models[self.model_id].patterns.len();
-                let new_pat_idx = maybe_prev(self.pat_idx, 0..num_pats);
-                self.change_pat_idx(display, new_pat_idx);
+                self.pat_state.prev(num_pats);
+                self.update_material_map(display);
+            }
+
+            // Single-step pattern animation
+            Key::L if alt => {
+                self.pat_state.single_stepping = true;
+                self.next_pattern_frame(display);
+            }
+            Key::K if alt => {
+                self.pat_state.single_stepping = true;
+                self.prev_pattern_frame(display);
             }
 
             // Next/prev material animation
-            Key::Apostrophe => {
-                let num = self.conn.models[self.model_id].mat_anims.len();
-                let new_idx = maybe_next(self.mat_anim_idx, 0..num);
-                self.change_mat_anim_idx(new_idx);
+            Key::Apostrophe if !alt => {
+                let num_mat_anims = self.conn.models[self.model_id].mat_anims.len();
+                self.mat_anim_state.next(num_mat_anims);
+                self.update_uv_mats();
             }
-            Key::Semicolon => {
-                let num = self.conn.models[self.model_id].mat_anims.len();
-                let new_idx = maybe_prev(self.mat_anim_idx, 0..num);
-                self.change_mat_anim_idx(new_idx);
+            Key::Semicolon if !alt => {
+                let num_mat_anims = self.conn.models[self.model_id].mat_anims.len();
+                self.mat_anim_state.prev(num_mat_anims);
+                self.update_uv_mats();
+            }
+
+            // Single-step material animation
+            Key::Apostrophe if alt => {
+                self.mat_anim_state.single_stepping = true;
+                self.next_mat_anim_frame();
+            }
+            Key::Semicolon if alt => {
+                self.mat_anim_state.single_stepping = true;
+                self.prev_mat_anim_frame();
             }
 
             // Speed up/down
@@ -245,7 +329,7 @@ impl Viewer {
     pub fn title(&self, s: &mut String) {
         use std::fmt::Write;
 
-        let model = self.cur_model();
+        let model = self.cur_model(&self.db);
         write!(s, "{model_name}[{model_num}/{num_models}] === ",
             model_name = model.name,
             model_num = self.model_id,
@@ -257,31 +341,31 @@ impl Viewer {
                 anim_name = anim.name,
                 anim_id = anim_id,
                 num_anims = self.db.animations.len(),
-                cur_frame = self.anim_frame,
+                cur_frame = self.anim_state.frame,
                 num_frames = anim.num_frames,
             ).unwrap()
         } else {
             write!(s, "Rest Pose === ").unwrap()
         }
         if let Some(pat_id) = self.pattern_id() {
-            let pat = self.cur_pattern().unwrap();
+            let pat = self.cur_pattern(&self.db).unwrap();
             write!(s, "{pat_name}[{pat_id}/{num_pats}] ({cur_frame}/{num_frames}) === ",
                 pat_name = pat.name,
                 pat_id = pat_id,
                 num_pats = self.db.patterns.len(),
-                cur_frame = self.pat_anim_frame,
+                cur_frame = self.pat_state.frame,
                 num_frames = pat.num_frames,
             ).unwrap()
         } else {
             write!(s, "No Pattern === ").unwrap()
         }
         if let Some(mat_anim_id) = self.mat_anim_id() {
-            let mat_anim = self.cur_mat_anim().unwrap();
+            let mat_anim = self.cur_mat_anim(&self.db).unwrap();
             write!(s, "{anim_name}[{anim_id}/{num_anims}] ({cur_frame}/{num_frames}) === ",
                 anim_name = mat_anim.name,
                 anim_id = mat_anim_id,
                 num_anims = self.db.mat_anims.len(),
-                cur_frame = self.mat_anim_frame,
+                cur_frame = self.mat_anim_state.frame,
                 num_frames = mat_anim.num_frames,
             ).unwrap()
         } else {
@@ -293,7 +377,7 @@ impl Viewer {
     pub fn print_info(&self) {
         println!("=============");
         println!("Model: {:?} [{}/{}]",
-            self.cur_model().name,
+            self.cur_model(&self.db).name,
             self.model_id,
             self.db.models.len());
         println!("Found in file: {}", self.db.file_paths[self.db.models_found_in[self.model_id]].display());
@@ -311,7 +395,7 @@ impl Viewer {
         }
 
         if let Some(pat_id) = self.pattern_id() {
-            let pat = self.cur_pattern().unwrap();
+            let pat = self.cur_pattern(&self.db).unwrap();
             println!("Pattern Animation: {:?} [{}/{}]",
                 pat.name,
                 pat_id,
@@ -323,7 +407,7 @@ impl Viewer {
         }
 
         if let Some(mat_anim_id) = self.mat_anim_id() {
-            let mat_anim = self.cur_mat_anim().unwrap();
+            let mat_anim = self.cur_mat_anim(&self.db).unwrap();
             println!("Material Animation: {:?} [{}/{}]",
                 mat_anim.name,
                 mat_anim_id,
@@ -343,103 +427,77 @@ impl Viewer {
             return;
         }
 
-        self.stop_animations();
+        // Reset animations
+        self.anim_state = AnimState::none();
+        self.pat_state = AnimState::none();
+        self.mat_anim_state = AnimState::none();
 
         self.model_id = model_id;
+        self.reset_state_from_model();
+        self.update_material_map(display);
 
-        let objects = self.cur_model().objects.iter()
-            .map(|ob| ob.matrix)
-            .collect::<Vec<Matrix4<f64>>>();
-        let uv_mats = self.cur_model().materials.iter()
-            .map(|mat| {
-                if mat.params.texcoord_transform_mode() == 1 {
-                    mat.texture_mat
-                } else {
-                    Matrix4::one()
-                }
-            })
-            .collect::<Vec<Matrix4<f64>>>();
-        let state = DynamicState { objects: &objects, uv_mats: &uv_mats };
-
-        let material_map = self.conn.models[self.model_id].materials.iter().map(|mat_conn| {
-            match mat_conn.image_id() {
-                Ok(Some(image_id)) => MaterialTextureBinding::ImageId(image_id),
-                Ok(None) => MaterialTextureBinding::None,
-                Err(_) => MaterialTextureBinding::Missing,
-            }
-        }).collect();
-        let prims = Primitives::build(self.cur_model(), PolyType::Tris, state);
-        self.model_viewer.change_model(display, &self.db, prims, material_map);
+        let state = DynamicState { objects: &self.object_mats, uv_mats: &self.uv_mats };
+        let prims = Primitives::build(self.cur_model(&self.db), PolyType::Tris, state);
+        self.model_viewer.change_model(display, &self.db, prims, self.material_map.clone());
     }
 
-    /// Updates the vertices of the current model (to their position in the
-    /// current animation frame).
-    fn update_vertices(&mut self) {
-        let objects = match self.cur_animation(&self.db) {
-            None => {
-                // Rest pose, use object values in model file
-                self.cur_model().objects.iter()
-                    .map(|ob| ob.matrix)
-                    .collect::<Vec<Matrix4<f64>>>()
-            }
-            Some(anim) => {
-                // Animated, sample animation curves
-                let num_objects = self.cur_model().objects.len();
-                (0..num_objects)
-                    .map(|i| {
-                        anim.objects_curves.get(i)
-                            .map(|curve| curve.sample_at(self.anim_frame))
-                            .unwrap_or(Matrix4::one())
-                    })
-                    .collect::<Vec<Matrix4<f64>>>()
-            }
-        };
+    // Reset dynamic state to the static value in the model
 
-        // Eval material anim
-        let mut uv_mats = self.cur_model().materials.iter()
-            .map(|mat| {
-                if mat.params.texcoord_transform_mode() == 1 {
-                    mat.texture_mat
-                } else {
-                    Matrix4::one()
-                }
-            })
-            .collect::<Vec<Matrix4<f64>>>();
-        if let Some(mat_anim) = self.cur_mat_anim() {
-            for track in &mat_anim.tracks {
-                for (i, mat) in self.cur_model().materials.iter().enumerate() {
-                    if mat.name == track.name {
-                        uv_mats[i] = track.eval_uv_mat(self.mat_anim_frame);
-                        break;
-                    }
-                }
-            }
+    fn reset_object_mats_from_model(&mut self) {
+        // Set from model values
+        self.object_mats.clear();
+        for obj in &self.cur_model(&self.db).objects {
+            self.object_mats.push(obj.matrix);
         }
-
-        let state = DynamicState { objects: &objects, uv_mats: &uv_mats };
-        let prims = Primitives::build(self.cur_model(), PolyType::Tris, state);
-        self.model_viewer.update_vertices(&prims.vertices);
     }
 
-    /// Update what texture to use for each material (to the values in the
-    /// current pattern animation frame).
-    fn update_materials(&mut self, display: &Display) {
-        // First get the bindings for each material from the model file.
-        let mut material_map: Vec<MaterialTextureBinding> =
-            self.conn.models[self.model_id].materials.iter()
-            .map(|mat_conn| {
+    fn reset_material_map_from_model(&mut self) {
+        self.material_map.clear();
+        for mat_conn in &self.conn.models[self.model_id].materials {
+            self.material_map.push(
                 match mat_conn.image_id() {
                     Ok(Some(image_id)) => MaterialTextureBinding::ImageId(image_id),
                     Ok(None) => MaterialTextureBinding::None,
                     Err(_) => MaterialTextureBinding::Missing,
                 }
-            })
-            .collect();
+            );
+        }
+    }
 
-        // Now update all the materials that are animated by the current
-        // pattern animation.
-        if let Some(pat) = self.cur_pattern() {
-            let mats = &self.cur_model().materials;
+    fn reset_uv_mats_from_model(&mut self) {
+        self.uv_mats.clear();
+        for material in &self.cur_model(&self.db).materials {
+            self.uv_mats.push(
+                if material.params.texcoord_transform_mode() == 1 {
+                    material.texture_mat
+                } else {
+                    Matrix4::one()
+                }
+            )
+        }
+    }
+
+    fn reset_state_from_model(&mut self) {
+        self.reset_object_mats_from_model();
+        self.reset_material_map_from_model();
+        self.reset_uv_mats_from_model();
+    }
+
+    // Update dynamic state to match the current animation state.
+
+    fn update_object_mats(&mut self) {
+        if let Some(anim) = self.cur_animation(&self.db) {
+            for i in 0..self.object_mats.len() {
+                if i > anim.objects_curves.len() { break }
+                self.object_mats[i] = anim.objects_curves[i].sample_at(self.anim_state.frame);
+            }
+        }
+        self.update_vertices();
+    }
+
+    fn update_material_map(&mut self, display: &Display) {
+        if let Some(pat) = self.cur_pattern(&self.db) {
+            let mats = &self.cur_model(&self.db).materials;
             for (mat_id, mat) in mats.iter().enumerate() {
                 // Find a track for this material (with the same name)
                 let track =
@@ -450,101 +508,91 @@ impl Viewer {
                     None => continue,
                 };
 
-                let (texture_idx, palette_idx) = track.sample(self.pat_anim_frame);
+                let (texture_idx, palette_idx) = track.sample(self.pat_state.frame);
 
-                let pat_conn = &self.conn.models[self.model_id].patterns[self.pat_idx.unwrap()];
+                let pat_conn_idx = self.pat_state.connection_idx.unwrap();
+                let pat_conn = &self.conn.models[self.model_id].patterns[pat_conn_idx];
                 let (texture_id, palette_id) = (
                     pat_conn.texture_ids[texture_idx as usize],
                     pat_conn.palette_ids[palette_idx as usize],
                 );
 
-                material_map[mat_id] = match (texture_id, palette_id) {
+                self.material_map[mat_id] = match (texture_id, palette_id) {
                     (Some(t), Some(p)) => MaterialTextureBinding::ImageId((t, Some(p))),
                     _ => MaterialTextureBinding::Missing,
                 };
             }
         }
-
-        self.model_viewer.update_materials(display, &self.db, material_map);
-    }
-
-    fn stop_animations(&mut self) {
-        self.anim_idx = None;
-        self.anim_frame = 0;
-        self.single_stepping = false;
-        self.pat_idx = None;
-        self.pat_anim_frame = 0;
-        self.mat_anim_idx = None;
-        self.mat_anim_frame = 0;
-    }
-
-    fn change_anim_idx(&mut self, anim_idx: Option<usize>) {
-        if self.anim_idx == anim_idx {
-            return;
-        }
-
-        self.single_stepping = false;
-        self.anim_idx = anim_idx;
-        self.anim_frame = 0;
-        self.update_vertices();
-    }
-
-    pub fn next_frame(&mut self) {
-        let num_anim_frames = self.cur_animation(&self.db).map(|anim| anim.num_frames);
-        if let Some(num_anim_frames) = num_anim_frames {
-            self.anim_frame += 1;
-            self.anim_frame %= num_anim_frames;
-            self.update_vertices();
-        }
-    }
-
-    pub fn prev_frame(&mut self) {
-        let num_anim_frames = self.cur_animation(&self.db).map(|anim| anim.num_frames);
-        if let Some(num_anim_frames) = num_anim_frames {
-            if self.anim_frame == 0 {
-                self.anim_frame = num_anim_frames - 1;
-            } else {
-                self.anim_frame -= 1;
-            }
-            self.update_vertices();
-        }
-    }
-
-    fn change_pat_idx(&mut self, display: &Display, pat_idx: Option<usize>) {
-        if self.pat_idx == pat_idx {
-            return;
-        }
-
-        self.pat_idx = pat_idx;
-        self.pat_anim_frame = 0;
         self.update_materials(display);
     }
 
-    fn change_mat_anim_idx(&mut self, mat_anim_idx: Option<usize>) {
-        if self.mat_anim_idx == mat_anim_idx {
-            return;
+    fn update_uv_mats(&mut self) {
+        if let Some(mat_anim) = self.cur_mat_anim(&self.db) {
+            for track in &mat_anim.tracks {
+                for (i, mat) in self.cur_model(&self.db).materials.iter().enumerate() {
+                    if mat.name == track.name {
+                        self.uv_mats[i] = track.eval_uv_mat(self.mat_anim_state.frame);
+                        break;
+                    }
+                }
+            }
         }
-
-        self.mat_anim_idx = mat_anim_idx;
-        self.mat_anim_frame = 0;
         self.update_vertices();
     }
 
+    /// Updates the vertices of the current model (eg. because an animation or
+    /// material animation has advanced).
+    fn update_vertices(&mut self) {
+        let state = DynamicState { objects: &self.object_mats, uv_mats: &self.uv_mats };
+        let prims = Primitives::build(self.cur_model(&self.db), PolyType::Tris, state);
+        self.model_viewer.update_vertices(&prims.vertices);
+    }
+
+    /// Updates the materials after the material map has changed (eg. because a
+    /// pattern animation has advanced).
+    fn update_materials(&mut self, display: &Display) {
+        self.model_viewer.update_materials(display, &self.db, self.material_map.clone());
+    }
+
+    pub fn next_anim_frame(&mut self) {
+        if let Some(anim) = self.cur_animation(&self.db) {
+            self.anim_state.frame = next_u16(self.anim_state.frame, 0..anim.num_frames);
+            self.update_object_mats();
+        }
+    }
+
+    pub fn prev_anim_frame(&mut self) {
+        if let Some(anim) = self.cur_animation(&self.db) {
+            self.anim_state.frame = prev_u16(self.anim_state.frame, 0..anim.num_frames);
+            self.update_object_mats();
+        }
+    }
+
     pub fn next_pattern_frame(&mut self, display: &Display) {
-        let num_frames = self.cur_pattern().map(|pat| pat.num_frames);
-        if let Some(num_frames) = num_frames {
-            self.pat_anim_frame += 1;
-            self.pat_anim_frame %= num_frames;
-            self.update_materials(display);
+        if let Some(pat) = self.cur_pattern(&self.db) {
+            self.pat_state.frame = next_u16(self.pat_state.frame, 0..pat.num_frames);
+            self.update_material_map(display);
+        }
+    }
+
+    pub fn prev_pattern_frame(&mut self, display: &Display) {
+        if let Some(pat) = self.cur_pattern(&self.db) {
+            self.pat_state.frame = prev_u16(self.pat_state.frame, 0..pat.num_frames);
+            self.update_material_map(display);
         }
     }
 
     pub fn next_mat_anim_frame(&mut self) {
-        let num_frames = self.cur_mat_anim().map(|anim| anim.num_frames);
-        if let Some(num_frames) = num_frames {
-            self.mat_anim_frame += 1;
-            self.mat_anim_frame %= num_frames;
-            self.update_vertices();
+        if let Some(mat_anim) = self.cur_mat_anim(&self.db) {
+            self.mat_anim_state.frame = next_u16(self.mat_anim_state.frame, 0..mat_anim.num_frames);
+            self.update_uv_mats();
+        }
+    }
+
+    pub fn prev_mat_anim_frame(&mut self) {
+        if let Some(mat_anim) = self.cur_mat_anim(&self.db) {
+            self.mat_anim_state.frame = prev_u16(self.mat_anim_state.frame, 0..mat_anim.num_frames);
+            self.update_uv_mats();
         }
     }
 
@@ -552,71 +600,39 @@ impl Viewer {
         self.model_viewer.aspect_ratio = aspect_ratio as f32;
     }
 
-    fn cur_model(&self) -> &Model {
-        &self.db.models[self.model_id]
-    }
+    // Getters
 
+    // These take the DB to make borrowck happy.
+    fn cur_model<'a>(&self, db: &'a Database) -> &'a Model {
+        &db.models[self.model_id]
+    }
     fn cur_animation<'a>(&self, db: &'a Database) -> Option<&'a Animation> {
         Some(&db.animations[self.animation_id()?])
     }
-
-    fn cur_pattern(&self) -> Option<&Pattern> {
-        Some(&self.db.patterns[self.pattern_id()?])
+    fn cur_pattern<'a>(&self, db: &'a Database) -> Option<&'a Pattern> {
+        Some(&db.patterns[self.pattern_id()?])
     }
 
-    fn cur_mat_anim(&self) -> Option<&MaterialAnimation> {
-        Some(&self.db.mat_anims[self.mat_anim_id()?])
+    fn cur_mat_anim<'a>(&self, db: &'a Database) -> Option<&'a MaterialAnimation> {
+        Some(&db.mat_anims[self.mat_anim_id()?])
     }
 
     fn animation_id(&self) -> Option<AnimationId> {
-        let idx = self.anim_idx?;
+        let idx = self.anim_state.connection_idx?;
         Some(self.conn.models[self.model_id].animations[idx])
     }
 
     fn pattern_id(&self) -> Option<PatternId> {
-        let idx = self.pat_idx?;
+        let idx = self.pat_state.connection_idx?;
         Some(self.conn.models[self.model_id].patterns[idx].pattern_id)
     }
 
     fn mat_anim_id(&self) -> Option<MatAnimId> {
-        let idx = self.mat_anim_idx?;
+        let idx = self.mat_anim_state.connection_idx?;
         Some(self.conn.models[self.model_id].mat_anims[idx].mat_anim_id)
     }
 
     pub fn speed(&self) -> f32 {
         SPEEDS[self.speed_idx]
-    }
-}
-
-use std::ops::Range;
-
-// Goes the next/prev element of a range, wrapping around.
-
-fn next(x: usize, range: Range<usize>) -> usize {
-    if x == range.end - 1 { range.start } else { x + 1 }
-}
-
-fn prev(x: usize, range: Range<usize>) -> usize {
-    if x == range.start { range.end - 1 } else { x - 1 }
-}
-
-// Goes to the next/prev element of a range. None is before the first element of
-// the range and after the last.
-
-fn maybe_next(x: Option<usize>, range: Range<usize>) -> Option<usize> {
-    match x {
-        None if range.start == range.end => None,
-        None => Some(range.start),
-        Some(y) if y == range.end - 1 => None,
-        Some(y) => Some(y + 1),
-    }
-}
-
-fn maybe_prev(x: Option<usize>, range: Range<usize>) -> Option<usize> {
-    match x {
-        None if range.start == range.end => None,
-        None => Some(range.end - 1),
-        Some(y) if y == range.start => None,
-        Some(y) => Some(y - 1),
     }
 }

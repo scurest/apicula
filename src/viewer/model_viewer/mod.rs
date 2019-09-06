@@ -34,6 +34,7 @@ pub struct ModelViewer {
 }
 
 /// Tells you what GL texture to use for a given material.
+#[derive(Clone)]
 pub enum MaterialTextureBinding {
     /// Used when the material had not texture.
     None,
