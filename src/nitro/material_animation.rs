@@ -95,7 +95,7 @@ fn read_channel(base_cur: Cur, data: ChannelData, target: MatChannelTarget) -> R
 
     let values = (base_cur + data.offset)
         .next_n::<u16>(data.num_frames as usize)?
-        .map(|n| fix16(n, 1, 11, 4))
+        .map(|n| fix16(n, 1, 10, 5))
         .collect::<Vec<f64>>();
     let curve = Curve::Samples {
         start_frame: 0,
