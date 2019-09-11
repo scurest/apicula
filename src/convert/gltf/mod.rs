@@ -65,7 +65,7 @@ pub fn to_gltf(
 
     mesh(&ctx, &mut gltf);
     nodes(&ctx, &mut gltf);
-    animations(&ctx, & mut gltf);
+    animations(&ctx, &mut gltf);
     materials(&ctx, &mut gltf);
 
     gltf.cleanup();
@@ -455,8 +455,9 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
 
 fn animations(ctx: &Ctx, gltf: &mut GlTF) {
     let models_animations = &ctx.conn.models[ctx.model_id].animations;
+    let mat_animations = &ctx.conn.models[ctx.model_id].mat_anims;
 
-    if models_animations.is_empty() {
+    if models_animations.is_empty() && mat_animations.is_empty() {
         return;
     }
 
@@ -472,7 +473,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
     // though.
     let mut timeline_descs = BiMap::<usize, TimelineDescriptor>::new();
 
-    // Used to hold the translation/rotation/scale data.
+    // Used to hold the sample data.
     let data_buffer = gltf.buffers.add(Buffer {
         bytes: Vec::with_capacity(1024 * 512),
         alignment: 4,
@@ -482,7 +483,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
         // NOTE: must fill out byte length when we finish writing to data_buffer
     ));
 
-    let animations =
+    let mut animations =
         models_animations.iter()
         .map(|&animation_id| {
             let anim = &ctx.db.animations[animation_id];
@@ -667,11 +668,117 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
         })
         .collect::<Vec<JsonValue>>();
 
+    // Now material animations
+    let model = &ctx.db.models[ctx.model_id];
+    let mut had_mat_anims = false;
+    for mat_anim_conn in mat_animations {
+        let mat_anim = &ctx.db.mat_anims[mat_anim_conn.mat_anim_id];
+
+        let mut channels: Vec<JsonValue> = vec![];
+        let mut samplers: Vec<JsonValue> = vec![];
+
+        for track in &mat_anim.tracks {
+            let u_off_curve = &track.channels[3].curve;
+            let v_off_curve = &track.channels[4].curve;
+
+            // Get common domain
+            let domain = u_off_curve.domain().union(v_off_curve.domain());
+            let (start_frame, end_frame, sampling_rate) = match domain {
+                CurveDomain::None => continue,
+                CurveDomain::Sampled { start_frame, end_frame, sampling_rate } =>
+                    (start_frame, end_frame, sampling_rate),
+            };
+            let timeline_descriptor = TimelineDescriptor {
+                start_frame, end_frame, sampling_rate,
+            };
+
+            // Reserve the input accessor
+            if !timeline_descs.right_contains(&timeline_descriptor) {
+                let accessor = gltf.json["accessors"].add(
+                    JsonValue::new_object()
+                );
+                timeline_descs.insert((accessor, timeline_descriptor));
+            };
+            let &input = timeline_descs.backward(&timeline_descriptor);
+
+            // Find the target
+            let material_idx = model.materials.iter().position(|mat| mat.name == track.name).unwrap();
+            let target = format!(
+                "/materials/{}/pbrMetallicRoughness/baseColorTexture/extensions/KHR_texture_transform/offset",
+                material_idx,
+            );
+
+            // Find texture dimensions
+            let (w, h) = (model.materials[material_idx].width as f64, model.materials[material_idx].height as f64);
+
+            let data = &mut gltf.buffers[data_buffer].bytes;
+            let byte_offset = data.len();
+            let num_samples = (end_frame - start_frame) / sampling_rate ;
+            data.reserve(4 * 2 * num_samples as usize);
+            let mut frame = start_frame;
+            while frame < end_frame {
+                let u_off = u_off_curve.sample_at(0.0, frame);
+                let v_off = v_off_curve.sample_at(0.0, frame);
+
+                // Convert to glTF texture space
+                let u_off = u_off / w;
+                let v_off = v_off / h;
+
+                data.push_f32(u_off as f32);
+                data.push_f32(v_off as f32);
+
+                frame += sampling_rate;
+            }
+            let output = gltf.json["accessors"].add(object!(
+                "bufferView" => data_buf_view,
+                "type" => "VEC2",
+                "componentType" => FLOAT,
+                "byteOffset" => byte_offset,
+                "count" => num_samples,
+            ));
+
+            let sampler = samplers.add(object!(
+                "input" => input,
+                "output" => output,
+            ));
+
+            channels.push(object!(
+                "target" => target,
+                "sampler" => sampler,
+            ));
+        }
+
+        if samplers.is_empty() { continue }
+
+        animations.push(object!(
+            "name" => mat_anim.name.to_string(),
+            "samplers" => samplers,
+            // glTF requires this be non-empty, so we add a channel that does
+            // nothing.
+            "channels" => vec![object!(
+                "target" => object!("path" => "scale"),
+                "sampler" => 0,
+            )],
+            "extensions" => object!(
+                "EXT_property_animation" => object!(
+                    "channels" => channels,
+                )
+            )
+        ));
+
+        had_mat_anims = true;
+    }
+
+    if had_mat_anims {
+        gltf.json["extensionsUsed"].push("KHR_texture_transform").unwrap();
+        gltf.json["extensionsUsed"].push("EXT_property_animation").unwrap();
+    }
+
     gltf.json["bufferViews"][data_buf_view]["byteLength"] =
         gltf.buffers[data_buffer].bytes.len().into();
 
     // Now we need to write out the keyframe descriptors to real accessors.
-    // The reason we defered it is because we can share most of this data.
+    // The reason we deferred it is because we can share most of this data.
     //
     // For each rate, find the range of values used by timelines with that
     // rate. Write that range of values sampled at that rate into a buffer.
@@ -683,7 +790,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
     //
     // Make a buffer view for each of these rates. Then for each accessor,
     // reference the buffer view for that rate and use the byteOffset and
-    // count properties to select the appropiate subrange.
+    // count properties to select the appropriate subrange.
 
     let mut rate_to_range = HashMap::<u16, std::ops::Range<u16>>::new();
     let mut rate_to_buf_view = HashMap::<u16, usize>::new();
