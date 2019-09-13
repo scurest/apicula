@@ -22,10 +22,13 @@ use super::{Z_NEAR, Z_FAR, FOV_Y};
 pub struct ModelViewer {
     pub eye: Eye,
     pub aspect_ratio: f32,
+    pub light_on: bool,
+
     /// Program for unlit materials (using vertex colors)
     unlit_program: Program,
     /// Program for lit materials (using normals)
     lit_program: Program,
+
     vertex_buffer: Option<VertexBuffer<Vertex>>,
     index_buffer: Option<IndexBuffer<u16>>,
     draw_calls: Vec<DrawCall>,
@@ -77,6 +80,7 @@ impl ModelViewer {
         ModelViewer {
             eye: Default::default(),
             aspect_ratio: 1.0,
+            light_on: true,
             unlit_program,
             lit_program,
             vertex_buffer: None,
@@ -220,7 +224,7 @@ impl ModelViewer {
                 .. Default::default()
             };
 
-            if !call.used_normals {
+            if !call.used_normals || !self.light_on {
                 let uniforms = uniform! {
                     matrix: model_view_persp,
                     alpha: material.alpha,

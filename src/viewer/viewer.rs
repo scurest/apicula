@@ -120,6 +120,7 @@ pub static CONTROL_HELP: &'static str =
         "  KL           Prev/Next Pattern Animation   (+Alt to single-step instead)\n",
         "  ;'           Prev/Next Material Animation  (+Alt to single-step instead)\n",
         "  Space        Print Info\n",
+        "  T            Toggle Lights                 (Models with normals only)\n"
     );
 
 
@@ -308,6 +309,10 @@ impl Viewer {
 
             Key::Space => {
                 self.print_info();
+            }
+
+            Key::T => {
+                self.model_viewer.light_on = !self.model_viewer.light_on;
             }
 
             _ => (),
