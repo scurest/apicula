@@ -12,6 +12,7 @@ uniform vec3 ambient_color;
 in vec3 position;
 in vec2 texcoord;
 in vec3 normal;
+in vec3 color;
 
 out vec2 v_texcoord;
 out vec4 v_color;
@@ -25,6 +26,7 @@ void main() {
     c += diffuse_color * light_color * diff_level;
     //c += specular_color * light_color * shine_level;
     c += ambient_color * light_color;
+    c *= color;
     v_color = vec4(c, alpha);
 
     gl_Position = matrix * vec4(position, 1.0);

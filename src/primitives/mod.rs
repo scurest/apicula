@@ -390,14 +390,21 @@ fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
                 );
                 b.next_vertex.texcoord = [texcoord.x as f32, texcoord.y as f32];
             }
+            // On the real DS, a normal command computes the lighting factor for
+            // the current lights from the normal and sets that as the vertex
+            // color. There's not both a vertex color AND a normal. To simulate
+            // this with GL-type rendering where there are both, after setting
+            // one of the color/normal, we always clear the other.
             GpuCmd::Color { color } => {
                 b.cur_draw_call.used_vertex_color = true;
                 b.next_vertex.color = [color.x, color.y, color.z];
+                b.next_vertex.normal = [0.0, 0.0, 0.0];
             }
             GpuCmd::Normal { normal } => {
                 b.cur_draw_call.used_normals = true;
                 let n = b.gpu.cur_matrix.transform_vector(normal).normalize();
                 b.next_vertex.normal = [n.x as f32, n.y as f32, n.z as f32];
+                b.next_vertex.color = [1.0, 1.0, 1.0];
             }
             GpuCmd::Vertex { position } => {
                 let p = b.gpu.cur_matrix.transform_point(position);
