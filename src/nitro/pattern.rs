@@ -54,9 +54,13 @@ pub fn read_pattern(cur: Cur, name: Name) -> Result<Pattern> {
                 (cur + off)
                 .next_n::<(u16, u8, u8)>(num_keyframes as usize)?
                 .map(|(frame, texture_idx, palette_idx)| {
-                    PatternKeyframe { frame, texture_idx, palette_idx }
+                    if texture_idx >= num_texture_names || palette_idx >= num_palette_names {
+                        bail!("OOB index in pattern animation");
+                    }
+
+                    Ok(PatternKeyframe { frame, texture_idx, palette_idx })
                 })
-                .collect();
+                .collect::<Result<Vec<_>>>()?;
 
             Ok(PatternTrack { name, keyframes })
         })
