@@ -496,6 +496,8 @@ impl Viewer {
                 if i > anim.objects_curves.len() { break }
                 self.object_mats[i] = anim.objects_curves[i].sample_at(self.anim_state.frame);
             }
+        } else {
+            self.reset_object_mats_from_model();
         }
         self.update_vertices();
     }
@@ -527,6 +529,8 @@ impl Viewer {
                     _ => MaterialTextureBinding::Missing,
                 };
             }
+        } else {
+            self.reset_material_map_from_model()
         }
         self.update_materials(display);
     }
@@ -541,6 +545,8 @@ impl Viewer {
                     }
                 }
             }
+        } else {
+            self.reset_uv_mats_from_model();
         }
         self.update_vertices();
     }
