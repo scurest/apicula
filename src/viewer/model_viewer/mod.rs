@@ -221,6 +221,7 @@ impl ModelViewer {
                         (true, true) => continue,
                     }
                 },
+                blend: glium::Blend::alpha_blending(),
                 .. Default::default()
             };
 
