@@ -148,11 +148,21 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
             bytes: Vec::with_capacity(4 * verts.len() * 1),
         });
         let dat = &mut gltf.buffers[buf].bytes;
+        // Is the DS in sRGB??
+        fn srgb_to_linear(s: f32) -> f32 {
+            if s < 0.04045 {
+                s / 12.92
+            } else {
+                ((s + 0.055) / 1.055).powf(2.4)
+            }
+        }
+        // Since each channel is originally only 5 bits, 8 bits should be enough
+        // to store it in linear space, so use normalized u8s.
         for v in verts {
-            dat.push_normalized_u8(v.color[0]);
-            dat.push_normalized_u8(v.color[1]);
-            dat.push_normalized_u8(v.color[2]);
-            dat.push_normalized_u8(1.0); // padding
+            dat.push_normalized_u8(srgb_to_linear(v.color[0]));
+            dat.push_normalized_u8(srgb_to_linear(v.color[1]));
+            dat.push_normalized_u8(srgb_to_linear(v.color[2]));
+            dat.push(255); // padding
         }
         let buf_view = gltf.json["bufferViews"].add(object!(
             "buffer" => buf,
