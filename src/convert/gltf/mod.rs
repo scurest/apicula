@@ -72,9 +72,11 @@ pub fn to_gltf(
     gltf
 }
 
+// glTF constants
 static UNSIGNED_BYTE: u32 = 5121;
 static UNSIGNED_SHORT: u32 = 5123;
 static FLOAT: u32 = 5126;
+static NEAREST: u32 = 9728;
 
 fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
     let verts = &ctx.prims.vertices;
@@ -990,6 +992,8 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
         object!(
             "wrapS" => wrap(desc.wrap_s),
             "wrapT" => wrap(desc.wrap_t),
+            "magFilter" => NEAREST,
+            "minFilter" => NEAREST,
         )
     }).collect::<Vec<JsonValue>>().into();
 
