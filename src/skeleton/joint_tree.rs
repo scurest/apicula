@@ -151,7 +151,7 @@ pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]
 
     // Bring multiple roots under a universal root if necessary so that the
     // graph becomes a tree.
-    if b.roots.len() > 1 {
+    if b.roots.len() != 1 {
         b.make_root();
     }
     let root = b.roots[0];

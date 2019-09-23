@@ -67,12 +67,14 @@ pub fn write(
     library_images(&mut xml, &ctx);
     library_materials(&mut xml, &ctx);
     library_effects(&mut xml, &ctx);
-    library_geometries(&mut xml, &ctx);
-    library_controllers(&mut xml, &ctx);
-    library_animations(&mut xml, &ctx);
-    library_animation_clips(&mut xml, &ctx);
-    library_visual_scenes(&mut xml, &ctx);
-    scene(&mut xml, &ctx);
+    if !ctx.prims.vertices.is_empty() {
+        library_geometries(&mut xml, &ctx);
+        library_controllers(&mut xml, &ctx);
+        library_animations(&mut xml, &ctx);
+        library_animation_clips(&mut xml, &ctx);
+        library_visual_scenes(&mut xml, &ctx);
+        scene(&mut xml, &ctx);
+    }
     xml!(xml;
         /COLLADA>;
     );

@@ -63,9 +63,11 @@ pub fn to_gltf(
 
     let mut gltf = GlTF::new();
 
-    mesh(&ctx, &mut gltf);
-    nodes(&ctx, &mut gltf);
-    animations(&ctx, &mut gltf);
+    if !ctx.prims.vertices.is_empty() {
+        mesh(&ctx, &mut gltf);
+        nodes(&ctx, &mut gltf);
+        animations(&ctx, &mut gltf);
+    }
     materials(&ctx, &mut gltf);
 
     gltf.cleanup();
