@@ -10,11 +10,9 @@ Rip models from DS games.
 
 -----
 
-apicula is a tool for the [NSBMD 3D model
-files](https://wiki.vg-resource.com/wiki/Nintendo_DS#NITRO_File_Formats) found
-in many Nintendo DS games, eg. .nsbmd for models, .nsbca for animations, .nsbtx
-for textures, etc. Models can be extracted from ROMs, viewed, and converted to
-COLLADA.
+apicula can rip, view, and convert the [NSBMD model
+files](https://github.com/scurest/apicula/wiki/FILETYPES) found in many Nintendo
+DS games.
 
 * [Tutorial](https://github.com/scurest/apicula/wiki/TUTORIAL)
 * [Hallow's tutorial on VG Resource](https://www.vg-resource.com/thread-32332.html)
@@ -22,9 +20,32 @@ COLLADA.
 * [Programmer's documentation on .nsbXX files](https://raw.githubusercontent.com/scurest/nsbmd_docs/master/nsbmd_docs.txt)
 
 
+### Compatibility
+
+apicula recognized these file types (called Nitro files). See [the
+wiki](https://github.com/scurest/apicula/wiki/FILETYPES) for more info.
+
+* `.nsbmd`, `.BMD`, or `.BMD0`: 3D models, textures, palettes
+* `.nsbtx`, `.BTX`, or `.BTX0`: textures, palettes
+* `.nsbca`, `.BCA`, or `.BCA0`: joint animations
+* `.nsbtp`, `.BTP`, or `.BTP0`: pattern animations (flipbook-type)
+* `.nsbta`, `.BTA`, or `.BTA0`: material animations (experimental!!)
+
+Models can be converted to COLLADA or glTF.
+
+Pattern animations are supported in the viewer and extractor, but not in the
+converter (neither COLLADA nor glTF support animations that change a material's
+textures).
+
+Material animations are supported in the viewer and extractor, but not in the
+converter.
+
+Importing apicula's COLLADA files has been tested in Blender and Maya.
+
+
 ### Downloads
 
-Pre-built binaries are provided for Windows:
+Pre-built binaries are available for Windows:
 
 * [apicula for Windows, 64-bit](https://s3.amazonaws.com/apicula/apicula-latest-x86_64-pc-windows-msvc.zip)
 * [apicula for Windows, 32-bit](https://s3.amazonaws.com/apicula/apicula-latest-i686-pc-windows-msvc.zip)
@@ -41,12 +62,12 @@ way](https://doc.rust-lang.org/cargo/guide/working-on-an-existing-project.html)
     $ git clone https://github.com/scurest/apicula.git
     $ cd apicula
     $ cargo b --release
-    $ target/release/apciula -V
+    $ target/release/apicula -V
 
 
 ### Usage
 
-To search a ROM or other packed file for .nsbXX files and extract them
+To search a ROM (or any other file) for Nitro files and extract them
 
     apicula extract <INPUT FILE> -o <OUTPUT DIR>
 
@@ -62,7 +83,7 @@ To convert models to glTF `.glb` files
 
     apicula convert -f=glb <NITRO FILES> -o <OUTPUT DIR>
 
-To get technical information about the given .nsbXX files
+To get technical information about the given Nitro files
 
     apicula info <NITRO FILES>
 
@@ -75,38 +96,15 @@ process of extracting .nsbXX files from a ROM, converting them to COLLADA, and
 importing them into Blender.
 
 
-### Compatibility
-
-apicula recognized these file formats
-
-* `.nsbmd`, `.BMD`, or `.BMD0` contain 3D models, and often their textures and
-  palettes
-* `.nsbca`, `.BCA`, or `.BCA0` contain skeletal animations
-* `.nsbtx`, `.BTX`, or `.BTX0` contain textures and palettes
-* `.nsbtp`, `.BTP`, or `.BTP0` contain pattern animations, which change the
-  textures in a material
-* `.nsbta`, `.BTA`, or `.BTA0` contain material animations, for eg. texture
-  scrolling effects (EXPERIMENTAL!!)
-
-Pattern animations are supported in the viewer and extractor, but not in the
-converter (neither COLLADA nor glTF support animations that change a material's
-textures).
-
-Material animations are supported in the viewer and extractor, but not in the
-converter.
-
-Importing apicula's COLLADA files has been tested in Blender and Maya.
-
-
 ### Special Thanks
 
 * **kiwi.ds**, for models and documentation for Nitro formats. All NDS model viewers seem to be
   derived from this one. Now defunct.
 
-* **Gericom and [MKDS Course Modifier](https://gbatemp.net/threads/mkds-course-modifier.299444/)**,
+* **Gericom's [MKDS Course Modifier](https://gbatemp.net/threads/mkds-course-modifier.299444/)**,
   for animation information, especially for the meaning of the basis rotations.
 
-* **Lowlines and [Console
+* **Lowlines' [Console
   Tool](https://web.archive.org/web/20180319005030/http://llref.emutalk.net/projects/ctool/)**,
   for animations and documentation for Nitro formats. I also used Console Tool
   for extracting files from ROMs.
