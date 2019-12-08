@@ -17,6 +17,7 @@ png = "0.11.0"
 smallvec = "0.6.5"
 termcolor = "0.3.5"
 time = "0.1.36"
+wild = "2.0.2"
 
 [build-dependencies]
 time = "0.1.36"

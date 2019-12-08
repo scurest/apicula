@@ -17,6 +17,7 @@ extern crate atty;
 extern crate smallvec;
 #[macro_use]
 extern crate json;
+extern crate wild;
 
 #[macro_use]
 mod errors;
@@ -97,7 +98,7 @@ fn main2() -> Result<()> {
             (@arg INPUT: +required +multiple "Nitro files")
         )
     );
-    let matches = app.get_matches();
+    let matches = app.get_matches_from(wild::args());
 
     // Set the log level from the number of --verbose flags we got.
     init_logger(matches.occurrences_of("VERBOSE"));
