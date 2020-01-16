@@ -4,7 +4,6 @@ use util::cur::Cur;
 use util::fixed::{fix16, fix32};
 use nitro::Name;
 use nitro::rotation::{pivot_mat, basis_mat};
-use std::ops::{Mul, Add};
 use errors::Result;
 
 pub struct Animation {
@@ -36,10 +35,10 @@ pub enum Curve<T> {
     // A curve defined by sampling at a fixed rate on the interval [start_frame,
     // end_frame].
     //
-    //      |    ,-,     _
-    //      |  ,'| |\  ,'|`,
-    //      |  | | | `-| | |
-    //      |__|_|_|_|_|_|_|_
+    //      |    ._._    .____
+    //      |__._| | | ._| |
+    //      |  | | | ._| | |
+    //      |__|_|_|_|_|_|_|__
     //         |           |
     //     start_frame   end_frame
     //
@@ -299,7 +298,7 @@ impl CurveInfo {
 
 
 impl<T> Curve<T>
-where T: Copy + Mul<f64, Output=T> + Add<T, Output=T> {
+where T: Copy {
     pub fn sample_at(&self, default: T, frame: u16) -> T {
         match *self {
             Curve::None => default,
@@ -313,14 +312,11 @@ where T: Copy + Mul<f64, Output=T> + Add<T, Output=T> {
                 if frame <= start_frame { return values[0]; }
                 if frame >= end_frame - 1 { return values[values.len() - 1]; }
 
-                // Linearly interpolate between the two nearest values
-                // XXX I made this up too :b
-                let lam = (frame - start_frame) as f64 / (end_frame - 1 - start_frame) as f64;
-                let idx = lam * (values.len() - 1) as f64;
-                let lo_idx = idx.floor();
-                let hi_idx = idx.ceil();
-                let gamma = idx - lo_idx;
-                values[lo_idx as usize] * (1.0 - gamma) + values[hi_idx as usize] * gamma
+                // Use step interpolation
+                // TODO: check me
+                let rate = (end_frame - start_frame) / values.len() as u16;
+                let idx = (frame - start_frame) / rate;
+                values[idx as usize]
             }
         }
     }

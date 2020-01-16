@@ -536,7 +536,7 @@ fn library_animations(xml: &mut Xml, ctx: &Ctx) {
                 <source id=["anim"(anim_id)"-joint"(joint_index)"-interpolation"]>;
                     <Name_array id=["anim"(anim_id)"-joint"(joint_index)"-interpolation-array"] count=[(num_frames)]>
                     for _frame in (0..num_frames) {
-                        "LINEAR "
+                        "STEP "
                     }
                     </Name_array>;
                     <technique_common>;

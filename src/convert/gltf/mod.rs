@@ -669,6 +669,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                 object!(
                     "input" => input,
                     "output" => output,
+                    "interpolation" => "STEP",
                 )
             }).collect::<Vec<JsonValue>>();
 
@@ -752,6 +753,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
             let sampler = samplers.add(object!(
                 "input" => input,
                 "output" => output,
+                "interpolation" => "STEP",
             ));
 
             channels.push(object!(
