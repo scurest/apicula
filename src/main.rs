@@ -10,7 +10,6 @@ extern crate glium;
 extern crate clap;
 extern crate cgmath;
 extern crate time;
-extern crate petgraph;
 extern crate png;
 extern crate termcolor;
 extern crate atty;

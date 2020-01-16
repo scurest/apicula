@@ -10,6 +10,7 @@ pub mod fixed;
 pub mod namers;
 pub mod view;
 pub mod out_dir;
+pub mod tree;
 
 pub use self::bivec::BiVec;
 pub use self::bimap::BiMap;

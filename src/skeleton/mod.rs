@@ -54,25 +54,20 @@ mod vertex_record;
 mod joint_tree;
 
 pub use self::symbolic_matrix::{SMatrix, CMatrix, AMatrix, ATerm};
-pub use petgraph::graph::NodeIndex;
 
 use cgmath::Matrix4;
 use nitro::Model;
-use petgraph::graph::Graph;
 use smallvec::SmallVec;
+use util::tree::{Tree, NodeIdx};
 
 /// Skeleton (or skin) for a model.
 pub struct Skeleton {
-    pub tree: JointTree,
-    pub root: NodeIndex,
+    pub tree: Tree<Joint>,
+    pub root: NodeIdx,
     pub vertices: Vec<SkinVertex>,
     /// Largest number of influences on any vertex.
     pub max_num_influences: usize,
 }
-
-/// Tree of joints. The convention for edges is that go *from* the parent *to*
-/// the child.
-pub type JointTree = Graph<Joint, ()>;
 
 pub struct Joint {
     pub local_to_parent: Transform,
@@ -98,7 +93,7 @@ pub struct SkinVertex {
 #[derive(Copy, Clone)]
 pub struct Influence {
     pub weight: f32,
-    pub joint: NodeIndex,
+    pub joint: NodeIdx,
 }
 
 impl Skeleton {

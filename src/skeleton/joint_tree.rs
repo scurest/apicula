@@ -113,9 +113,9 @@
 use cgmath::{Matrix4, SquareMatrix, One, ApproxEq};
 use super::vertex_record::VertexRecord;
 use super::{SMatrix, AMatrix};
-use super::{Skeleton, JointTree, NodeIndex, Joint, Transform, SkinVertex, Influence};
+use super::{Skeleton, Joint, Transform, SkinVertex, Influence};
 use nitro::Model;
-use petgraph::Direction;
+use util::tree::{Tree, NodeIdx};
 
 pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]) -> Skeleton {
     let mut b = Builder::new(model, objects);
@@ -145,8 +145,9 @@ pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]
     // it. This somewhat confusing use is because it seems slightly better to
     // compute (A B ... C)^{-1} than to compute C^{-1} ... B^{-1} A^{-1}, that
     // is, to do the inverse at the end rather than at each step.
-    for joint in b.graph.node_weights_mut() {
-        joint.rest_world_to_local = invert_matrix(joint.rest_world_to_local);
+    for joint in b.graph.node_idxs() {
+        let rest_local_to_world = b.graph[joint].rest_world_to_local;
+        b.graph[joint].rest_world_to_local = invert_matrix(rest_local_to_world);
     }
 
     // Bring multiple roots under a universal root if necessary so that the
@@ -170,9 +171,9 @@ struct Builder<'a, 'b> {
 
     /// The joint graph, which is actually only a forest. We make it a tree at
     /// the end, if necessary (which it usually isn't).
-    graph: JointTree,
+    graph: Tree<Joint>,
     /// List of roots of the forest.
-    roots: Vec<NodeIndex>,
+    roots: Vec<NodeIdx>,
 
     /// Set if we encounter any matrices that can't be resolved as skinning
     /// matrices. Used to report an error.
@@ -182,7 +183,7 @@ struct Builder<'a, 'b> {
 impl<'a, 'b> Builder<'a, 'b> {
     fn new(model: &'a Model, objects: &'b [Matrix4<f64>]) -> Builder<'a, 'b> {
         // Guess capacities
-        let graph = JointTree::with_capacity(objects.len(), objects.len());
+        let graph = Tree::with_capacity(objects.len());
         let roots = Vec::with_capacity(1);
 
         let unusual_matrices = false;
@@ -208,7 +209,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         });
 
         for &old_root in &self.roots {
-            self.graph.add_edge(root, old_root, ());
+            self.graph.reparent(old_root, root);
         }
 
         self.roots.clear();
@@ -226,7 +227,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         SkinVertex { influences }
     }
 
-    fn cmatrix_to_joint(&mut self, mut factors: &[SMatrix]) -> NodeIndex {
+    fn cmatrix_to_joint(&mut self, mut factors: &[SMatrix]) -> NodeIdx {
         // Remove the longest suffix of constant SMatrices.
         while let Some((&last, rest)) = factors.split_last() {
             let is_const = match last {
@@ -252,7 +253,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     /// Find (or create) a root joint whose transform is the given SMatrix.
-    fn find_root(&mut self, smat: SMatrix) -> NodeIndex {
+    fn find_root(&mut self, smat: SMatrix) -> NodeIdx {
         // First, handle when there is a universal root.
         if self.roots.len() == 1 {
             let root = self.roots[0];
@@ -287,9 +288,9 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     /// Find (or create) a child of the given node whose transform is the given
     /// SMatrix.
-    fn find_child(&mut self, node: NodeIndex, smat: SMatrix) -> NodeIndex {
+    fn find_child(&mut self, node: NodeIdx, smat: SMatrix) -> NodeIdx {
         let existing_child = self.graph
-            .neighbors_directed(node, Direction::Outgoing)
+            .children(node)
             .find(|&idx| match self.graph[idx].local_to_parent {
                 Transform::SMatrix(smat2) => smat == smat2,
                 Transform::Root => false,
@@ -306,7 +307,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             rest_world_to_local,
         });
 
-        self.graph.add_edge(node, new_child, ());
+        self.graph.reparent(new_child, node);
         new_child
     }
 

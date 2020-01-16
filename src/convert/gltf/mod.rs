@@ -233,7 +233,7 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
                 let mut i = 0;
                 while i != 4 * num_sets {
                     if i < sv.influences.len() {
-                        dat.push(sv.influences[i].joint.index() as u8);
+                        dat.push(sv.influences[i].joint as u8);
                     } else {
                         dat.push(0);
                     }
@@ -366,13 +366,11 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
 
     // Make a node tree from the skeleton tree. The NodeIndices for skel.tree
     // are the same as the indices into the glTF nodes array.
-    gltf.json["nodes"] = ctx.skel.tree.node_indices().map(|idx| {
-        use petgraph::Direction;
+    gltf.json["nodes"] = ctx.skel.tree.node_idxs().map(|idx| {
         let mut node = object!();
 
         let children = ctx.skel.tree
-            .neighbors_directed(idx, Direction::Outgoing)
-            .map(|child_idx| child_idx.index())
+            .children(idx)
             .collect::<Vec<_>>();
         if !children.is_empty() {
             node["children"] = children.into();
@@ -418,7 +416,7 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
         "mesh" => 0,
         "skin" => 0,
         "name" => ctx.model.name.to_string(),
-        "children" => array!(ctx.skel.root.index()),
+        "children" => array!(ctx.skel.root),
     )).unwrap();
 
     // Make the skin
@@ -431,7 +429,7 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
             bytes: Vec::with_capacity(16 * skel.tree.node_count() * 4),
         });
         let dat = &mut gltf.buffers[buf].bytes;
-        for joint_idx in skel.tree.node_indices() {
+        for joint_idx in skel.tree.node_idxs() {
             let joint = &skel.tree[joint_idx];
             let matrix: &[f64; 16] = joint.rest_world_to_local.as_ref();
             for &entry in matrix {
@@ -452,7 +450,7 @@ fn nodes(ctx: &Ctx, gltf: &mut GlTF) {
 
     gltf.json["skins"] = array!(
         object!(
-            "skeleton" => skel.root.index(),
+            "skeleton" => skel.root,
             "joints" => (0..skel.tree.node_count()).collect::<Vec<_>>(),
             "inverseBindMatrices" => inv_bind_accessor,
         )
@@ -526,7 +524,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
             // The channels array wires nodes/paths up to the samplers they use.
             let mut channels = Vec::<JsonValue>::new();
 
-            for node_idx in ctx.skel.tree.node_indices() {
+            for node_idx in ctx.skel.tree.node_idxs() {
                 // Only objects are animated
                 let object_idx = match ctx.skel.tree[node_idx].local_to_parent {
                     Transform::SMatrix(SMatrix::Object { object_idx }) => object_idx,
@@ -546,7 +544,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                     sampler_descs.push(sampler_descriptor);
                     channels.push(object!(
                         "target" => object!(
-                            "node" => node_idx.index(),
+                            "node" => node_idx,
                             "path" => "translation",
                         ),
                         "sampler" => sampler_descs.idx(&sampler_descriptor),
@@ -561,7 +559,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                     sampler_descs.push(sampler_descriptor);
                     channels.push(object!(
                         "target" => object!(
-                            "node" => node_idx.index(),
+                            "node" => node_idx,
                             "path" => "rotation",
                         ),
                         "sampler" => sampler_descs.idx(&sampler_descriptor),
@@ -576,7 +574,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                     sampler_descs.push(sampler_descriptor);
                     channels.push(object!(
                         "target" => object!(
-                            "node" => node_idx.index(),
+                            "node" => node_idx,
                             "path" => "scale",
                         ),
                         "sampler" => sampler_descs.idx(&sampler_descriptor),

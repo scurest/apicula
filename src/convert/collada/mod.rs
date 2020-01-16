@@ -8,12 +8,11 @@ use db::{Database, ModelId};
 use skeleton::{Skeleton, Transform, SMatrix};
 use primitives::{self, Primitives, DynamicState};
 use nitro::Model;
-use petgraph::{Direction};
-use petgraph::graph::NodeIndex;
 use time;
 use util::BiVec;
 use connection::Connection;
 use self::xml::Xml;
+use util::tree::NodeIdx;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
@@ -381,8 +380,8 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
     xml!(xml;
         <source id=["controller-joints"]>;
             <Name_array id=["controller-joints-array"] count=[(num_joints)]>
-            for j in (ctx.skel.tree.node_indices()) {
-                "joint"(j.index())" "
+            for j in (ctx.skel.tree.node_idxs()) {
+                "joint"(j)" "
             }
             </Name_array>;
             <technique_common>;
@@ -397,7 +396,7 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
     xml!(xml;
         <source id=["controller-bind-poses"]>;
             <float_array id=["controller-bind-poses-array"] count=[(16 * num_joints)]>
-            for j in (ctx.skel.tree.node_indices()) {
+            for j in (ctx.skel.tree.node_idxs()) {
                 MATRIX(&ctx.skel.tree[j].rest_world_to_local)" "
             }
             </float_array>;
@@ -459,7 +458,7 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
             <v>
             for v in (&ctx.skel.vertices) {
                 for influence in (&v.influences) {
-                    (influence.joint.index())" "
+                    (influence.joint)" "
                     (weights_lut.idx(&encode(influence.weight)))" "
                 }
             }
@@ -485,9 +484,8 @@ fn library_animations(xml: &mut Xml, ctx: &Ctx) {
         let anim = &ctx.db.animations[anim_id];
         let num_frames = anim.num_frames;
 
-        for joint_id in ctx.skel.tree.node_indices() {
-            let joint_index = joint_id.index();
-            let joint = &ctx.skel.tree[joint_id];
+        for joint_index in ctx.skel.tree.node_idxs() {
+            let joint = &ctx.skel.tree[joint_index];
             let object_id = match joint.local_to_parent {
                 Transform::SMatrix(SMatrix::Object { object_idx }) => object_idx,
                 _ => continue,
@@ -588,8 +586,8 @@ fn library_animation_clips(xml: &mut Xml, ctx: &Ctx) {
 
         xml!(xml;
             <animation_clip id=["anim"(anim_id)] name=[(anim.name.print_safe())] end=[(end_time)]>;
-            for j in (ctx.skel.tree.node_indices()) {
-                <instance_animation url=["#anim"(anim_id)"-joint"(j.index())]/>;
+            for j in (ctx.skel.tree.node_idxs()) {
+                <instance_animation url=["#anim"(anim_id)"-joint"(j)]/>;
             }
             /animation_clip>;
         );
@@ -612,7 +610,7 @@ fn library_visual_scenes(xml: &mut Xml, ctx: &Ctx) {
     xml!(xml;
         <node id=["node"] name=[(model_name.print_safe())] type=["NODE"]>;
             <instance_controller url=["#controller"]>;
-                <skeleton>"#joint"(ctx.skel.root.index())</skeleton>;
+                <skeleton>"#joint"(ctx.skel.root)</skeleton>;
                 <bind_material>;
                     <technique_common>;
                     for i in (0..ctx.model.materials.len()) {
@@ -634,7 +632,7 @@ fn library_visual_scenes(xml: &mut Xml, ctx: &Ctx) {
 
 fn joint_hierarchy(xml: &mut Xml, ctx: &Ctx) {
     /// Write the name for a joint that will appear in DCC programs.
-    fn joint_name(ctx: &Ctx, node: NodeIndex) -> String {
+    fn joint_name(ctx: &Ctx, node: NodeIdx) -> String {
         match ctx.skel.tree[node].local_to_parent {
             Transform::Root =>
                 format!("__ROOT__"),
@@ -648,13 +646,13 @@ fn joint_hierarchy(xml: &mut Xml, ctx: &Ctx) {
     }
 
     // Recursive tree walker
-    fn rec(xml: &mut Xml, ctx: &Ctx, node: NodeIndex) {
+    fn rec(xml: &mut Xml, ctx: &Ctx, node: NodeIdx) {
         let tree = &ctx.skel.tree;
 
         xml!(xml;
             <node
-                id=["joint"(node.index())]
-                sid=["joint"(node.index())]
+                id=["joint"(node)]
+                sid=["joint"(node)]
                 name=[(joint_name(ctx, node))]
                 type=["JOINT"]>;
         );
@@ -673,8 +671,7 @@ fn joint_hierarchy(xml: &mut Xml, ctx: &Ctx) {
             <matrix sid=["transform"]>MATRIX(&mat)</matrix>;
         );
 
-        let children = tree.neighbors_directed(node, Direction::Outgoing);
-        for child in children {
+        for child in tree.children(node) {
             rec(xml, ctx, child);
         }
 
