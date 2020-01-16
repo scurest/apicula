@@ -11,7 +11,7 @@ use nitro::Model;
 use petgraph::{Direction};
 use petgraph::graph::NodeIndex;
 use time;
-use util::BiList;
+use util::BiVec;
 use connection::Connection;
 use self::xml::Xml;
 
@@ -414,7 +414,7 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
     // by gathering all weights into a list. Since weights are floats, we can't
     // insert them into a HashMap directly, so we first encode them as a
     // fixed-point number. Remember to decode them when they come out!
-    let mut weights_lut = BiList::new();
+    let mut weights_lut = BiVec::new();
     let encode = |x: f32| (x * 4096.0) as u32;
     let decode = |x: u32| x as f64 / 4096.0;
     weights_lut.clear();
@@ -460,7 +460,7 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
             for v in (&ctx.skel.vertices) {
                 for influence in (&v.influences) {
                     (influence.joint.index())" "
-                    (weights_lut.index(&encode(influence.weight)))" "
+                    (weights_lut.idx(&encode(influence.weight)))" "
                 }
             }
             </v>;

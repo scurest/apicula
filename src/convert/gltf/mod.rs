@@ -13,7 +13,7 @@ use cgmath::{Matrix4, One};
 use json::JsonValue;
 use self::gltf::{GlTF, Buffer, ByteVec, VecExt};
 use self::object_trs::ObjectTRSes;
-use util::{BiList, BiMap};
+use util::{BiVec, BiMap};
 use self::curve::{GlTFObjectCurves, CurveDomain};
 use nitro::animation::Curve;
 use std::collections::HashMap;
@@ -521,7 +521,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
             // Each glTF sampler will contain the curve for one TRS property of
             // one object matrix. This maps a sampler index to the description
             // of what it will contain.
-            let mut sampler_descs = BiList::<SamplerDescriptor>::new();
+            let mut sampler_descs = BiVec::<SamplerDescriptor>::new();
 
             // The channels array wires nodes/paths up to the samplers they use.
             let mut channels = Vec::<JsonValue>::new();
@@ -549,7 +549,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                             "node" => node_idx.index(),
                             "path" => "translation",
                         ),
-                        "sampler" => sampler_descs.index(&sampler_descriptor),
+                        "sampler" => sampler_descs.idx(&sampler_descriptor),
                     ));
                 }
 
@@ -564,7 +564,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                             "node" => node_idx.index(),
                             "path" => "rotation",
                         ),
-                        "sampler" => sampler_descs.index(&sampler_descriptor),
+                        "sampler" => sampler_descs.idx(&sampler_descriptor),
                     ));
                 }
 
@@ -579,7 +579,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                             "node" => node_idx.index(),
                             "path" => "scale",
                         ),
-                        "sampler" => sampler_descs.index(&sampler_descriptor),
+                        "sampler" => sampler_descs.idx(&sampler_descriptor),
                     ));
                 }
             }
@@ -883,10 +883,10 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
         wrap_t: WrapMode,
     }
     // Maps a sampler index to the wrapping mode it should use.
-    let mut sampler_descs = BiList::<SamplerDescriptor>::new();
+    let mut sampler_descs = BiVec::<SamplerDescriptor>::new();
 
     // Maps an image index to the image name it should use.
-    let mut image_descs = BiList::<String>::new();
+    let mut image_descs = BiVec::<String>::new();
 
     #[derive(Copy, Clone, Hash, PartialEq, Eq)]
     struct TextureDescriptor {
@@ -894,7 +894,7 @@ fn materials(ctx: &Ctx, gltf: &mut GlTF) {
         image: usize,
     }
     // Maps a texture index to the sampler and image it will use.
-    let mut texture_descs = BiList::<TextureDescriptor>::new();
+    let mut texture_descs = BiVec::<TextureDescriptor>::new();
 
     let materials = ctx.model.materials.iter().enumerate()
         .map(|(material_idx, material)| {
