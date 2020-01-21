@@ -42,13 +42,7 @@ pub fn write(
         .map(|o| make_invertible(&o.matrix))
         .collect::<Vec<_>>();
     let uv_mats = &model.materials.iter()
-        .map(|mat| {
-            if mat.params.texcoord_transform_mode() == 1 {
-                mat.texture_mat
-            } else {
-                Matrix4::one()
-            }
-        })
+        .map(|mat| mat.texture_mat)
         .collect::<Vec<_>>();
     let state = DynamicState { objects, uv_mats };
     let prims = &Primitives::build(model, primitives::PolyType::TrisAndQuads, state);

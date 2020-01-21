@@ -197,26 +197,36 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
 
     fields!(cur, material {
         dummy: u16,
-        section_size: u16,
+        sizeof: u16,
         dif_amb: u32,
         spe_emi: u32,
         polygon_attr: u32,
-        unknown2: u32, // possibly SHININESS?
-        params: u32,
-        unknown3: u32,
-        unknown4: u32, // flag for texture matrix?
+        polygon_attr_mask: u32,
+        teximage_param: u32,
+        unknown3: u32, // seems like a boolean flag
+        pltt_base: u16,
+        misc: u16,
+
+        // only read if unknown3 != 0?
         width: u16,
         height: u16,
-        unknown5: (fix32(1,19,12)), // always 1?
-        unknown6: (fix32(1,19,12)), // always 1?
+        unknown5: (fix32(1,19,12)), // usually 1.0
+        unknown6: (fix32(1,19,12)), // usually 1.0
+
         end: Cur,
     });
 
-    let params = TextureParams(params);
+    let params = TextureParams(teximage_param & polygon_attr_mask);
 
     fn rgb(x: u32) -> [f32; 3] {
         [x.bits(0,5) as f32 / 31.0, x.bits(5,10) as f32 / 31.0, x.bits(10,15) as f32 / 31.0]
     }
+
+    // TODO: data stored in the BMD0 file is masked with data at runtime to
+    //       produce the final value; masks are currently ignored
+
+    //let dif_amb_mask = some_table[misc.bits(6,9) as usize];
+    //let spe_emi_mask = some_table[misc.bits(9,12) as usize];
 
     let diffuse = rgb(dif_amb.bits(0,15));
     let diffuse_is_default_vertex_color = dif_amb.bits(15,16) != 0;
@@ -229,18 +239,55 @@ fn read_material(cur: Cur, name: Name) -> Result<Material> {
     let cull_backface = polygon_attr.bits(6,7) == 0;
     let cull_frontface = polygon_attr.bits(7,8) == 0;
 
-    // For now, use the section size to determine whether there
-    // is texture matrix data.
-    let texture_mat = match section_size {
-        60 => {
-            fields!(end, texcoord_matrix {
-                a: (fix32(1,19,12)),
-                b: (fix32(1,19,12)),
-            });
-            Matrix4::from_nonuniform_scale(a, b, 1.0)
+
+    let texture_mat: Matrix4<f64>;
+    if misc.bits(0,1) != 0 {
+        // Read texture matrix
+        let mut x: Option<(f64, f64)> = None;
+        let mut y: Option<(u16, u16)> = None;
+        let mut z: Option<(f64, f64)> = None;
+        let mut cur = end;
+        let fx32 = |x| fix32(x, 1, 19, 12);
+        if misc.bits(1,2) == 0 {
+            let x1 = fx32(cur.next::<u32>()?);
+            let x2 = fx32(cur.next::<u32>()?);
+            x = Some((x1, x2));
         }
-        _ => Matrix4::from_scale(1.0),
-    };
+        if misc.bits(2,3) == 0 {
+            let y1 = cur.next::<u16>()?;
+            let y2 = cur.next::<u16>()?;
+            y = Some((y1, y2));
+        }
+        if misc.bits(3,4) == 0 {
+            let z1 = fx32(cur.next::<u32>()?);
+            let z2 = fx32(cur.next::<u32>()?);
+            z = Some((z1, z2));
+        }
+
+        texture_mat = match (x, y, z) {
+            (None, None, None) => Matrix4::one(),
+            (Some((x1, x2)), None, None) => {
+                let c = 0.0; // TODO: this isn't actually zero
+                Matrix4::new(
+                    x1, 0.0, 0.0, 0.0,
+                    0.0, x2, 0.0, 0.0,
+                    0.0, 0.0, 0.0, 0.0,
+                    0.0, c, 0.0, 1.0,
+                )
+            }
+            _ => {
+                // TODO
+                warn!("material: texture matrix is unimplemented");
+                Matrix4::one()
+            }
+        }
+
+        // TODO: some kind of scaling involving unknown5/6 goes here
+        //       skipped when they are 1.0
+
+    } else {
+        texture_mat = Matrix4::one();
+    }
 
     Ok(Material {
         name,

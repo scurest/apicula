@@ -8,7 +8,7 @@ use glium::{Frame, Surface};
 use glium::glutin::VirtualKeyCode;
 use nitro::{Model, Animation, Pattern, MaterialAnimation};
 use primitives::{Primitives, PolyType, DynamicState};
-use cgmath::{Matrix4, InnerSpace, One, Vector3, vec3, vec2};
+use cgmath::{Matrix4, InnerSpace, Vector3, vec3, vec2};
 use super::fps::FpsCounter;
 use super::{FRAMERATE, BG_COLOR};
 
@@ -472,13 +472,7 @@ impl Viewer {
     fn reset_uv_mats_from_model(&mut self) {
         self.uv_mats.clear();
         for material in &self.cur_model(&self.db).materials {
-            self.uv_mats.push(
-                if material.params.texcoord_transform_mode() == 1 {
-                    material.texture_mat
-                } else {
-                    Matrix4::one()
-                }
-            )
+            self.uv_mats.push(material.texture_mat)
         }
     }
 

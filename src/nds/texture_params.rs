@@ -18,12 +18,6 @@ impl TextureParams {
     pub fn texcoord_transform_mode(self) -> u8 { self.0.bits(30,32) as u8 }
 }
 
-// NOTE: there is a u32 for texture parameters stored in both the texture itself
-// and the model's material. I believe they are or-ed together to get the final
-// parameters, with the texture storing innate properties (eg. format, width,
-// height) and the material storing ephermeral properties (eg. repeat, mirror,
-// transform mode).
-
 impl std::fmt::Debug for TextureParams {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("TextureParams")
