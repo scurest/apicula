@@ -210,7 +210,7 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
     // glTF gives joint/weight influences in sets of 4 (JOINT_0 is a VEC4
     // accessor with the first four joints, JOINTS_1 has the next four, etc).
     // Find out how many sets we need.
-    let num_sets = (ctx.skel.max_num_influences + 3) / 4;
+    let num_sets = ((ctx.skel.max_num_weights + 3) / 4) as usize;
 
     // Make sure joints fit in a byte
     assert!(ctx.skel.tree.node_count() <= 255);
@@ -223,15 +223,14 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
         });
         let dat_len = {
             let dat = &mut gltf.buffers[buf].bytes;
-            for sv in &ctx.skel.vertices {
-                let mut i = 0;
-                while i != 4 * num_sets {
-                    if i < sv.influences.len() {
-                        dat.push(sv.influences[i].joint as u8);
+            for vi in 0 .. verts.len() {
+                let ws = ctx.skel.vert_weights(vi);
+                for i in 0 .. 4 * num_sets {
+                    if i < ws.len() {
+                        dat.push(ws[i].joint as u8);
                     } else {
                         dat.push(0);
                     }
-                    i += 1;
                 }
             }
             dat.len()
@@ -260,15 +259,14 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
         });
         let dat_len = {
             let dat = &mut gltf.buffers[buf].bytes;
-            for sv in &ctx.skel.vertices {
-                let mut i = 0;
-                while i != 4 * num_sets {
-                    if i < sv.influences.len() {
-                        dat.push_normalized_u8(sv.influences[i].weight);
+            for vi in 0 .. verts.len() {
+                let ws = ctx.skel.vert_weights(vi);
+                for i in 0 .. 4 * num_sets {
+                    if i < ws.len() {
+                        dat.push_normalized_u8(ws[i].weight);
                     } else {
-                        dat.push_normalized_u8(0.0);
+                        dat.push(0);
                     }
-                    i += 1;
                 }
             }
             dat.len()

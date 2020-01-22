@@ -411,10 +411,8 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
     let encode = |x: f32| (x * 4096.0) as u32;
     let decode = |x: u32| x as f64 / 4096.0;
     weights_lut.clear();
-    for v in &ctx.skel.vertices {
-        for influence in &v.influences {
-            weights_lut.push(encode(influence.weight));
-        }
+    for w in &ctx.skel.weights {
+        weights_lut.push(encode(w.weight));
     }
     // Here is the list of all weights.
     xml!(xml;
@@ -439,21 +437,21 @@ fn library_controllers(xml: &mut Xml, ctx: &Ctx) {
         /joints>;
     );
 
-    let num_verts = ctx.skel.vertices.len();
+    let num_verts = ctx.prims.vertices.len();
     xml!(xml;
         <vertex_weights count=[(num_verts)]>;
             <input semantic=["JOINT"] source=["#controller-joints"] offset=["0"]/>;
             <input semantic=["WEIGHT"] source=["#controller-weights"] offset=["1"]/>;
             <vcount>
-            for v in (&ctx.skel.vertices) {
-                (v.influences.len())" "
+            for vi in (0 .. ctx.prims.vertices.len()) {
+                (ctx.skel.vert_weights(vi).len())" "
             }
             </vcount>;
             <v>
-            for v in (&ctx.skel.vertices) {
-                for influence in (&v.influences) {
-                    (influence.joint)" "
-                    (weights_lut.idx(&encode(influence.weight)))" "
+            for vi in (0 .. ctx.prims.vertices.len()) {
+                for w in (ctx.skel.vert_weights(vi)) {
+                    (w.joint)" "
+                    (weights_lut.idx(&encode(w.weight)))" "
                 }
             }
             </v>;

@@ -113,27 +113,38 @@
 use cgmath::{Matrix4, SquareMatrix, One, ApproxEq};
 use super::vertex_record::VertexRecord;
 use super::{SMatrix, AMatrix};
-use super::{Skeleton, Joint, Transform, SkinVertex, Influence};
+use super::{Skeleton, Joint, Transform, Weight, WeightsOfs};
 use nitro::Model;
 use util::tree::{Tree, NodeIdx};
 
 pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]) -> Skeleton {
     let mut b = Builder::new(model, objects);
 
-    // Caches the right skinvertex for each of the matrices in vr.
-    let mut skin_vert_cache: Vec<Option<SkinVertex>> = vec![None; vr.matrices.len()];
-    let mut max_num_influences = 0;
+    // Caches the WeightOfs for each of the matrices in vr.
+    let mut mat_cache: Vec<Option<WeightsOfs>> = vec![None; vr.matrices.len()];
+    let mut max_num_weights = 0;
+    let mut weights: Vec<Weight> = Vec::with_capacity(vr.matrices.len());
 
-    let vertices = vr.vertices.iter().map(|&mat_idx| {
-        if skin_vert_cache[mat_idx as usize].is_none() {
-            let mut sv = b.amatrix_to_skinvert(&vr.matrices[mat_idx as usize]);
-            simplify_skinvert(&mut sv);
-            max_num_influences = max_num_influences.max(sv.influences.len());
-            skin_vert_cache[mat_idx as usize] = Some(sv);
+    let verts = vr.vertices.iter().map(|&mat_idx| {
+        if mat_cache[mat_idx as usize].is_none() {
+            let mut ws = b.amatrix_to_weights(&vr.matrices[mat_idx as usize]);
+            simplify_weights(&mut ws);
+            assert!(ws.len() <= 255);
+            max_num_weights = max_num_weights.max(ws.len() as u8);
+
+            // Add the weights for this vert to the weights array
+            // and create an offset to them.
+            let start = weights.len();
+            let len = ws.len();
+            assert!(start <= 0xffffff);
+            weights.append(&mut ws);
+            let ofs = WeightsOfs(start as u32 | ((len as u32) << 24));
+
+            mat_cache[mat_idx as usize] = Some(ofs);
         }
 
-        skin_vert_cache[mat_idx as usize].as_ref().unwrap().clone()
-    }).collect();
+        mat_cache[mat_idx as usize].unwrap()
+    }).collect::<Vec<WeightsOfs>>();
 
     if b.unusual_matrices {
         warn!("unusual matrices encountered in model {}; the skin for this \
@@ -160,8 +171,9 @@ pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]
     Skeleton {
         tree: b.graph,
         root,
-        vertices,
-        max_num_influences,
+        max_num_weights,
+        weights,
+        verts,
     }
 }
 
@@ -216,15 +228,14 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.roots.push(root);
     }
 
-    fn amatrix_to_skinvert(&mut self, amatrix: &AMatrix) -> SkinVertex {
+    fn amatrix_to_weights(&mut self, amatrix: &AMatrix) -> Vec<Weight> {
         self.detect_unusual_matrices(amatrix);
 
-        let influences = amatrix.terms.iter().map(|term| {
+        amatrix.terms.iter().map(|term| {
             let weight = term.weight;
             let joint = self.cmatrix_to_joint(&term.cmat.factors);
-            Influence { weight, joint }
-        }).collect();
-        SkinVertex { influences }
+            Weight { weight, joint }
+        }).collect()
     }
 
     fn cmatrix_to_joint(&mut self, mut factors: &[SMatrix]) -> NodeIdx {
@@ -348,20 +359,20 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 }
 
-fn simplify_skinvert(sv: &mut SkinVertex) {
+fn simplify_weights(weights: &mut Vec<Weight>) {
     // Group like terms.
-    for i in 0..sv.influences.len() {
-        for j in (i+1)..sv.influences.len() {
-            if sv.influences[i].joint == sv.influences[j].joint {
-                sv.influences[i].weight += sv.influences[j].weight;
-                sv.influences[j].weight = 0.0;
+    for i in 0..weights.len() {
+        for j in (i+1)..weights.len() {
+            if weights[i].joint == weights[j].joint {
+                weights[i].weight += weights[j].weight;
+                weights[j].weight = 0.0;
             }
         }
     }
-    sv.influences.retain(|influence| influence.weight != 0.0);
+    weights.retain(|influence| influence.weight != 0.0);
 
     // Sort by weight, highest to lowest
-    sv.influences.sort_by(|in1, in2| in2.weight.partial_cmp(&in1.weight).unwrap());
+    weights.sort_by(|w1, w2| w2.weight.partial_cmp(&w1.weight).unwrap());
 }
 
 /// Inverts a matrix, bumping its entries slightly if necessary until it is

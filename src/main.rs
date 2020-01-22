@@ -13,7 +13,6 @@ extern crate time;
 extern crate png;
 extern crate termcolor;
 extern crate atty;
-extern crate smallvec;
 #[macro_use]
 extern crate json;
 extern crate wild;

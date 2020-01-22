@@ -57,16 +57,16 @@ pub use self::symbolic_matrix::{SMatrix, CMatrix, AMatrix, ATerm};
 
 use cgmath::Matrix4;
 use nitro::Model;
-use smallvec::SmallVec;
 use util::tree::{Tree, NodeIdx};
 
 /// Skeleton (or skin) for a model.
 pub struct Skeleton {
     pub tree: Tree<Joint>,
     pub root: NodeIdx,
-    pub vertices: Vec<SkinVertex>,
-    /// Largest number of influences on any vertex.
-    pub max_num_influences: usize,
+    pub max_num_weights: u8, // max weights on any vertex
+
+    pub weights: Vec<Weight>, // weights for all verts packed together
+    verts: Vec<WeightsOfs>, // verts[vi] points to the weights for vertex vi in weights
 }
 
 pub struct Joint {
@@ -85,18 +85,26 @@ pub enum Transform {
     Root,
 }
 
-#[derive(Clone)]
-pub struct SkinVertex {
-    pub influences: SmallVec<[Influence; 1]>,
-}
-
 #[derive(Copy, Clone)]
-pub struct Influence {
+pub struct Weight {
     pub weight: f32,
     pub joint: NodeIdx,
 }
 
+/// Points to a slice skel.weights[start..start+len].
+/// start is the low 24 bits, len is the high 8 bits.
+#[derive(Copy, Clone)]
+struct WeightsOfs(u32);
+
+
 impl Skeleton {
+    pub fn vert_weights(&self, vi: usize) -> &[Weight] {
+        let ofs = self.verts[vi];
+        let start = (ofs.0 & 0xffffff) as usize;
+        let len = (ofs.0 >> 24) as usize;
+        &self.weights[start .. start + len]
+    }
+
     pub fn build(model: &Model, objects: &[Matrix4<f64>]) -> Skeleton {
         // First play back rendering commands recording the symbolic value of
         // the matrix applied to every vertex.
