@@ -487,7 +487,7 @@ impl Viewer {
     fn update_object_mats(&mut self) {
         if let Some(anim) = self.cur_animation(&self.db) {
             for i in 0..self.object_mats.len() {
-                if i > anim.objects_curves.len() { break }
+                if i >= anim.objects_curves.len() { break }
                 self.object_mats[i] = anim.objects_curves[i].sample_at(self.anim_state.frame);
             }
         } else {
