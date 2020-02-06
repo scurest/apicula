@@ -32,8 +32,8 @@ pub enum Op {
     /// Bind materials[material_idx] for subsequent draw calls.
     BindMaterial { material_idx: u8 },
 
-    /// Draw meshes[mesh_idx].
-    Draw { mesh_idx: u8 },
+    /// Draw pieces[piece_idx].
+    Draw { piece_idx: u8 },
 }
 
 /// Parses a bytestream of render commands into a list of render ops.
@@ -75,8 +75,8 @@ pub fn parse_render_cmds(mut cur: Cur) -> Result<Vec<Op>> {
                 ops.push(Op::BindMaterial { material_idx: params[0] });
             }
             0x05 => {
-                // Draw a mesh
-                ops.push(Op::Draw { mesh_idx: params[0] });
+                // Draw a piece of the model
+                ops.push(Op::Draw { piece_idx: params[0] });
             }
             0x06 | 0x26 | 0x46 | 0x66 => {
                 // Multiply the current matrix by an object matrix, possibly

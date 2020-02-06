@@ -2,7 +2,7 @@ use cgmath::Matrix4;
 
 /// Slightly perturb a matrix's diagonal to create a non-singular matrix.
 ///
-/// For example, if an object matrix is zero (to eg. hide a part of a mesh
+/// For example, if an object matrix is zero (to eg. hide a part of a model
 /// for some portion of an animation) this will make a new object matrix
 /// that "hides" it by making it very small.
 pub fn make_invertible(m: &Matrix4<f64>) -> Matrix4<f64> {

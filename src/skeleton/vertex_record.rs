@@ -29,7 +29,7 @@ impl VertexRecord {
                 Op::ScaleUp => b.scale_up(),
                 Op::ScaleDown => b.scale_down(),
                 Op::BindMaterial { .. } => (),
-                Op::Draw { mesh_idx } => b.draw(mesh_idx),
+                Op::Draw { piece_idx } => b.draw(piece_idx),
             }
         }
         b.vr
@@ -110,10 +110,10 @@ impl<'a> Builder<'a> {
     fn scale_up(&mut self) { }
     fn scale_down(&mut self) { }
 
-    fn draw(&mut self, mesh_idx: u8) {
-        let mesh = &self.model.meshes[mesh_idx as usize];
+    fn draw(&mut self, piece_idx: u8) {
+        let piece = &self.model.pieces[piece_idx as usize];
         use nds::gpu_cmds::{CmdParser, GpuCmd};
-        let interpreter = CmdParser::new(&mesh.gpu_commands);
+        let interpreter = CmdParser::new(&piece.gpu_commands);
 
         for cmd_res in interpreter {
             if cmd_res.is_err() { break; }

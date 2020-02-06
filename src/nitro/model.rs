@@ -8,12 +8,11 @@ use util::bits::BitField;
 use util::cur::Cur;
 use util::fixed::{fix16, fix32};
 
-/// NSBMD model. Consists of data like meshes and materials, and a list of
-/// rendering commands. Drawn by executing the rendering commands.
+/// NSBMD model.
 pub struct Model {
     pub name: Name,
     pub materials: Vec<Material>,
-    pub meshes: Vec<Mesh>,
+    pub pieces: Vec<Piece>,
     pub objects: Vec<Object>,
     pub inv_binds: Vec<Matrix4<f64>>,
     pub render_ops: Vec<Op>,
@@ -28,12 +27,12 @@ pub fn read_model(cur: Cur, name: Name) -> Result<Model> {
         section_size: u32,
         render_cmds_off: u32,
         materials_off: u32,
-        mesh_off: u32,
+        pieces_off: u32,
         inv_binds_off: u32,
         unknown1: [u8; 3],
         num_objects: u8,
         num_materials: u8,
-        num_meshes: u8,
+        num_pieces: u8,
         unknown2: [u8; 2],
         up_scale: (fix32(1,19,12)),
         down_scale: (fix32(1,19,12)),
@@ -54,13 +53,13 @@ pub fn read_model(cur: Cur, name: Name) -> Result<Model> {
     use super::render_cmds::parse_render_cmds;
     let render_ops = parse_render_cmds(cur + render_cmds_off)?;
 
-    let meshes = read_meshes(cur + mesh_off)?;
+    let pieces = read_pieces(cur + pieces_off)?;
     let materials = read_materials(cur + materials_off)?;
     let objects = read_objects(objects_cur)?;
     let inv_binds = read_inv_binds(cur + inv_binds_off, num_objects as usize);
 
     let model = Model {
-        name, materials, meshes, objects, inv_binds,
+        name, materials, pieces, objects, inv_binds,
         render_ops, up_scale, down_scale,
     };
 
@@ -75,7 +74,7 @@ fn validate_render_ops(model: &Model) -> Result<()> {
         let good = match *op {
             Op::MulObject { object_idx } => (object_idx as usize) < model.objects.len(),
             Op::BindMaterial { material_idx } => (material_idx as usize) < model.materials.len(),
-            Op::Draw { mesh_idx } => (mesh_idx as usize) < model.meshes.len(),
+            Op::Draw { piece_idx } => (piece_idx as usize) < model.pieces.len(),
             Op::Skin { ref terms } => {
                 terms.iter().all(|term| {
                     (term.inv_bind_idx as usize) < model.inv_binds.len()
@@ -90,24 +89,23 @@ fn validate_render_ops(model: &Model) -> Result<()> {
     Ok(())
 }
 
-/// A mesh is a "piece" of a model, containing the actual vertex/polygon data.
-/// It is really just a blob of NDS GPU commands, drawn by just submitting the
-/// blob to the GPU.
-pub struct Mesh {
+/// A "piece" of a model, containing vertex/polygon data. It's just a blob
+/// of NDS GPU commands. Draw it by submitting the blob to the GPU.
+pub struct Piece {
     pub name: Name,
     pub gpu_commands: Vec<u8>,
 }
 
-fn read_meshes(cur: Cur) -> Result<Vec<Mesh>> {
+fn read_pieces(cur: Cur) -> Result<Vec<Piece>> {
     info_block::read::<u32>(cur)?
-        .map(|(off, name)| read_mesh(cur + off, name))
+        .map(|(off, name)| read_piece(cur + off, name))
         .collect()
 }
 
-fn read_mesh(cur: Cur, name: Name) -> Result<Mesh> {
-    debug!("mesh: {:?}", name);
+fn read_piece(cur: Cur, name: Name) -> Result<Piece> {
+    debug!("piece: {:?}", name);
 
-    fields!(cur, mesh {
+    fields!(cur, piece {
         dummy: u16,
         section_size: u16,
         unknown: u32,
@@ -122,7 +120,7 @@ fn read_mesh(cur: Cur, name: Name) -> Result<Mesh> {
         .next_n_u8s(cmds_len as usize)?
         .to_vec();
 
-    Ok(Mesh { name, gpu_commands })
+    Ok(Piece { name, gpu_commands })
 }
 
 /// Material contains drawing state, eg. diffuse color, texture name, whether to

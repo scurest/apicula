@@ -42,7 +42,7 @@ fn model_info(db: &Database, conn: &Connection, model_id: usize) {
     println!("  Name: {:?}", model.name);
     println!("  Found In: {}",
         db.file_paths[db.models_found_in[model_id]].to_string_lossy());
-    println!("  Num Meshes: {}", model.meshes.len());
+    println!("  Num Pieces: {}", model.pieces.len());
     println!("  Objects ({} total):", model.objects.len());
     for (i, object) in model.objects.iter().enumerate() {
         print!("    Object {}: {:?} ", i, object.name);

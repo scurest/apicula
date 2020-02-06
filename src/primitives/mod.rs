@@ -40,12 +40,12 @@ pub struct DynamicState<'a> {
     pub uv_mats: &'a [Matrix4<f64>],
 }
 
-/// Info about the result of a draw call, ie. the result of drawing a mesh (a set
-/// of GPU commands) while in a particular GPU state (matrix stack, bound material,
-/// etc.).
+/// Info about the result of a draw call, ie. the result of drawing a piece
+/// of a model (a set of GPU commands) while in a particular GPU state
+/// (matrix stack, bound material, etc.).
 #[derive(Clone)]
 pub struct DrawCall {
-    /// Executing a draw call for a mesh (a set of GPU commands) results in
+    /// Executing a draw call for a piece (a set of GPU commands) results in
     /// pushing a set of vertices and indices `primitives.vertices` and
     /// `primitives.indices`. This is the range of of `vertices` that this call
     /// produced.
@@ -54,8 +54,8 @@ pub struct DrawCall {
     pub index_range: Range<usize>,
     /// The index of the material that was bound when the draw call ran.
     pub mat_id: u8,
-    /// The index of the mesh that was drawn.
-    pub mesh_id: u8,
+    /// The index of the piece that was drawn.
+    pub piece_id: u8,
     /// Whether texcoords were set during this call.
     pub used_texcoords: bool,
     /// Whether vertex colors were set during this call.
@@ -99,7 +99,7 @@ impl Primitives {
                 Op::ScaleUp => b.scale_up(),
                 Op::ScaleDown => b.scale_down(),
                 Op::BindMaterial { material_idx } => b.bind_material(material_idx),
-                Op::Draw { mesh_idx } => b.draw(mesh_idx),
+                Op::Draw { piece_idx } => b.draw(piece_idx),
             }
         }
         b.done()
@@ -166,7 +166,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 vertex_range: 0..0,
                 index_range: 0..0,
                 mat_id: 0,
-                mesh_id: 0,
+                piece_id: 0,
                 used_texcoords: false,
                 used_vertex_color: false,
                 used_normals: false,
@@ -178,7 +178,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         }
     }
 
-    fn begin_draw_call(&mut self, mesh_id: u8, mat_id: u8) {
+    fn begin_draw_call(&mut self, piece_id: u8, mat_id: u8) {
         let vert_len = self.vertices.len() as u16;
         let ind_len = self.indices.len();
 
@@ -189,7 +189,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             vertex_range: vert_len..vert_len,
             index_range: ind_len..ind_len,
             mat_id,
-            mesh_id,
+            piece_id,
             used_texcoords: false,
             used_vertex_color: false,
             used_normals: false,
@@ -251,7 +251,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.cur_material = material_idx;
     }
 
-    fn draw(&mut self, mesh_idx: u8) {
+    fn draw(&mut self, piece_idx: u8) {
         let cur_material = self.cur_material;
 
         let mat = &self.model.materials[cur_material as usize];
@@ -259,14 +259,14 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.cur_texture_dim = dim;
         self.gpu.texture_matrix = mat.texture_mat;
 
-        self.begin_draw_call(mesh_idx, cur_material);
+        self.begin_draw_call(piece_idx, cur_material);
 
         if mat.diffuse_is_default_vertex_color && mat.diffuse != [1.0, 1.0, 1.0] {
             self.next_vertex.color = mat.diffuse;
             self.cur_draw_call.used_vertex_color = true;
         }
 
-        run_gpu_cmds(self, &self.model.meshes[mesh_idx as usize].gpu_commands);
+        run_gpu_cmds(self, &self.model.pieces[piece_idx as usize].gpu_commands);
         self.end_draw_call();
     }
 
