@@ -6,7 +6,7 @@
 //! call supply the right files to the right calls. That leaves us to figure it
 //! out for ourselves. This modules contains the heuristics for that.
 
-use clap::ArgMatches;
+use cli::Args;
 use db::{Database, AnimationId, TextureId, PaletteId, ModelId, PatternId, MatAnimId};
 use errors::Result;
 
@@ -94,9 +94,9 @@ pub struct ConnectionOptions {
 
 impl ConnectionOptions {
     /// Creates a ConnectionOptions from the CLI arguments.
-    pub fn from_arg_matches(matches: &ArgMatches) -> ConnectionOptions {
+    pub fn from_cli_args(args: &Args) -> ConnectionOptions {
         ConnectionOptions {
-            all_animations: matches.is_present("all_animations"),
+            all_animations: args.flags.contains(&"all-animations"),
         }
     }
 }

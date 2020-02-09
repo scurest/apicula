@@ -1,12 +1,12 @@
-use clap::ArgMatches;
+use cli::Args;
 use errors::Result;
 use db::Database;
 use connection::{Connection, ConnectionOptions, MaterialConnection, Match};
 
-pub fn main(matches: &ArgMatches) -> Result<()> {
-    let db = Database::from_arg_matches(matches)?;
+pub fn main(args: &Args) -> Result<()> {
+    let db = Database::from_cli_args(args)?;
 
-    let conn_options = ConnectionOptions::from_arg_matches(matches);
+    let conn_options = ConnectionOptions::from_cli_args(args);
     let conn = Connection::build(&db, conn_options);
 
     db.print_status();

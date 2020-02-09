@@ -1,4 +1,4 @@
-use clap::ArgMatches;
+use cli::Args;
 use std::path::PathBuf;
 use std::fs;
 use std::collections::HashMap;
@@ -40,9 +40,9 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn from_arg_matches(matches: &ArgMatches) -> Result<Database> {
+    pub fn from_cli_args(args: &Args) -> Result<Database> {
         let user_paths =
-            matches.values_of_os("INPUT").unwrap()
+            args.free_args.iter()
             .map(PathBuf::from);
         let file_paths = expand_directories(user_paths);
 

@@ -2,7 +2,7 @@ mod collada;
 mod image_namer;
 mod gltf;
 
-use clap::ArgMatches;
+use cli::Args;
 use errors::Result;
 use std::fs::File;
 use std::io::Write;
@@ -13,24 +13,22 @@ use db::Database;
 use convert::image_namer::ImageNamer;
 use connection::{Connection, ConnectionOptions};
 
-pub fn main(matches: &ArgMatches) -> Result<()> {
-    let out_dir_path = PathBuf::from(matches.value_of("OUTPUT").unwrap());
+pub fn main(args: &Args) -> Result<()> {
+    let out_dir_path = PathBuf::from(args.get_opt("output").unwrap());
     let mut out_dir = OutDir::make_ready(out_dir_path)?;
 
-    let db = Database::from_arg_matches(matches)?;
+    let db = Database::from_cli_args(args)?;
 
     db.print_status();
 
-    let conn_options = ConnectionOptions::from_arg_matches(matches);
+    let conn_options = ConnectionOptions::from_cli_args(args);
     let conn = Connection::build(&db, conn_options);
 
-    let format = matches.value_of("FORMAT").unwrap_or("dae");
-    if format != "dae" && format != "glb" && format != "gltf" {
-        bail!("format should be either dae or glb or gltf");
-    }
+    let format = args.get_opt("format").map(|s| s.to_str().unwrap())
+        .unwrap_or("dae");
 
     let mut image_namer = ImageNamer::build(&db, &conn);
-    if matches.is_present("more_textures") {
+    if args.flags.contains(&"more_textures") {
         image_namer.add_more_images(&db);
     }
 

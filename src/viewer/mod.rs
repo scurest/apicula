@@ -10,7 +10,7 @@ mod main_loop;
 mod viewer;
 mod fps;
 
-use clap::ArgMatches;
+use cli::Args;
 use db::Database;
 use connection::{Connection, ConnectionOptions};
 use errors::Result;
@@ -32,8 +32,8 @@ pub static FRAMERATE: f64 = 1.0 / 60.0;
 /// Calculate FPS over intervals of this length (seconds).
 pub static FPS_INTERVAL: f64 = 2.0;
 
-pub fn main(matches: &ArgMatches) -> Result<()> {
-    let db = Database::from_arg_matches(matches)?;
+pub fn main(args: &Args) -> Result<()> {
+    let db = Database::from_cli_args(args)?;
     db.print_status();
 
     if db.models.len() == 0 {
@@ -41,7 +41,7 @@ pub fn main(matches: &ArgMatches) -> Result<()> {
         return Ok(());
     }
 
-    let conn_options = ConnectionOptions::from_arg_matches(matches);
+    let conn_options = ConnectionOptions::from_cli_args(args);
     let conn = Connection::build(&db, conn_options);
 
     // Print the controls

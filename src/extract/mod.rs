@@ -1,6 +1,6 @@
 //! Extract recognized container files from ROMs or other packed files.
 
-use clap::ArgMatches;
+use cli::Args;
 use decompress;
 use errors::Result;
 use nitro::Container;
@@ -12,13 +12,13 @@ use std::path::PathBuf;
 use util::cur::Cur;
 use util::OutDir;
 
-pub fn main(matches: &ArgMatches) -> Result<()> {
-    let input_file = matches.value_of_os("INPUT").unwrap();
-    let input = fs::read(&input_file)
+pub fn main(args: &Args) -> Result<()> {
+    let input_file = &args.free_args[0];
+    let input = fs::read(input_file)
         .map_err(|e| errmsg!("couldn't read input file: {}", e))?;
     let cur = Cur::new(&input[..]);
 
-    let out_dir_path = PathBuf::from(matches.value_of("OUTPUT").unwrap());
+    let out_dir_path = PathBuf::from(args.get_opt("output").unwrap());
     let out_dir = OutDir::make_ready(out_dir_path)?;
     let mut output = ExtractOutput::new(out_dir);
 
