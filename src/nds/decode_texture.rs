@@ -197,7 +197,7 @@ fn decode_format6(buf: &mut RGBABuf, tex: &Texture, pal: &Palette) {
     for n in 0..num_texels {
         let x = data[n];
         let rgb = pal_cur.nth::<u16>(x.bits(0,3) as usize).unwrap_or(0);
-        let a = a3_to_a5(x.bits(3,8));
+        let a = x.bits(3,8);
         buf.pixel(rgb555a5(rgb, a));
     }
 }
