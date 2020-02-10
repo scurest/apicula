@@ -339,8 +339,8 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
     let p = flags.bits(3,4);
     trace!("t={}, r={}, s={}, p={}", t, r, s, p);
 
-    // Why in God's name is this here instead of with the
-    // other rotation stuff?
+    // Logically goes with the rotation stuff.
+    // Here for alignment reasons.
     let m0 = cur.next::<u16>()?;
 
     let mut trans = None;
