@@ -19,7 +19,7 @@ pub fn main(args: &Args) -> Result<()> {
     let cur = Cur::new(&input[..]);
 
     let out_dir_path = PathBuf::from(args.get_opt("output").unwrap());
-    let out_dir = OutDir::make_ready(out_dir_path)?;
+    let out_dir = OutDir::new(out_dir_path)?;
     let mut output = ExtractOutput::new(out_dir);
 
     scan_for_nitro_files(&mut output, cur);

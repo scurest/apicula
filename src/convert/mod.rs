@@ -15,7 +15,7 @@ use connection::{Connection, ConnectionOptions};
 
 pub fn main(args: &Args) -> Result<()> {
     let out_dir_path = PathBuf::from(args.get_opt("output").unwrap());
-    let mut out_dir = OutDir::make_ready(out_dir_path)?;
+    let mut out_dir = OutDir::new(out_dir_path)?;
 
     let db = Database::from_cli_args(args)?;
 

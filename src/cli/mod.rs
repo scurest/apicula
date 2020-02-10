@@ -77,6 +77,10 @@ static OUTPUT_OPT: Opt = Opt {
     short: "o", long: "output", flag: false,
     help: "-o, --output <outdir>     place output files here (will be created)",
 };
+static OVERWRITE_OPT: Opt = Opt {
+    short: "", long: "overwrite", flag: true,
+    help: "--overwrite               allow overwriting files in the output dir",
+};
 static ALL_ANIMATIONS_OPT: Opt = Opt {
     short: "", long: "all-animations", flag: true,
     help: "--all-animations          don't guess which joint anims go with a model, just try them all",
@@ -140,7 +144,7 @@ fn help(p: &mut Parse) -> ! {
 }
 
 
-static EXTRACT_OPTS: &[&Opt] = &[&OUTPUT_OPT, &HELP_OPT];
+static EXTRACT_OPTS: &[&Opt] = &[&OUTPUT_OPT, &OVERWRITE_OPT, &HELP_OPT];
 
 fn extract(p: &mut Parse) {
     parse_opts(p, EXTRACT_OPTS);
@@ -217,7 +221,7 @@ fn show_view_help_and_exit() -> ! {
 }
 
 
-static CONVERT_OPTS: &[&Opt] = &[&OUTPUT_OPT, &FORMAT_OPT, &MORE_TEXTURES_OPT, &ALL_ANIMATIONS_OPT, &HELP_OPT];
+static CONVERT_OPTS: &[&Opt] = &[&OUTPUT_OPT, &FORMAT_OPT, &OVERWRITE_OPT, &MORE_TEXTURES_OPT, &ALL_ANIMATIONS_OPT, &HELP_OPT];
 
 fn convert(p: &mut Parse) {
     parse_opts(p, CONVERT_OPTS);
@@ -270,7 +274,11 @@ fn check_output_dir(p: &Parse) {
     }
     let output = output.unwrap();
     if Path::new(output).exists() {
-        error!("output directory already exists, choose a different one");
-        exit(1);
+        if !p.args.flags.contains(&"overwrite") {
+            error!("output directory already exists, choose a different one or \
+                pass --overwrite if you're okay with files in that dir possibly \
+                being overwritten");
+            exit(1);
+        }
     }
 }
