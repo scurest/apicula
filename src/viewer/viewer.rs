@@ -485,18 +485,18 @@ impl Viewer {
     // Update dynamic state to match the current animation state.
 
     fn update_object_mats(&mut self) {
+        self.reset_object_mats_from_model();
         if let Some(anim) = self.cur_animation(&self.db) {
             for i in 0..self.object_mats.len() {
                 if i >= anim.objects_curves.len() { break }
                 self.object_mats[i] = anim.objects_curves[i].sample_at(self.anim_state.frame);
             }
-        } else {
-            self.reset_object_mats_from_model();
         }
         self.update_vertices();
     }
 
     fn update_material_map(&mut self, display: &Display) {
+        self.reset_material_map_from_model();
         if let Some(pat) = self.cur_pattern(&self.db) {
             let mats = &self.cur_model(&self.db).materials;
             for (mat_id, mat) in mats.iter().enumerate() {
@@ -523,13 +523,12 @@ impl Viewer {
                     _ => MaterialTextureBinding::Missing,
                 };
             }
-        } else {
-            self.reset_material_map_from_model()
         }
         self.update_materials(display);
     }
 
     fn update_uv_mats(&mut self) {
+        self.reset_uv_mats_from_model();
         if let Some(mat_anim) = self.cur_mat_anim(&self.db) {
             for track in &mat_anim.tracks {
                 for (i, mat) in self.cur_model(&self.db).materials.iter().enumerate() {
@@ -539,8 +538,6 @@ impl Viewer {
                     }
                 }
             }
-        } else {
-            self.reset_uv_mats_from_model();
         }
         self.update_vertices();
     }
