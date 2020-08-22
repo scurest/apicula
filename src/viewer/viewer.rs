@@ -1,6 +1,6 @@
 use std::ops::Range;
 use super::model_viewer::{ModelViewer, MaterialTextureBinding};
-use db::{Database, ModelId, AnimationId, PatternId, MatAnimId};
+use db::{Database, ModelId, AnimationId, PatternId, MatAnimId, FileId};
 use connection::Connection;
 use glium::Display;
 use glium::glutin::{ElementState, ModifiersState};
@@ -387,6 +387,11 @@ impl Viewer {
             self.db.models.len());
         println!("Found in file: {}", self.db.file_paths[self.db.models_found_in[self.model_id]].display());
 
+        let file_ids = self.get_texture_files_for_model();
+        for file_id in file_ids {
+            println!("Textures found in file: {}", self.db.file_paths[file_id].display());
+        }
+
         if let Some(anim_id) = self.animation_id() {
             let anim = self.cur_animation(&self.db).unwrap();
             println!("Animation: {:?} [{}/{}]",
@@ -424,6 +429,25 @@ impl Viewer {
         }
 
         println!();
+    }
+
+    /// Gets the FileID for all files that supplied a texture/palette for
+    /// the current model.
+    fn get_texture_files_for_model(&self) -> Vec<FileId> {
+        let mut file_ids: Vec<FileId> = vec![];
+        for mat_conn in &self.conn.models[self.model_id].materials {
+            if let Some(id) = mat_conn.texture_id() {
+                file_ids.push(self.db.textures_found_in[id]);
+            }
+            if let Some(id) = mat_conn.palette_id() {
+                file_ids.push(self.db.palettes_found_in[id]);
+            }
+        }
+
+        file_ids.sort();
+        file_ids.dedup();
+
+        file_ids
     }
 
     /// Changes to a new model.

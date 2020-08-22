@@ -67,6 +67,30 @@ impl MaterialConnection {
         }
     }
 
+    pub fn texture_id(&self) -> Option<TextureId> {
+        match *self {
+            MaterialConnection::NoTexture |
+            MaterialConnection::TextureMissing =>
+                None,
+            MaterialConnection::TextureOkNoPalette { texture } |
+            MaterialConnection::TextureOkPaletteMissing { texture } |
+            MaterialConnection::TextureOkPaletteOk { texture, .. } =>
+                Some(texture.id),
+        }
+    }
+
+    pub fn palette_id(&self) -> Option<TextureId> {
+        match *self {
+            MaterialConnection::NoTexture |
+            MaterialConnection::TextureMissing |
+            MaterialConnection::TextureOkNoPalette { .. } |
+            MaterialConnection::TextureOkPaletteMissing { .. } =>
+                None,
+            MaterialConnection::TextureOkPaletteOk { palette, .. } =>
+                Some(palette.id)
+        }
+    }
+
     /// Produces None if there was no texture, the texture/palette if there was
     /// and everything resolved sucessfully, or an Err if there was any
     /// resolving error.
