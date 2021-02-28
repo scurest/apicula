@@ -104,11 +104,11 @@ pub fn main(args: &Args) -> Result<()> {
 }
 
 pub fn write_rgba(f: &mut File, rgba: &[u8], dim: (u32, u32)) -> Result<()> {
-    use png::{Encoder, ColorType, BitDepth, HasParameters};
+    use png::{Encoder, ColorType, BitDepth};
+
     let mut encoder = Encoder::new(f, dim.0, dim.1);
-    encoder
-        .set(ColorType::RGBA)
-        .set(BitDepth::Eight);
+    encoder.set_color(ColorType::RGBA);
+    encoder.set_depth(BitDepth::Eight);
 
     let mut writer = encoder.write_header()?;
     writer.write_image_data(rgba)?;

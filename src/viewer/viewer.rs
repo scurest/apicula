@@ -3,9 +3,9 @@ use super::model_viewer::{ModelViewer, MaterialTextureBinding};
 use db::{Database, ModelId, AnimationId, PatternId, MatAnimId, FileId};
 use connection::Connection;
 use glium::Display;
-use glium::glutin::{ElementState, ModifiersState};
 use glium::{Frame, Surface};
-use glium::glutin::VirtualKeyCode;
+use glium::glutin::event::{ElementState, ModifiersState};
+use glium::glutin::event::VirtualKeyCode;
 use nitro::{Model, Animation, Pattern, MaterialAnimation};
 use primitives::{Primitives, PolyType, DynamicState};
 use cgmath::{Matrix4, InnerSpace, Vector3, vec3, vec2};
@@ -216,7 +216,7 @@ impl Viewer {
 
         if state != ElementState::Pressed { return; }
 
-        let alt = modifiers.alt;
+        let alt = modifiers.alt();
 
         match keycode {
             // Next/prev model

@@ -1,138 +1,136 @@
-use glium::glutin::{self, EventsLoop, dpi::{LogicalSize, LogicalPosition}};
+use glium::glutin::{self, dpi::{LogicalSize, PhysicalSize, PhysicalPosition}};
+use glium::glutin::event_loop::ControlFlow;
 use super::viewer::Viewer;
 use db::Database;
 use connection::Connection;
 
 pub fn main_loop(db: Database, conn: Connection) {
-    let window_builder = glutin::WindowBuilder::new()
-        .with_dimensions(LogicalSize {
+    let window_builder = glutin::window::WindowBuilder::new()
+        .with_inner_size(LogicalSize {
             width: super::WINDOW_WIDTH as f64,
             height: super::WINDOW_HEIGHT as f64
         });
     let context_builder = glutin::ContextBuilder::new()
         .with_depth_buffer(24);
-    let mut events_loop = EventsLoop::new();
+    let events_loop = glutin::event_loop::EventLoop::new();
     let display = glium::Display::new(window_builder, context_builder, &events_loop)
         .expect("failed to get rendering context");
 
-    let window = display.gl_window();
-
     let mut viewer = Viewer::new(&display, db, conn);
 
-    // Track the last known mouse position.
-    let mut last_mouse_xy = LogicalPosition { x: 0.0, y: 0.0 };
-    // Mouse grabbing/capturing, ie. moving the mouse stops moving the cursor
-    // and our window gets the raw deltas. We have to fake it.
-    let mut mouse_grabbed = false;
-    // The position of the mouse when a capture started. Used so we can restore
-    // it when the capture ends.
-    let mut saved_mouse_pos = LogicalPosition { x: 0.0, y: 0.0 };
-
-    let grab_cursor = |grab: bool| {
-        let _ = window.grab_cursor(grab);
-        window.hide_cursor(grab);
+    struct State {
+        last_mouse_xy: PhysicalPosition<f64>,
+        saved_mouse_xy: PhysicalPosition<f64>,
+        mouse_grabbed: bool,
+        win_title: String,
+        cur_time: u64,
+        last_time: u64,
     };
 
-    // Buffer for the window's title
-    let mut win_title = String::new();
+    let mut state = State {
+        last_mouse_xy: PhysicalPosition { x: 0.0, y: 0.0 },
+        saved_mouse_xy: PhysicalPosition { x: 0.0, y: 0.0 },
+        mouse_grabbed: false,
+        win_title: String::with_capacity(512),
+        cur_time: time::precise_time_ns(),
+        last_time: time::precise_time_ns(),
+    };
 
-    let mut cur_time = time::precise_time_ns();
-    let mut last_time;
-    loop {
-        last_time = cur_time;
-        cur_time = time::precise_time_ns();
-        let dt_in_ns = cur_time.wrapping_sub(last_time);
+    events_loop.run(move |ev, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
+
+        let gl_window = display.gl_window();
+        let window = gl_window.window();
+
+        state.last_time = state.cur_time;
+        state.cur_time = time::precise_time_ns();
+        let dt_in_ns = state.cur_time.wrapping_sub(state.last_time);
         let dt = dt_in_ns as f64 / 1_000_000_000.0;
 
         viewer.update(&display, dt);
 
-        if let Some(LogicalSize { width, height }) = window.get_inner_size() {
-            if width > 0.0 && height > 0.0 {
-                viewer.set_aspect_ratio(width / height);
-            }
+        let PhysicalSize { width, height } = window.inner_size();
+        if width > 0 && height > 0 {
+            viewer.set_aspect_ratio(width as f64 / height as f64);
         }
 
         let mut frame = display.draw();
         viewer.draw(&mut frame);
         frame.finish().expect("rendering error");
 
-        win_title.clear();
-        viewer.title(&mut win_title);
-        window.set_title(&win_title);
+        state.win_title.clear();
+        viewer.title(&mut state.win_title);
+        window.set_title(&state.win_title);
 
-        let mut should_close = false;
-        events_loop.poll_events(|ev| {
-            use self::glutin::Event as Ev;
-            use self::glutin::WindowEvent as WEv;
-            use self::glutin::DeviceEvent as DEv;
+        use self::glutin::event::Event as Ev;
+        use self::glutin::event::WindowEvent as WEv;
+        use self::glutin::event::DeviceEvent as DEv;
 
-            match ev {
-                Ev::WindowEvent { event, .. } => match event {
-                    WEv::CloseRequested => {
-                        should_close = true;
-                    }
-                    WEv::KeyboardInput { input, .. } => {
-                        if input.virtual_keycode.is_none() { return; }
-                        let keycode = input.virtual_keycode.unwrap();
-                        viewer.key(&display, (input.state, keycode, input.modifiers));
-                    }
-                    WEv::MouseInput { state, button, .. } => {
-                        use self::glutin::ElementState as Es;
-                        use self::glutin::MouseButton as MB;
+        match ev {
+            Ev::WindowEvent { event, .. } => match event {
+                WEv::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+                }
+                WEv::KeyboardInput { input, .. } => {
+                    if input.virtual_keycode.is_none() { return; }
+                    let keycode = input.virtual_keycode.unwrap();
+                    viewer.key(&display, (input.state, keycode, input.modifiers));
+                }
+                WEv::MouseInput { state: mouse_state, button, .. } => {
+                    use self::glutin::event::ElementState as Es;
+                    use self::glutin::event::MouseButton as MB;
 
-                        match (state, button) {
-                            (Es::Pressed, MB::Left) => {
-                                mouse_grabbed = true;
-                                saved_mouse_pos = last_mouse_xy;
-                                grab_cursor(true);
-                            }
-                            (Es::Released, MB::Left) => {
-                                mouse_grabbed = false;
-                                let _ = window.set_cursor_position(saved_mouse_pos);
-                                grab_cursor(false);
-                            }
-                            _ => (),
+                    match (mouse_state, button) {
+                        (Es::Pressed, MB::Left) => {
+                            state.mouse_grabbed = true;
+                            state.saved_mouse_xy = state.last_mouse_xy;
+                            let _ = window.set_cursor_grab(true);
+                            let _ = window.set_cursor_visible(true);
                         }
-                    }
-                    WEv::CursorMoved { position, .. } => {
-                        last_mouse_xy = position;
-
-                        if mouse_grabbed {
-                            // Warp the mouse to the center of the window to
-                            // keep it inside our window to fake mouse capture.
-                            let LogicalSize { width, height } =
-                                window
-                                .get_outer_size()
-                                .unwrap_or(LogicalSize { width: 0.0, height: 0.0 });
-                            let center = LogicalPosition {
-                                x: width as f64 / 2.0,
-                                y: height as f64 / 2.0,
-                            };
-                            let _ = window.set_cursor_position(center);
+                        (Es::Released, MB::Left) => {
+                            state.mouse_grabbed = false;
+                            let _ = window.set_cursor_position(state.saved_mouse_xy);
+                            let _ = window.set_cursor_grab(false);
+                            let _ = window.set_cursor_visible(false);
                         }
+                        _ => (),
                     }
-                    WEv::Focused(false) => {
-                        viewer.blur();
+                }
+                WEv::CursorMoved { position, .. } => {
+                    state.last_mouse_xy = position;
 
-                        // Release the mouse
-                        mouse_grabbed = false;
-                        grab_cursor(false);
+                    if state.mouse_grabbed {
+                        // Warp the mouse to the center of the window to
+                        // keep it inside our window to fake mouse capture.
+                        let PhysicalSize { width, height } = window.outer_size();
+                        let center = PhysicalPosition {
+                            x: width as f64 / 2.0,
+                            y: height as f64 / 2.0,
+                        };
+                        let _ = window.set_cursor_position(center);
                     }
-                    _ => ()
-                },
-                Ev::DeviceEvent { event, .. } => match event {
-                    DEv::MouseMotion { delta } => {
-                        // delta is in an "unspecified coordinate system" but
-                        // appears to be pixels on my machine
-                        if mouse_grabbed {
-                            viewer.mouse_drag(delta);
-                        }
+                }
+                WEv::Focused(false) => {
+                    viewer.blur();
+
+                    // Release the mouse
+                    state.mouse_grabbed = false;
+                    let _ = window.set_cursor_grab(false);
+                    let _ = window.set_cursor_visible(false);
+                }
+                _ => ()
+            },
+            Ev::DeviceEvent { event, .. } => match event {
+                DEv::MouseMotion { delta } => {
+                    // delta is in an "unspecified coordinate system" but
+                    // appears to be pixels on my machine
+                    if state.mouse_grabbed {
+                        viewer.mouse_drag(delta);
                     }
-                    _ => (),
-                },
+                }
                 _ => (),
-            }
-        });
-        if should_close { break; }
-    }
+            },
+            _ => (),
+        }
+    });
 }

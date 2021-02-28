@@ -1,11 +1,4 @@
-//mod draw;
-//mod fps;
-//mod gl_context;
-//mod mouse;
-//mod speed;
-//mod state;
 mod model_viewer;
-//mod eye;
 mod main_loop;
 mod viewer;
 mod fps;

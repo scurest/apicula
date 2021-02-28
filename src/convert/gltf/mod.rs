@@ -341,12 +341,11 @@ fn mesh(ctx: &Ctx, gltf: &mut GlTF) {
         primitive
     }).collect::<Vec<JsonValue>>();
 
-    gltf.json["meshes"] = array!(
-        object!(
-            "primitives" => primitives,
-            "name" => ctx.model.name.to_string(),
-        )
+    let mesh = object!(
+        "primitives" => primitives,
+        "name" => ctx.model.name.to_string(),
     );
+    gltf.json["meshes"] = array!(mesh);
 
     gltf.json["extensionsUsed"].push("FB_ngon_encoding").unwrap();
 }

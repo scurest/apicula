@@ -8,10 +8,10 @@ build = "build.rs"
 [dependencies]
 atty = "0.2"
 cgmath = "0.16.0"
-glium = "0.23.0"
-json = "0.11"
+glium = "0.29.0"
+json = "0.12.4"
 log = { version = "0.4.6", features = ["std"] }
-png = "0.11.0"
+png = "0.16"
 termcolor = "0.3.5"
 time = "0.1.36"
 wild = "2.0.2"
