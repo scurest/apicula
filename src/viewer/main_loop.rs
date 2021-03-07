@@ -85,30 +85,19 @@ pub fn main_loop(db: Database, conn: Connection) {
                             state.mouse_grabbed = true;
                             state.saved_mouse_xy = state.last_mouse_xy;
                             let _ = window.set_cursor_grab(true);
-                            let _ = window.set_cursor_visible(true);
+                            let _ = window.set_cursor_visible(false);
                         }
                         (Es::Released, MB::Left) => {
                             state.mouse_grabbed = false;
                             let _ = window.set_cursor_position(state.saved_mouse_xy);
                             let _ = window.set_cursor_grab(false);
-                            let _ = window.set_cursor_visible(false);
+                            let _ = window.set_cursor_visible(true);
                         }
                         _ => (),
                     }
                 }
                 WEv::CursorMoved { position, .. } => {
                     state.last_mouse_xy = position;
-
-                    if state.mouse_grabbed {
-                        // Warp the mouse to the center of the window to
-                        // keep it inside our window to fake mouse capture.
-                        let PhysicalSize { width, height } = window.outer_size();
-                        let center = PhysicalPosition {
-                            x: width as f64 / 2.0,
-                            y: height as f64 / 2.0,
-                        };
-                        let _ = window.set_cursor_position(center);
-                    }
                 }
                 WEv::Focused(false) => {
                     viewer.blur();
@@ -116,7 +105,7 @@ pub fn main_loop(db: Database, conn: Connection) {
                     // Release the mouse
                     state.mouse_grabbed = false;
                     let _ = window.set_cursor_grab(false);
-                    let _ = window.set_cursor_visible(false);
+                    let _ = window.set_cursor_visible(true);
                 }
                 _ => ()
             },
