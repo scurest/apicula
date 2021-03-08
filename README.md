@@ -1,7 +1,6 @@
 <p align=center><img src="frontispiece.gif" alt="Ore ga Omae o Mamoru model in Blender"></p>
 <h3 align=center>apicula</h3>
 <p align=center>
-<a href="https://ci.appveyor.com/project/scurest/apicula"><img src="https://ci.appveyor.com/api/projects/status/bavh9qh25mbta41x?svg=true" alt="Build status"></a>
 <a href="https://github.com/XAMPPRocky/tokei"><img src="https://tokei.rs/b1/github/scurest/apicula?category=code" alt="Lines of code"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-0BSD-lightgrey.svg" alt="license 0BSD"></a>
 <br>
@@ -45,12 +44,9 @@ Importing apicula's COLLADA files has been tested in Blender and Maya.
 
 ### Downloads
 
-Pre-built binaries are available for Windows:
+* [Download for Windows, 64-bit](https://github.com/scurest/apicula/releases/download/continuous/apicula-latest-windows.zip)
 
-* [apicula for Windows, 64-bit](https://s3.amazonaws.com/apicula/apicula-latest-x86_64-pc-windows-msvc.zip)
-* [apicula for Windows, 32-bit](https://s3.amazonaws.com/apicula/apicula-latest-i686-pc-windows-msvc.zip)
-
-These are built automatically off the latest `master`. You may need one of the Visual Studio
+This is built automatically off the latest `master`. You may need one of the Visual Studio
 Redistributable packages installed.
 
 
