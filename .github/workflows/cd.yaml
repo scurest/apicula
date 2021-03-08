@@ -1,0 +1,43 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Version Info
+      run: |
+        rustc -Vv
+        cargo -Vv
+
+    - name: Build
+      run: |
+        cargo b --release
+        target/release/apicula.exe -V
+
+    - name: Zip
+      run: |
+        cd target/release
+        7z a ../../apicula-latest-windows.zip apicula.exe
+
+    - name: Tag
+      run: |
+        git tag --force continuous ${{ github.sha }}
+        git push --tags --force
+
+    - name: Release
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        artifacts: "apicula-latest-windows.zip"
+        body: >
+          This is an automated build of the latest source code.
+        tag: continuous
+        token: ${{ secrets.GITHUB_TOKEN }}
