@@ -28,7 +28,7 @@ pub fn main(args: &Args) -> Result<()> {
         .unwrap_or("dae");
 
     let mut image_namer = ImageNamer::build(&db, &conn);
-    if args.flags.contains(&"more_textures") {
+    if args.flags.contains(&"more-textures") {
         image_namer.add_more_images(&db);
     }
 
