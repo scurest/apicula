@@ -7,6 +7,7 @@ use nitro::rotation::{pivot_mat, basis_mat};
 use std::ops::{Mul, Add};
 use errors::Result;
 
+
 pub struct Animation {
     pub name: Name,
     pub num_frames: u16,
@@ -137,11 +138,11 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
                     let v = fix32(cur.next::<u32>()?, 1, 19, 12);
                     trs_curves.trans[i as usize] = Curve::Constant(v);
                 } else {
-                    let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
+                    let info = CurveInfo::from_u32(cur.next::<u32>()?, num_frames)?;
                     let off = cur.next::<u32>()?;
 
                     let start_frame = info.start_frame;
-                    let end_frame = info.end_frame;
+                    let end_frame = num_frames;
                     let values = match info.data_width {
                         0 => (base_cur + off)
                             .next_n::<u32>(info.num_samples())?
@@ -154,8 +155,23 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
                             .collect::<Vec<f64>>(),
                     };
 
+                    let mut real_values = Vec::new();
+                    values.iter().enumerate().map(|(i, &v)| {
+                        real_values.push(v);
+                        if (i * info.rate as usize) < info.interp_last as usize {
+                            if info.rate == 2 {
+                                real_values.push(v / 2.0 + values[i + 1] / 2.0);
+                            }
+                            else if info.rate == 4 {
+                                real_values.push((v / 4.0) * 3.0 + (values[i + 1] / 4.0) * 1.0);
+                                real_values.push((v / 4.0) * 2.0 + (values[i + 1] / 4.0) * 2.0);
+                                real_values.push((v / 4.0) * 1.0 + (values[i + 1] / 4.0) * 3.0);
+                            }
+                        }
+                    }).count();
+
                     trs_curves.trans[i as usize] = Curve::Samples {
-                        start_frame, end_frame, values,
+                        start_frame, end_frame, values: real_values,
                     };
                 }
             }
@@ -197,7 +213,7 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
                 let _ = cur.next::<u16>()?; // Skipped? For alignment?
                 trs_curves.rotation = Curve::Constant(fetch_matrix(v)?);
             } else {
-                let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
+                let info = CurveInfo::from_u32(cur.next::<u32>()?, num_frames)?;
                 let off = cur.next::<u32>()?;
 
                 let start_frame = info.start_frame;
@@ -216,8 +232,23 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
                     samples
                 };
 
+                let mut real_values = Vec::new();
+                values.iter().enumerate().map(|(i, &v)| {
+                    real_values.push(v);
+                    if (i * info.rate as usize) < info.interp_last as usize {
+                        if info.rate == 2 {
+                            real_values.push(v / 2.0 + values[i + 1] / 2.0);
+                        }
+                        else if info.rate == 4 {
+                            real_values.push((v / 4.0) * 3.0 + (values[i + 1] / 4.0) * 1.0);
+                            real_values.push((v / 4.0) * 2.0 + (values[i + 1] / 4.0) * 2.0);
+                            real_values.push((v / 4.0) * 1.0 + (values[i + 1] / 4.0) * 3.0);
+                        }
+                    }
+                }).count();
+
                 trs_curves.rotation = Curve::Samples {
-                    start_frame, end_frame, values,
+                    start_frame, end_frame, values: real_values,
                 };
             }
         }
@@ -238,7 +269,7 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
                     let v = fix32(cur.next::<(u32, u32)>()?.0, 1, 19, 12);
                     trs_curves.scale[i as usize] = Curve::Constant(v);
                 } else {
-                    let info = CurveInfo::from_u32(cur.next::<u32>()?)?;
+                    let info = CurveInfo::from_u32(cur.next::<u32>()?, num_frames)?;
                     let off = cur.next::<u32>()?;
 
                     let start_frame = info.start_frame;
@@ -255,8 +286,23 @@ pub fn read_animation(base_cur: Cur, name: Name) -> Result<Animation> {
                             .collect::<Vec<f64>>(),
                     };
 
+                    let mut real_values = Vec::new();
+                    values.iter().enumerate().map(|(i, &v)| {
+                        real_values.push(v);
+                        if (i * info.rate as usize) < info.interp_last as usize {
+                            if info.rate == 2 {
+                                real_values.push(v / 2.0 + values[i + 1] / 2.0);
+                            }
+                            else if info.rate == 4 {
+                                real_values.push((v / 4.0) * 3.0 + (values[i + 1] / 4.0) * 1.0);
+                                real_values.push((v / 4.0) * 2.0 + (values[i + 1] / 4.0) * 2.0);
+                                real_values.push((v / 4.0) * 1.0 + (values[i + 1] / 4.0) * 3.0);
+                            }
+                        }
+                    }).count();
+
                     trs_curves.scale[i as usize] = Curve::Samples {
-                        start_frame, end_frame, values,
+                        start_frame, end_frame, values: real_values,
                     };
                 }
             }
@@ -277,23 +323,36 @@ struct CurveInfo {
     end_frame: u16,
     rate: u8,
     data_width: u8,
+    interp_last: u16
 }
 
 impl CurveInfo {
-    fn from_u32(x: u32) -> Result<CurveInfo> {
+    fn from_u32(x: u32, end_frame: u16) -> Result<CurveInfo> {
         let start_frame = x.bits(0, 16) as u16;
-        let end_frame = x.bits(16, 28) as u16;
-        let rate = x.bits(30, 32) as u8;
-        let data_width = x.bits(28, 30) as u8;
+        let interp_last = x.bits(16, 29) as u16;
+        let data_width = x.bits(29, 30) as u8;
+        let mut rate = x.bits(30, 32) as u8;
+
+        // rate confuses me so lets do this instead for now
+        if (x & 0xC0000000 == 0) {
+            rate = 1;
+        }
+        else if (x & 0x40000000 == 0x40000000) {
+            rate = 2;
+        }
+        else {
+            rate = 4;
+        }
 
         check!(start_frame < end_frame)?;
 
-        Ok(CurveInfo { start_frame, end_frame, rate, data_width })
+        Ok(CurveInfo { start_frame, end_frame, rate, data_width, interp_last })
     }
 
     fn num_samples(&self) -> usize {
         // XXX check this (I literally just made it up)
-        ((self.end_frame - self.start_frame) >> self.rate) as usize
+        let frames = self.end_frame - self.start_frame;
+        ((self.interp_last / self.rate as u16) + (frames - self.interp_last)) as usize
     }
 }
 
