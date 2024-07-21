@@ -11,7 +11,8 @@ pub fn main_loop(db: Database, conn: Connection) {
             height: super::WINDOW_HEIGHT as f64
         });
     let context_builder = glutin::ContextBuilder::new()
-        .with_depth_buffer(24);
+        .with_depth_buffer(24)
+        .with_vsync(true);
     let events_loop = glutin::event_loop::EventLoop::new();
     let display = glium::Display::new(window_builder, context_builder, &events_loop)
         .expect("failed to get rendering context");
