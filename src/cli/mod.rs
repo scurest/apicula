@@ -6,6 +6,7 @@ use wild;
 mod parse;
 use self::parse::*;
 pub use self::parse::Args;
+use crate::version::print_version_info;
 
 
 pub fn parse_cli_args() -> Args {
@@ -96,7 +97,7 @@ static FORMAT_OPT: Opt = Opt {
 
 
 fn version() -> ! {
-    println!("apicula {}", ::VERSION);
+    print_version_info();
     exit(0)
 }
 

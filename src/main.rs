@@ -32,18 +32,9 @@ mod primitives;
 mod skeleton;
 mod logger;
 mod connection;
+mod version;
 
 use errors::Result;
-
-// See build.rs.
-pub static VERSION: &'static str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " (",
-    include_str!(concat!(env!("OUT_DIR"), "/git-commit")),
-    " ",
-    include_str!(concat!(env!("OUT_DIR"), "/compile-date")),
-    ")",
-);
 
 fn main() {
     let ret_code = match main2() {

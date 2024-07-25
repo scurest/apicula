@@ -19,6 +19,8 @@ jobs:
 
     - name: Build
       run: |
+        set APICULA_BUILD_COMMIT_HASH=(git log --pretty=format:'%h' -n 1)
+        set APICULA_BUILD_COMMIT_DATE=(git log --pretty=format:'%cs' -n 1)
         cargo b --release
         target/release/apicula.exe -V
 
