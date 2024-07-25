@@ -26,7 +26,7 @@ pub fn main_loop(db: Database, conn: Connection) {
         win_title: String,
         cur_time: u64,
         last_time: u64,
-    };
+    }
 
     let mut state = State {
         last_mouse_xy: PhysicalPosition { x: 0.0, y: 0.0 },
