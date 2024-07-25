@@ -6,9 +6,9 @@
 //! call supply the right files to the right calls. That leaves us to figure it
 //! out for ourselves. This modules contains the heuristics for that.
 
-use cli::Args;
-use db::{Database, AnimationId, TextureId, PaletteId, ModelId, PatternId, MatAnimId};
-use errors::Result;
+use crate::cli::Args;
+use crate::db::{Database, AnimationId, TextureId, PaletteId, ModelId, PatternId, MatAnimId};
+use crate::errors::Result;
 
 /// A Connection records interrelationships between Nitro resources, namely how
 /// all the other resources relate to the models.

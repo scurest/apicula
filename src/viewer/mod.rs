@@ -3,10 +3,10 @@ mod main_loop;
 mod viewer;
 mod fps;
 
-use cli::Args;
-use db::Database;
-use connection::{Connection, ConnectionOptions};
-use errors::Result;
+use crate::cli::Args;
+use crate::db::Database;
+use crate::connection::{Connection, ConnectionOptions};
+use crate::errors::Result;
 
 /// Initial window width.
 pub static WINDOW_WIDTH: u32 = 640;

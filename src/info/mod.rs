@@ -1,7 +1,7 @@
-use cli::Args;
-use errors::Result;
-use db::Database;
-use connection::{Connection, ConnectionOptions, MaterialConnection, Match};
+use crate::cli::Args;
+use crate::errors::Result;
+use crate::db::Database;
+use crate::connection::{Connection, ConnectionOptions, MaterialConnection, Match};
 
 pub fn main(args: &Args) -> Result<()> {
     let db = Database::from_cli_args(args)?;
@@ -160,7 +160,7 @@ fn animation_info(db: &Database, anim_id: usize) {
     for (i, trs_curves) in anim.objects_curves.iter().enumerate() {
         println!("    Object {}:", i);
 
-        use nitro::animation::Curve;
+        use crate::nitro::animation::Curve;
         fn curve_info<T>(name: &'static str, curve: &Curve<T>) {
             match *curve {
                 Curve::None => { }

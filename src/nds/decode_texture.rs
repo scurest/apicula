@@ -1,7 +1,7 @@
-use nitro::{Texture, Palette};
-use errors::Result;
-use util::bits::BitField;
-use util::cur::Cur;
+use crate::nitro::{Texture, Palette};
+use crate::errors::Result;
+use crate::util::bits::BitField;
+use crate::util::cur::Cur;
 
 /// Pixel data stored in R8G8B8A8 format.
 pub struct RGBABuf(pub Vec<u8>);

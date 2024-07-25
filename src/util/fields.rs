@@ -30,13 +30,13 @@ macro_rules! field_helper2 {
     ($cur:ident, (fix16($s:expr,$i:expr,$f:expr))) => {
         {
             let x = $cur.next::<u16>()?;
-            ::util::fixed::fix16(x, $s, $i, $f)
+            crate::util::fixed::fix16(x, $s, $i, $f)
         }
     };
     ($cur:ident, (fix32($s:expr,$i:expr,$f:expr))) => {
         {
             let x = $cur.next::<u32>()?;
-            ::util::fixed::fix32(x, $s, $i, $f)
+            crate::util::fixed::fix32(x, $s, $i, $f)
         }
     };
     ($cur:ident, Cur) => { $cur.clone() };

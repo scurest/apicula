@@ -9,11 +9,11 @@
 //! for a reference on the DS's GPU.
 
 use cgmath::{Point2, Point3, Vector3, vec3};
-use errors::Result;
-use util::bits::BitField;
-use util::fixed::fix16;
-use util::fixed::fix32;
-use util::view::View;
+use crate::errors::Result;
+use crate::util::bits::BitField;
+use crate::util::fixed::fix16;
+use crate::util::fixed::fix32;
+use crate::util::view::View;
 
 /// DS GPU command.
 pub enum GpuCmd {

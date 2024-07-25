@@ -1,12 +1,12 @@
 // HIGHLY INCOMPLETE!!!
 
 use super::animation::Curve;
-use util::cur::Cur;
-use util::view::Viewable;
-use util::fixed::fix16;
+use crate::util::cur::Cur;
+use crate::util::view::Viewable;
+use crate::util::fixed::fix16;
 use cgmath::{Matrix4, vec3};
-use nitro::Name;
-use errors::Result;
+use crate::nitro::Name;
+use crate::errors::Result;
 use super::info_block;
 
 /// Material animation. Does things like UV matrix animation.

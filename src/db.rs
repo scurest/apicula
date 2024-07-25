@@ -1,13 +1,13 @@
-use cli::Args;
+use crate::cli::Args;
 use std::path::PathBuf;
 use std::fs;
 use std::collections::HashMap;
-use nitro::{
+use crate::nitro::{
     Name, Model, Texture, Palette, Animation, Pattern,
     MaterialAnimation, Container
 };
-use errors::Result;
-use util::cur::Cur;
+use crate::errors::Result;
+use crate::util::cur::Cur;
 
 pub type FileId = usize;
 pub type ModelId = usize;
@@ -93,7 +93,7 @@ impl Database {
                 }
             };
 
-            use nitro::container::read_container;
+            use crate::nitro::container::read_container;
             match read_container(Cur::new(&buf)) {
                 Ok(cont) => {
                     self.add_container(file_id, cont);

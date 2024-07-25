@@ -5,7 +5,7 @@
 /// three component curve onto their common domain and join them together. And
 /// we need to convert the curve of rotation matrices to a curve of quaternions.
 
-use nitro::animation::{TRSCurves, Curve};
+use crate::nitro::animation::{TRSCurves, Curve};
 use cgmath::{Vector3, Matrix3, Quaternion, InnerSpace, vec3};
 
 /// Represents the domain of a Curve.

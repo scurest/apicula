@@ -114,8 +114,8 @@ use cgmath::{Matrix4, SquareMatrix, One, ApproxEq};
 use super::vertex_record::VertexRecord;
 use super::{SMatrix, AMatrix};
 use super::{Skeleton, Joint, Transform, Weight, WeightsOfs};
-use nitro::Model;
-use util::tree::{Tree, NodeIdx};
+use crate::nitro::Model;
+use crate::util::tree::{Tree, NodeIdx};
 
 pub fn build_skeleton(vr: &VertexRecord, model: &Model, objects: &[Matrix4<f64>]) -> Skeleton {
     let mut b = Builder::new(model, objects);

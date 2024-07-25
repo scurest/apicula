@@ -1,7 +1,7 @@
 //! Render commands for model files.
 
-use errors::Result;
-use util::cur::Cur;
+use crate::errors::Result;
+use crate::util::cur::Cur;
 
 pub struct SkinTerm {
     pub weight: f32,

@@ -4,10 +4,10 @@ pub mod texture_cache;
 pub use self::eye::Eye;
 
 use cgmath::{PerspectiveFov, Rad, Matrix4};
-use db::Database;
+use crate::db::Database;
 use glium::{VertexBuffer, IndexBuffer, Frame, Surface, Program, Display};
-use nitro::Model;
-use primitives::{Primitives, DrawCall, Vertex};
+use crate::nitro::Model;
+use crate::primitives::{Primitives, DrawCall, Vertex};
 use self::texture_cache::{TextureCache, ImageId};
 use super::{Z_NEAR, Z_FAR, FOV_Y};
 

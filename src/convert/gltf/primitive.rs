@@ -1,4 +1,4 @@
-use primitives::{Primitives, PolyType};
+use crate::primitives::{Primitives, PolyType};
 
 /// Triangulates the quads in a Primitive in the correct way for
 /// FB_ngon_encoding to reconstruct them.

@@ -1,11 +1,11 @@
 use cgmath::{Matrix3, Matrix4};
-use util::bits::BitField;
-use util::cur::Cur;
-use util::fixed::{fix16, fix32};
-use nitro::Name;
-use nitro::rotation::{pivot_mat, basis_mat};
+use crate::util::bits::BitField;
+use crate::util::cur::Cur;
+use crate::util::fixed::{fix16, fix32};
+use crate::nitro::Name;
+use crate::nitro::rotation::{pivot_mat, basis_mat};
 use std::ops::{Mul, Add};
-use errors::Result;
+use crate::errors::Result;
 
 pub struct Animation {
     pub name: Name,

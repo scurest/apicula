@@ -6,8 +6,8 @@
 //! See: DSDecmp (https://github.com/Barubary/dsdecmp)
 
 use std::{fmt, error, result};
-use util::bits::BitField;
-use util::cur::{self, Cur};
+use crate::util::bits::BitField;
+use crate::util::cur::{self, Cur};
 
 pub struct DecompressResult<'a> {
     /// The decompressed data.

@@ -1,16 +1,16 @@
 //! Extract recognized container files from ROMs or other packed files.
 
-use cli::Args;
-use decompress;
-use errors::Result;
-use nitro::Container;
-use nitro::container::read_container;
+use crate::cli::Args;
+use crate::decompress;
+use crate::errors::Result;
+use crate::nitro::Container;
+use crate::nitro::container::read_container;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use util::cur::Cur;
-use util::OutDir;
+use crate::util::cur::Cur;
+use crate::util::OutDir;
 
 pub fn main(args: &Args) -> Result<()> {
     let input_file = &args.free_args[0];

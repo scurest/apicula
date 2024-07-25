@@ -4,12 +4,12 @@
 //! data-name pairs, where the data is usually an offset to the location
 //! of some struct with the given name.
 
-use errors::Result;
-use nitro::name::Name;
+use crate::errors::Result;
+use crate::nitro::name::Name;
 use std::fmt::Debug;
 use std::iter::Zip;
-use util::cur::Cur;
-use util::view::{View, Viewable};
+use crate::util::cur::Cur;
+use crate::util::view::{View, Viewable};
 
 pub type Iterator<'a, T> = Zip<View<'a, T>, View<'a, Name>>;
 

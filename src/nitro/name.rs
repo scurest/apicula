@@ -1,5 +1,5 @@
 use std::fmt::{self, Write};
-use util::view::Viewable;
+use crate::util::view::Viewable;
 
 /// Sixteen-byte NUL-padded ASCII(?) string, used as human-readable names
 /// in Nitro files.

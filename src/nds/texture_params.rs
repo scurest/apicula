@@ -1,5 +1,5 @@
 use super::TextureFormat;
-use util::bits::BitField;
+use crate::util::bits::BitField;
 
 #[derive(Copy, Clone)]
 pub struct TextureParams(pub u32);

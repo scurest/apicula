@@ -8,8 +8,8 @@
 //! This is then further consumed by both the viewer and the COLLADA writer.
 
 use cgmath::{Matrix4, Point2, Transform, InnerSpace, vec4, Zero};
-use nitro::Model;
-use nitro::render_cmds::SkinTerm;
+use crate::nitro::Model;
+use crate::nitro::render_cmds::SkinTerm;
 use std::default::Default;
 use std::ops::Range;
 
@@ -89,7 +89,7 @@ implement_vertex!(Vertex, position, texcoord, color, normal);
 impl Primitives {
     pub fn build(model: &Model, poly_type: PolyType, state: DynamicState) -> Primitives {
         let mut b = Builder::new(model, poly_type, state);
-        use nitro::render_cmds::Op;
+        use crate::nitro::render_cmds::Op;
         for op in &model.render_ops {
             match *op {
                 Op::LoadMatrix { stack_pos } => b.load_matrix(stack_pos),
@@ -364,7 +364,7 @@ impl<'a, 'b> Builder<'a, 'b> {
 }
 
 fn run_gpu_cmds(b: &mut Builder, commands: &[u8]) {
-    use nds::gpu_cmds::{CmdParser, GpuCmd};
+    use crate::nds::gpu_cmds::{CmdParser, GpuCmd};
     let interpreter = CmdParser::new(commands);
 
     for cmd_res in interpreter {

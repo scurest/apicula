@@ -6,14 +6,8 @@
 extern crate log;
 #[macro_use]
 extern crate glium;
-extern crate cgmath;
-extern crate time;
-extern crate png;
-extern crate termcolor;
-extern crate atty;
 #[macro_use]
 extern crate json;
-extern crate wild;
 
 #[macro_use]
 mod errors;

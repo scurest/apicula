@@ -1,9 +1,9 @@
 use std::rc::Rc;
-use nitro::Name;
-use nitro::info_block;
-use errors::Result;
-use util::cur::Cur;
-use nds::{TextureParams, TextureFormat};
+use crate::nitro::Name;
+use crate::nitro::info_block;
+use crate::errors::Result;
+use crate::util::cur::Cur;
+use crate::nds::{TextureParams, TextureFormat};
 
 pub struct Texture {
     pub name: Name,

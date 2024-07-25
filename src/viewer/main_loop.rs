@@ -1,8 +1,8 @@
 use glium::glutin::{self, dpi::{LogicalSize, PhysicalSize, PhysicalPosition}};
 use glium::glutin::event_loop::ControlFlow;
 use super::viewer::Viewer;
-use db::Database;
-use connection::Connection;
+use crate::db::Database;
+use crate::connection::Connection;
 
 pub fn main_loop(db: Database, conn: Connection) {
     let window_builder = glutin::window::WindowBuilder::new()

@@ -2,8 +2,8 @@
 //! matrix is applied to each vertex.
 
 use super::symbolic_matrix::{SMatrix, AMatrix};
-use nitro::Model;
-use nitro::render_cmds::SkinTerm;
+use crate::nitro::Model;
+use crate::nitro::render_cmds::SkinTerm;
 
 type MatrixIdx = u16;
 
@@ -19,7 +19,7 @@ pub struct VertexRecord {
 impl VertexRecord {
     pub fn build_for_model(model: &Model) -> VertexRecord {
         let mut b = Builder::new(model);
-        use nitro::render_cmds::Op;
+        use crate::nitro::render_cmds::Op;
         for op in &model.render_ops {
             match *op {
                 Op::LoadMatrix { stack_pos } => b.load_matrix(stack_pos),
@@ -112,7 +112,7 @@ impl<'a> Builder<'a> {
 
     fn draw(&mut self, piece_idx: u8) {
         let piece = &self.model.pieces[piece_idx as usize];
-        use nds::gpu_cmds::{CmdParser, GpuCmd};
+        use crate::nds::gpu_cmds::{CmdParser, GpuCmd};
         let interpreter = CmdParser::new(&piece.gpu_commands);
 
         for cmd_res in interpreter {

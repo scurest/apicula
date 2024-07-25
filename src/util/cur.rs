@@ -1,6 +1,6 @@
 use std::{fmt, error};
 use std::ops::Add;
-use util::view::{View, Viewable};
+use crate::util::view::{View, Viewable};
 
 /// A pointer into a buffer of bytes. Used for binary file parsing.
 #[derive(Copy, Clone)]

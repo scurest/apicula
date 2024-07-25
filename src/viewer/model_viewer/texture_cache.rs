@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use db::{Database, TextureId, PaletteId};
+use crate::db::{Database, TextureId, PaletteId};
 use glium::{Display, Texture2d, texture::RawImage2d};
-use nds;
+use crate::nds;
 
 // TODO: move somewhere more important.
 pub type ImageId = (TextureId, Option<PaletteId>);

@@ -1,4 +1,4 @@
-use nitro::Model;
+use crate::nitro::Model;
 use cgmath::{Vector3, Quaternion, InnerSpace, One, vec3, Matrix4};
 
 pub struct TRS {

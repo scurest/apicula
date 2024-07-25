@@ -6,8 +6,8 @@
 //! actually be a rotation (ie. orthogonal of determinant +1).
 
 use cgmath::{Matrix3, vec3};
-use util::bits::BitField;
-use util::fixed::fix16;
+use crate::util::bits::BitField;
+use crate::util::fixed::fix16;
 
 pub fn pivot_mat(select: u16, neg: u16, a: f64, b: f64) -> Matrix3<f64> {
     if select >= 9 {

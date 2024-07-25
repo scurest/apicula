@@ -1,13 +1,13 @@
 use std::ops::Range;
 use super::model_viewer::{ModelViewer, MaterialTextureBinding};
-use db::{Database, ModelId, AnimationId, PatternId, MatAnimId, FileId};
-use connection::Connection;
+use crate::db::{Database, ModelId, AnimationId, PatternId, MatAnimId, FileId};
+use crate::connection::Connection;
 use glium::Display;
 use glium::{Frame, Surface};
 use glium::glutin::event::{ElementState, ModifiersState};
 use glium::glutin::event::VirtualKeyCode;
-use nitro::{Model, Animation, Pattern, MaterialAnimation};
-use primitives::{Primitives, PolyType, DynamicState};
+use crate::nitro::{Model, Animation, Pattern, MaterialAnimation};
+use crate::primitives::{Primitives, PolyType, DynamicState};
 use cgmath::{Matrix4, InnerSpace, Vector3, vec3, vec2};
 use super::fps::FpsCounter;
 use super::{FRAMERATE, BG_COLOR};

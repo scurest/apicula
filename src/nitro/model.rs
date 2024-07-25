@@ -1,12 +1,12 @@
 use cgmath::{Matrix3, Matrix4, One, vec3, Vector3};
-use errors::Result;
-use nitro::info_block;
-use nitro::Name;
-use nds::TextureParams;
-use nitro::render_cmds::Op;
-use util::bits::BitField;
-use util::cur::Cur;
-use util::fixed::{fix16, fix32};
+use crate::errors::Result;
+use crate::nitro::info_block;
+use crate::nitro::Name;
+use crate::nds::TextureParams;
+use crate::nitro::render_cmds::Op;
+use crate::util::bits::BitField;
+use crate::util::cur::Cur;
+use crate::util::fixed::{fix16, fix32};
 
 /// NSBMD model.
 pub struct Model {
@@ -360,7 +360,7 @@ fn read_object(mut cur: Cur, name: Name) -> Result<Object> {
         let b = fx16(cur.next::<u16>()?);
         let select = flags.bits(4,8);
         let neg = flags.bits(8,12);
-        use nitro::rotation::pivot_mat;
+        use crate::nitro::rotation::pivot_mat;
         rot = Some(pivot_mat(select, neg, a, b));
     } else if r == 0 {
         let m = cur.next_n::<u16>(8)?;

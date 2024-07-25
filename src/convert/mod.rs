@@ -2,16 +2,16 @@ mod collada;
 mod image_namer;
 mod gltf;
 
-use cli::Args;
-use errors::Result;
+use crate::cli::Args;
+use crate::errors::Result;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use util::namers::UniqueNamer;
-use util::OutDir;
-use db::Database;
-use convert::image_namer::ImageNamer;
-use connection::{Connection, ConnectionOptions};
+use crate::util::namers::UniqueNamer;
+use crate::util::OutDir;
+use crate::db::Database;
+use crate::convert::image_namer::ImageNamer;
+use crate::connection::{Connection, ConnectionOptions};
 
 pub fn main(args: &Args) -> Result<()> {
     let out_dir_path = PathBuf::from(args.get_opt("output").unwrap());
@@ -71,7 +71,7 @@ pub fn main(args: &Args) -> Result<()> {
         let texture = &db.textures[texture_id];
         let palette = palette_id.map(|id| &db.palettes[id]);
 
-        use nds::decode_texture;
+        use crate::nds::decode_texture;
         let rgba = match decode_texture(texture, palette) {
             Ok(rgba) => rgba,
             Err(e) => {

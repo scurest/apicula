@@ -3,16 +3,16 @@ mod xml;
 mod make_invertible;
 
 use cgmath::{Matrix4, One};
-use convert::image_namer::ImageNamer;
-use db::{Database, ModelId};
-use skeleton::{Skeleton, Transform, SMatrix};
-use primitives::{self, Primitives, DynamicState};
-use nitro::Model;
+use crate::convert::image_namer::ImageNamer;
+use crate::db::{Database, ModelId};
+use crate::skeleton::{Skeleton, Transform, SMatrix};
+use crate::primitives::{self, Primitives, DynamicState};
+use crate::nitro::Model;
 use time;
-use util::BiVec;
-use connection::Connection;
+use crate::util::BiVec;
+use crate::connection::Connection;
 use self::xml::Xml;
-use util::tree::NodeIdx;
+use crate::util::tree::NodeIdx;
 
 static FRAME_LENGTH: f64 = 1.0 / 60.0; // 60 fps
 
@@ -173,7 +173,7 @@ fn library_effects(xml: &mut Xml, ctx: &Ctx) {
                 let params = ctx.db.textures[texture_id].params;
                 let alpha_type = params.format().alpha_type(params);
 
-                use nds::Alpha;
+                use crate::nds::Alpha;
                 match alpha_type {
                     Alpha::Opaque => false,
                     Alpha::Transparent | Alpha::Translucent => true,

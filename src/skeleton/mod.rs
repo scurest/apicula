@@ -56,8 +56,8 @@ mod joint_tree;
 pub use self::symbolic_matrix::{SMatrix, AMatrix};
 
 use cgmath::Matrix4;
-use nitro::Model;
-use util::tree::{Tree, NodeIdx};
+use crate::nitro::Model;
+use crate::util::tree::{Tree, NodeIdx};
 
 /// Skeleton (or skin) for a model.
 pub struct Skeleton {

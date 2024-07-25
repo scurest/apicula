@@ -19,10 +19,10 @@ impl Error for ErrorMsg {}
 
 macro_rules! errmsg {
     ($msg:expr) => {
-        ::errors::ErrorMsg { msg: $msg.into() }
+        crate::errors::ErrorMsg { msg: $msg.into() }
     };
     ($fmt:expr, $($arg:tt)+) => {
-        ::errors::ErrorMsg { msg: format!($fmt, $($arg)+) }
+        crate::errors::ErrorMsg { msg: format!($fmt, $($arg)+) }
     };
 }
 

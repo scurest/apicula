@@ -1,6 +1,6 @@
-use util::cur::Cur;
-use nitro::Name;
-use errors::Result;
+use crate::util::cur::Cur;
+use crate::nitro::Name;
+use crate::errors::Result;
 use super::info_block;
 
 /// A pattern animation changes the images that the materials of a model use as

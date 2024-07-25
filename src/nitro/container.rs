@@ -12,10 +12,10 @@
 //! usually only contains JNT0s (animations), but we don't do anything to
 //! enforce this. We'll read any kind of file we can get our hands on!
 
-use errors::Result;
-use nitro::{Model, Texture, Palette, Animation, Pattern, MaterialAnimation};
-use nitro::info_block;
-use util::cur::Cur;
+use crate::errors::Result;
+use crate::nitro::{Model, Texture, Palette, Animation, Pattern, MaterialAnimation};
+use crate::nitro::info_block;
+use crate::util::cur::Cur;
 
 const STAMPS: [&[u8]; 5] = [b"BMD0", b"BTX0", b"BCA0", b"BTP0", b"BTA0"];
 
@@ -83,7 +83,7 @@ fn read_section(cont: &mut Container, cur: Cur) -> Result<()> {
 
 // An MDL is a container for models.
 fn add_mdl(cont: &mut Container, cur: Cur) -> Result<()> {
-    use nitro::model::read_model;
+    use crate::nitro::model::read_model;
 
     fields!(cur, MDL0 {
         stamp: [u8; 4],
@@ -105,7 +105,7 @@ fn add_mdl(cont: &mut Container, cur: Cur) -> Result<()> {
 
 // This work is already done for us in read_tex; see that module for why.
 fn add_tex(cont: &mut Container, cur: Cur) -> Result<()> {
-    use nitro::tex::read_tex;
+    use crate::nitro::tex::read_tex;
 
     let (textures, palettes) = read_tex(cur)?;
     cont.textures.extend(textures.into_iter());
@@ -116,7 +116,7 @@ fn add_tex(cont: &mut Container, cur: Cur) -> Result<()> {
 
 // A JNT is a container for animations.
 fn add_jnt(cont: &mut Container, cur: Cur) -> Result<()> {
-    use nitro::animation::read_animation;
+    use crate::nitro::animation::read_animation;
 
     fields!(cur, JNT0 {
         stamp: [u8; 4],
@@ -138,7 +138,7 @@ fn add_jnt(cont: &mut Container, cur: Cur) -> Result<()> {
 
 // A PAT is a container for pattern animations.
 fn add_pat(cont: &mut Container, cur: Cur) -> Result<()> {
-    use nitro::pattern::read_pattern;
+    use crate::nitro::pattern::read_pattern;
 
     fields!(cur, PAT0 {
         stamp: [u8; 4],
@@ -160,7 +160,7 @@ fn add_pat(cont: &mut Container, cur: Cur) -> Result<()> {
 
 // An SRT is a container for material animations.
 fn add_srt(cont: &mut Container, cur: Cur) -> Result<()> {
-    use nitro::material_animation::read_mat_anim;
+    use crate::nitro::material_animation::read_mat_anim;
 
     fields!(cur, SRT0 {
         stamp: [u8; 4],

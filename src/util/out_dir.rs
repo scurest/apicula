@@ -1,7 +1,7 @@
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::fs;
-use errors::Result;
+use crate::errors::Result;
 
 /// Directory for putting output files in. Will be created lazily when the first
 /// file is created.

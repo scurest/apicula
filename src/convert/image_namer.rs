@@ -1,11 +1,11 @@
 //! Discovers images in a Connection and assigns them names. We use these for
 //! image filenames so that models know what the path to a specific image it
 //! uses will be.
-use db::{Database, TextureId, PaletteId};
-use nitro::Name;
+use crate::db::{Database, TextureId, PaletteId};
+use crate::nitro::Name;
 use std::collections::HashMap;
-use util::namers::UniqueNamer;
-use connection::Connection;
+use crate::util::namers::UniqueNamer;
+use crate::connection::Connection;
 
 type ImageId = (TextureId, Option<PaletteId>);
 

@@ -1,6 +1,6 @@
 //! Fixed-point to `f64` conversions.
 
-use util::bits::BitField;
+use crate::util::bits::BitField;
 
 /// Reads a fixed-point number from a `u32`.
 ///

@@ -3,22 +3,22 @@ mod object_trs;
 mod curve;
 mod primitive;
 
-use nitro::Model;
-use db::{Database, ModelId};
-use connection::Connection;
-use primitives::{Primitives, PolyType, DynamicState};
-use skeleton::{Skeleton, Transform, SMatrix};
+use crate::nitro::Model;
+use crate::db::{Database, ModelId};
+use crate::connection::Connection;
+use crate::primitives::{Primitives, PolyType, DynamicState};
+use crate::skeleton::{Skeleton, Transform, SMatrix};
 use super::image_namer::ImageNamer;
 use cgmath::Matrix4;
 use json::JsonValue;
 use self::gltf::{GlTF, Buffer, ByteVec, VecExt};
 use self::object_trs::ObjectTRSes;
-use util::{BiVec, BiMap};
+use crate::util::{BiVec, BiMap};
 use self::curve::{GlTFObjectCurves, CurveDomain};
-use nitro::animation::Curve;
+use crate::nitro::animation::Curve;
 use std::collections::HashMap;
 use self::primitive::encode_ngons;
-use nds::Alpha;
+use crate::nds::Alpha;
 
 static FRAME_LENGTH: f32 = 1.0 / 60.0; // 60 fps
 
