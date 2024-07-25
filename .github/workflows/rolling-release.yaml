@@ -1,4 +1,4 @@
-name: CD
+name: Rolling Release
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Version Info
       run: |
@@ -19,8 +19,8 @@ jobs:
 
     - name: Build
       run: |
-        set APICULA_BUILD_COMMIT_HASH=(git log --pretty=format:'%h' -n 1)
-        set APICULA_BUILD_COMMIT_DATE=(git log --pretty=format:'%cs' -n 1)
+        $env:APICULA_BUILD_COMMIT_HASH=(git log --pretty=format:'%h' -n 1)
+        $env:APICULA_BUILD_COMMIT_DATE=(git log --pretty=format:'%cs' -n 1)
         cargo b --release
         target/release/apicula.exe -V
 
@@ -39,7 +39,6 @@ jobs:
       with:
         allowUpdates: true
         artifacts: "apicula-latest-windows.zip"
-        body: >
-          This is an automated build of the latest source code.
+        omitBodyDuringUpdate: true
+        omitNameDuringUpdate: true
         tag: continuous
-        token: ${{ secrets.GITHUB_TOKEN }}
