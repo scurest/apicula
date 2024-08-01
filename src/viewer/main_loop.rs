@@ -43,31 +43,32 @@ pub fn main_loop(db: Database, conn: Connection) {
         let gl_window = display.gl_window();
         let window = gl_window.window();
 
-        state.last_time = state.cur_time;
-        state.cur_time = time::precise_time_ns();
-        let dt_in_ns = state.cur_time.wrapping_sub(state.last_time);
-        let dt = dt_in_ns as f64 / 1_000_000_000.0;
-
-        viewer.update(&display, dt);
-
-        let PhysicalSize { width, height } = window.inner_size();
-        if width > 0 && height > 0 {
-            viewer.set_aspect_ratio(width as f64 / height as f64);
-        }
-
-        let mut frame = display.draw();
-        viewer.draw(&mut frame);
-        frame.finish().expect("rendering error");
-
-        state.win_title.clear();
-        viewer.title(&mut state.win_title);
-        window.set_title(&state.win_title);
-
         use self::glutin::event::Event as Ev;
         use self::glutin::event::WindowEvent as WEv;
         use self::glutin::event::DeviceEvent as DEv;
 
         match ev {
+            Ev::MainEventsCleared => {
+                state.last_time = state.cur_time;
+                state.cur_time = time::precise_time_ns();
+                let dt_in_ns = state.cur_time.wrapping_sub(state.last_time);
+                let dt = dt_in_ns as f64 / 1_000_000_000.0;
+
+                viewer.update(&display, dt);
+
+                let PhysicalSize { width, height } = window.inner_size();
+                if width > 0 && height > 0 {
+                    viewer.set_aspect_ratio(width as f64 / height as f64);
+                }
+
+                let mut frame = display.draw();
+                viewer.draw(&mut frame);
+                frame.finish().expect("rendering error");
+
+                state.win_title.clear();
+                viewer.title(&mut state.win_title);
+                window.set_title(&state.win_title);
+            }
             Ev::WindowEvent { event, .. } => match event {
                 WEv::CloseRequested => {
                     *control_flow = ControlFlow::Exit;
