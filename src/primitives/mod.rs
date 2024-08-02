@@ -65,6 +65,7 @@ pub struct DrawCall {
 }
 
 #[derive(Copy, Clone)]
+#[repr(C)]
 pub struct Vertex {
     pub position: [f32; 3],
     pub texcoord: [f32; 2],
