@@ -1,3 +1,4 @@
+use glium::winit;
 use winit::dpi::{PhysicalSize, PhysicalPosition};
 use winit::keyboard::ModifiersState;
 use super::viewer::Viewer;
@@ -5,11 +6,12 @@ use crate::db::Database;
 use crate::connection::Connection;
 
 pub fn main_loop(db: Database, conn: Connection) {
-    let event_loop = winit::event_loop::EventLoopBuilder::new()
+    let event_loop = winit::event_loop::EventLoop::builder()
         .build()
         .expect("event loop building");
     let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
         .with_inner_size(super::WINDOW_WIDTH, super::WINDOW_HEIGHT)
+        .with_vsync(true)
         .build(&event_loop);
 
     let mut viewer = Viewer::new(&display, db, conn);

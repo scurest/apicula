@@ -3,6 +3,7 @@ use super::model_viewer::{ModelViewer, MaterialTextureBinding};
 use crate::db::{Database, ModelId, AnimationId, PatternId, MatAnimId, FileId};
 use crate::connection::Connection;
 use glium::{Frame, Surface};
+use glium::winit;
 use winit::keyboard::{KeyCode, ModifiersState};
 use crate::nitro::{Model, Animation, Pattern, MaterialAnimation};
 use crate::primitives::{Primitives, PolyType, DynamicState};
