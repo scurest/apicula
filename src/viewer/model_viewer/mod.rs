@@ -5,11 +5,13 @@ pub use self::eye::Eye;
 
 use cgmath::{PerspectiveFov, Rad, Matrix4};
 use crate::db::Database;
-use glium::{VertexBuffer, IndexBuffer, Frame, Surface, Program, Display};
+use glium::{VertexBuffer, IndexBuffer, Frame, Surface, Program};
 use crate::nitro::Model;
 use crate::primitives::{Primitives, DrawCall, Vertex};
 use self::texture_cache::{TextureCache, ImageId};
 use super::{Z_NEAR, Z_FAR, FOV_Y};
+
+type Display = glium::Display<glium::glutin::surface::WindowSurface>;
 
 /// Model viewer.
 ///

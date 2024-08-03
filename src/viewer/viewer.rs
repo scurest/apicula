@@ -2,15 +2,15 @@ use std::ops::Range;
 use super::model_viewer::{ModelViewer, MaterialTextureBinding};
 use crate::db::{Database, ModelId, AnimationId, PatternId, MatAnimId, FileId};
 use crate::connection::Connection;
-use glium::Display;
 use glium::{Frame, Surface};
-use glium::glutin::event::{ElementState, ModifiersState};
-use glium::glutin::event::VirtualKeyCode;
+use winit::keyboard::{KeyCode, ModifiersState};
 use crate::nitro::{Model, Animation, Pattern, MaterialAnimation};
 use crate::primitives::{Primitives, PolyType, DynamicState};
 use cgmath::{Matrix4, InnerSpace, Vector3, vec3, vec2};
 use super::fps::FpsCounter;
 use super::{FRAMERATE, BG_COLOR};
+
+type Display = glium::Display<glium::glutin::surface::WindowSurface>;
 
 pub struct Viewer {
     db: Database,
@@ -191,16 +191,18 @@ impl Viewer {
     pub fn key(
         &mut self,
         display: &Display,
-        (state, keycode, modifiers): (ElementState, VirtualKeyCode, ModifiersState),
+        keycode: KeyCode,
+        is_pressed: bool,
+        modifiers: ModifiersState,
     ) {
-        use self::VirtualKeyCode as Key;
+        type Key = KeyCode;
 
         // Use WASD controls to update the move_vector.
         static MOVE_KEYS: [(Key, Key, usize); 3] = [
             // Key to move forward, key to move backward, affected XYZ component
-            (Key::W, Key::S, 0),
-            (Key::D, Key::A, 1),
-            (Key::E, Key::Q, 2),
+            (Key::KeyW, Key::KeyS, 0),
+            (Key::KeyD, Key::KeyA, 1),
+            (Key::KeyE, Key::KeyQ, 2),
         ];
         for &(forward_key, backward_key, component) in &MOVE_KEYS {
             let x =
@@ -208,15 +210,14 @@ impl Viewer {
                 else if keycode == backward_key { -1.0 }
                 else { continue; };
 
-            match state {
-                ElementState::Pressed => self.move_vector[component] = x,
-                ElementState::Released => self.move_vector[component] = 0.0,
-            }
+            self.move_vector[component] = if is_pressed { x } else { 0.0 };
         }
 
-        if state != ElementState::Pressed { return; }
+        if !is_pressed {
+            return;
+        }
 
-        let alt = modifiers.alt();
+        let alt = modifiers.alt_key();
 
         match keycode {
             // Next/prev model
@@ -230,51 +231,51 @@ impl Viewer {
             }
 
             // Next/prev animation
-            Key::P if !alt => {
+            Key::KeyP if !alt => {
                 let num_anims = self.conn.models[self.model_id].animations.len();
                 self.anim_state.next(num_anims);
                 self.update_object_mats();
             }
-            Key::O if !alt => {
+            Key::KeyO if !alt => {
                 let num_anims = self.conn.models[self.model_id].animations.len();
                 self.anim_state.prev(num_anims);
                 self.update_object_mats();
             }
 
             // Single-step forward/backward in animation
-            Key::P if alt => {
+            Key::KeyP if alt => {
                 self.anim_state.single_stepping = true;
                 self.next_anim_frame();
             }
-            Key::O if alt => {
+            Key::KeyO if alt => {
                 self.anim_state.single_stepping = true;
                 self.prev_anim_frame();
             }
 
             // Next/prev pattern animation
-            Key::L if !alt => {
+            Key::KeyL if !alt => {
                 let num_pats = self.conn.models[self.model_id].patterns.len();
                 self.pat_state.next(num_pats);
                 self.update_material_map(display);
             }
-            Key::K if !alt => {
+            Key::KeyK if !alt => {
                 let num_pats = self.conn.models[self.model_id].patterns.len();
                 self.pat_state.prev(num_pats);
                 self.update_material_map(display);
             }
 
             // Single-step pattern animation
-            Key::L if alt => {
+            Key::KeyL if alt => {
                 self.pat_state.single_stepping = true;
                 self.next_pattern_frame(display);
             }
-            Key::K if alt => {
+            Key::KeyK if alt => {
                 self.pat_state.single_stepping = true;
                 self.prev_pattern_frame(display);
             }
 
             // Next/prev material animation
-            Key::Apostrophe if !alt => {
+            Key::Quote if !alt => {
                 let num_mat_anims = self.conn.models[self.model_id].mat_anims.len();
                 self.mat_anim_state.next(num_mat_anims);
                 self.update_uv_mats();
@@ -286,7 +287,7 @@ impl Viewer {
             }
 
             // Single-step material animation
-            Key::Apostrophe if alt => {
+            Key::Quote if alt => {
                 self.mat_anim_state.single_stepping = true;
                 self.next_mat_anim_frame();
             }
@@ -296,12 +297,12 @@ impl Viewer {
             }
 
             // Speed up/down
-            Key::LShift => {
+            Key::ShiftLeft => {
                 if self.speed_idx != SPEEDS.len() - 1 {
                     self.speed_idx += 1;
                 }
             }
-            Key::LControl => {
+            Key::ControlLeft => {
                 if self.speed_idx != 0 {
                     self.speed_idx -= 1;
                 }
@@ -311,7 +312,7 @@ impl Viewer {
                 self.print_info();
             }
 
-            Key::T => {
+            Key::KeyT => {
                 self.model_viewer.light_on = !self.model_viewer.light_on;
             }
 
