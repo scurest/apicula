@@ -1,6 +1,5 @@
 //! Logger that prints messages like `[WARN] Lorem ipsum`.
 
-use atty;
 use log::{self, Log, Level, Metadata, Record};
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -37,7 +36,9 @@ impl Log for Logger {
 }
 
 pub fn init(level: Level) {
-    let use_color = atty::is(atty::Stream::Stderr);
+    use std::io::IsTerminal;
+    let use_color = std::io::stderr().is_terminal();
+
     let logger = Logger { level, use_color };
     let _ = log::set_boxed_logger(Box::new(logger));
     log::set_max_level(level.to_level_filter());

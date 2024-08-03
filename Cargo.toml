@@ -6,7 +6,6 @@ license = "0BSD"
 edition = "2021"
 
 [dependencies]
-atty = "0.2"
 cgmath = "0.16.0"
 glium = "0.34"
 json = "0.12.4"
