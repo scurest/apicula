@@ -522,7 +522,10 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
                     _ => continue,
                 };
 
-                let curves = &object_curves[object_idx as usize];
+                let curves = match object_curves.get(object_idx as usize) {
+                    Some(c) => c,
+                    None => continue, // no animation data for this object
+                };
 
                 // Add channels for any of the TRSs that are animated for this
                 // object
@@ -576,7 +579,7 @@ fn animations(ctx: &Ctx, gltf: &mut GlTF) {
             // Now use the sampler descriptions to write the actual samplers
             let samplers = sampler_descs.iter().map(|desc| {
                 let &SamplerDescriptor { object_idx, path } = desc;
-                let curves = &object_curves[object_idx as usize];
+                let curves = &object_curves[object_idx as usize]; // safe: only indices that passed bounds check above are in sampler_descs
 
                 let domain = match path {
                     SamplerPath::Translation => curves.translation.domain(),
